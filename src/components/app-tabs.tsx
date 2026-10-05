@@ -24,6 +24,10 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Transactions</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="flat">
+        <NativeTabs.Trigger.Label>Flat</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="explore">
         <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
