@@ -130,7 +130,6 @@ function FlatView({ flat }: { flat: Flat }) {
   }, [flat.id, userId]);
 
   useEffect(() => {
-    setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
 
@@ -316,7 +315,6 @@ export default function FlatScreen() {
   }, [userId]);
 
   useEffect(() => {
-    setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
 
