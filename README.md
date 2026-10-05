@@ -1,56 +1,44 @@
-# Welcome to your Expo app 👋
+# Tabby
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Tabby is a mobile personal finance tracker that also handles flatmate bill-splitting. AI auto-categorizes transactions, parses natural-language expense entries, and summarizes spending trends — so budgeting your own money and splitting shared costs with flatmates both live in one simple app.
 
-## Get started
+## Tech stack
 
-1. Install dependencies
+- [Expo](https://expo.dev) (React Native + TypeScript)
+- [NativeWind](https://www.nativewind.dev) (Tailwind CSS for React Native)
+- [Supabase](https://supabase.com) (Postgres database, auth)
+- Expo Router (file-based navigation, routes live in `src/app/`)
 
-   ```bash
-   npm install
-   ```
+## Getting started
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+This project pins Node 22 LTS via `.nvmrc`. If you use [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
-npm run reset-project
+nvm use
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Then install dependencies and start the dev server:
 
-### Other setup steps
+```bash
+npm install
+npx expo start
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+From the Expo CLI output you can open the app in:
 
-## Learn more
+- an iOS Simulator (Mac only, via Xcode)
+- an Android Emulator (via Android Studio, works on Mac/Windows/Linux)
+- [Expo Go](https://expo.dev/go) on a physical device (scan the QR code)
 
-To learn more about developing your project with Expo, look at the following resources:
+## Project structure
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `src/app/` — screens and routes (Expo Router file-based routing)
+- `src/components/` — reusable UI components
+- `src/constants/`, `src/hooks/` — shared theme/logic
+- `src/global.css` — Tailwind directives + base styles (via NativeWind)
 
-## Join the community
+## Scripts
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `npm run android` / `npm run ios` / `npm run web` — start on a specific platform
+- `npm run lint` — run ESLint
+- `npx tsc --noEmit` — typecheck
