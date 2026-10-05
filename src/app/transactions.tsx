@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { categorizeTransaction, parseNaturalLanguageExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
   addTransaction,
@@ -37,6 +38,10 @@ export default function TransactionsScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [quickAddText, setQuickAddText] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [categorySource, setCategorySource] = useState<'manual' | 'ai' | null>(null);
+
   const load = useCallback(async () => {
     if (!userId) return;
     try {
@@ -63,7 +68,46 @@ export default function TransactionsScreen() {
     setAmount('');
     setDescription('');
     setCategoryId(null);
+    setCategorySource(null);
     setEditingId(null);
+  };
+
+  const handleDescriptionBlur = async () => {
+    // Only auto-suggest if the user hasn't picked (or we haven't already
+    // AI-suggested) a category -- never override a manual choice.
+    if (!description.trim() || categorySource === 'manual' || categories.length === 0) return;
+
+    setAiBusy(true);
+    try {
+      const suggestedId = await categorizeTransaction(description, categories);
+      if (suggestedId) {
+        setCategoryId(suggestedId);
+        setCategorySource('ai');
+      }
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const handleQuickAdd = async () => {
+    if (!quickAddText.trim()) return;
+    setAiBusy(true);
+    setError(null);
+    try {
+      const parsed = await parseNaturalLanguageExpense(quickAddText, categories);
+      if (!parsed) {
+        setError("Couldn't understand that -- try the fields below instead.");
+        return;
+      }
+      setAmount(String(parsed.amount));
+      setDescription(parsed.description);
+      const matched = categories.find((c) => c.name === parsed.categoryName);
+      setCategoryId(matched?.id ?? null);
+      setCategorySource(matched ? 'ai' : null);
+      setQuickAddText('');
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const handleStartEdit = (item: Transaction) => {
@@ -71,6 +115,7 @@ export default function TransactionsScreen() {
     setAmount(String(item.amount));
     setDescription(item.description ?? '');
     setCategoryId(item.category_id);
+    setCategorySource(item.category_id ? 'manual' : null);
     setError(null);
   };
 
@@ -135,6 +180,27 @@ export default function TransactionsScreen() {
 
         <View className="flex-row gap-2">
           <TextInput
+            value={quickAddText}
+            onChangeText={setQuickAddText}
+            placeholder='Try "coffee $8.50 yesterday"'
+            className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
+          />
+          <Pressable
+            onPress={handleQuickAdd}
+            disabled={aiBusy}
+            className="bg-gray-800 rounded-lg px-4 items-center justify-center"
+            accessibilityRole="button"
+            accessibilityLabel="Fill form with AI">
+            {aiBusy ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Text className="text-white font-semibold text-sm">✨ AI Fill</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View className="flex-row gap-2">
+          <TextInput
             value={amount}
             onChangeText={setAmount}
             placeholder="Amount"
@@ -144,16 +210,20 @@ export default function TransactionsScreen() {
           <TextInput
             value={description}
             onChangeText={setDescription}
+            onBlur={handleDescriptionBlur}
             placeholder="Description"
             className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
           />
         </View>
 
-        <View className="flex-row flex-wrap gap-2">
+        <View className="flex-row flex-wrap gap-2 items-center">
           {categories.map((cat) => (
             <Pressable
               key={cat.id}
-              onPress={() => setCategoryId(cat.id === categoryId ? null : cat.id)}
+              onPress={() => {
+                setCategoryId(cat.id === categoryId ? null : cat.id);
+                setCategorySource(cat.id === categoryId ? null : 'manual');
+              }}
               className={`px-3 py-1.5 rounded-full border ${
                 categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
               }`}>
@@ -162,6 +232,9 @@ export default function TransactionsScreen() {
               </Text>
             </Pressable>
           ))}
+          {categorySource === 'ai' && (
+            <Text className="text-xs text-blue-500">✨ AI suggested</Text>
+          )}
         </View>
 
         {error && <Text className="text-red-500 text-sm">{error}</Text>}
