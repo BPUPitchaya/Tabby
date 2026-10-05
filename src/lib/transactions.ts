@@ -55,6 +55,28 @@ export async function addTransaction(params: {
   if (error) throw error;
 }
 
+export async function updateTransaction(
+  id: string,
+  params: {
+    amount: number;
+    description: string;
+    categoryId: string | null;
+    occurredAt: string;
+  }
+) {
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      amount: params.amount,
+      description: params.description || null,
+      category_id: params.categoryId,
+      occurred_at: params.occurredAt,
+    })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
 export async function deleteTransaction(id: string) {
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) throw error;
