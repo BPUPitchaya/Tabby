@@ -1,7 +1,10 @@
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   Text,
@@ -12,8 +15,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categorizeTransaction, parseNaturalLanguageExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
+import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import {
   addTransaction,
+  bulkAddTransactions,
   deleteTransaction,
   fetchCategories,
   fetchTransactions,
@@ -41,6 +46,9 @@ export default function TransactionsScreen() {
   const [quickAddText, setQuickAddText] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [categorySource, setCategorySource] = useState<'manual' | 'ai' | null>(null);
+
+  const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -110,6 +118,44 @@ export default function TransactionsScreen() {
     }
   };
 
+  const handlePickCSV = async () => {
+    setError(null);
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['text/csv', '.csv'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    try {
+      const file = new File(result.assets[0].uri);
+      const text = await file.text();
+      const parsed = parseTransactionsFromCSV(text);
+      if (parsed.length === 0) {
+        setError(
+          "Couldn't find any transactions in that file -- make sure it has a header row with a Date and Amount column."
+        );
+        return;
+      }
+      setCsvPreview(parsed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read that file.');
+    }
+  };
+
+  const handleConfirmCSVImport = async () => {
+    if (!userId || !csvPreview) return;
+    setCsvImporting(true);
+    try {
+      await bulkAddTransactions(userId, csvPreview);
+      setCsvPreview(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import transactions.');
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
   const handleStartEdit = (item: Transaction) => {
     setEditingId(item.id);
     setAmount(String(item.amount));
@@ -176,7 +222,15 @@ export default function TransactionsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <View className="px-4 pt-4 gap-3 border-b border-gray-200 pb-4">
-        <Text className="text-2xl font-bold">Transactions</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-2xl font-bold">Transactions</Text>
+          <Pressable
+            onPress={handlePickCSV}
+            accessibilityRole="button"
+            accessibilityLabel="Import CSV">
+            <Text className="text-blue-600 font-semibold text-sm">Import CSV</Text>
+          </Pressable>
+        </View>
 
         <View className="flex-row gap-2">
           <TextInput
@@ -306,6 +360,59 @@ export default function TransactionsScreen() {
           </Pressable>
         )}
       />
+
+      <Modal visible={csvPreview !== null} animationType="slide" transparent>
+        <View className="flex-1 bg-black/40 justify-end">
+          <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
+            <Text className="text-xl font-bold">
+              Import {csvPreview?.length ?? 0} transaction{csvPreview?.length === 1 ? '' : 's'}?
+            </Text>
+            <Text className="text-gray-500 text-sm">
+              Total: $
+              {csvPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}. All imported
+              as Uncategorized -- edit them afterwards to assign categories.
+            </Text>
+
+            <FlatList
+              data={csvPreview ?? []}
+              keyExtractor={(_, i) => String(i)}
+              style={{ maxHeight: 300 }}
+              renderItem={({ item }) => (
+                <View className="flex-row justify-between py-2 border-b border-gray-100">
+                  <View className="flex-1">
+                    <Text className="text-sm">{item.description || '(no description)'}</Text>
+                    <Text className="text-xs text-gray-400">{item.occurredAt}</Text>
+                  </View>
+                  <Text className="text-sm font-semibold">${item.amount.toFixed(2)}</Text>
+                </View>
+              )}
+            />
+
+            <View className="flex-row gap-2 pt-2">
+              <Pressable
+                onPress={handleConfirmCSVImport}
+                disabled={csvImporting}
+                className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                accessibilityRole="button"
+                accessibilityLabel="Confirm import">
+                {csvImporting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-semibold">Import</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => setCsvPreview(null)}
+                disabled={csvImporting}
+                className="px-4 py-3 items-center justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel import">
+                <Text className="text-gray-500 font-semibold">Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
