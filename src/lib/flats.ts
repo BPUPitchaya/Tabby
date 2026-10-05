@@ -203,3 +203,88 @@ export async function computeBalances(flatId: string, currentUserId: string): Pr
       netAmount: Math.round((net.get(m.user_id) ?? 0) * 100) / 100,
     }));
 }
+
+export type FlatHealth = {
+  score: number; // 0-100
+  label: 'Excellent' | 'Good' | 'Fair' | 'Needs attention';
+  totalOutstanding: number;
+  totalSpend: number;
+};
+
+/**
+ * Flat-wide health score: what fraction of all shared spending in this flat
+ * is still unsettled between members, across every pair of members (not
+ * just relative to one person). 100 = everyone is fully settled up.
+ * Formula is deliberately simple and explainable:
+ *   score = 100 - (total outstanding between all pairs / total shared spend) * 100
+ */
+export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
+  const [{ data: splits, error: splitsError }, { data: settlements, error: settlementsError }] =
+    await Promise.all([
+      supabase
+        .from('shared_expense_splits')
+        .select('user_id, share_amount, shared_expenses(paid_by, flat_id, amount)'),
+      supabase.from('settlements').select('from_user, to_user, amount').eq('flat_id', flatId),
+    ]);
+
+  if (splitsError) throw splitsError;
+  if (settlementsError) throw settlementsError;
+
+  // directed[ower][owed] = how much "ower" owes "owed", before settlements
+  const directed = new Map<string, number>();
+  const pairKey = (a: string, b: string) => `${a}|${b}`;
+
+  for (const split of (splits ?? []) as unknown as {
+    user_id: string;
+    share_amount: number;
+    shared_expenses: { paid_by: string; flat_id: string; amount: number } | null;
+  }[]) {
+    const expense = split.shared_expenses;
+    if (!expense || expense.flat_id !== flatId) continue;
+
+    if (split.user_id !== expense.paid_by) {
+      const key = pairKey(split.user_id, expense.paid_by);
+      directed.set(key, (directed.get(key) ?? 0) + split.share_amount);
+    }
+  }
+
+  // each row from this table is already a distinct expense, no dedup needed
+  const { data: expenses, error: expensesError } = await supabase
+    .from('shared_expenses')
+    .select('amount')
+    .eq('flat_id', flatId);
+  if (expensesError) throw expensesError;
+  const totalSpend = (expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
+
+  for (const s of settlements ?? []) {
+    const key = pairKey(s.from_user, s.to_user);
+    directed.set(key, (directed.get(key) ?? 0) - s.amount);
+  }
+
+  // consolidate directed pairs into net-per-unordered-pair, summing magnitude
+  const seen = new Set<string>();
+  let totalOutstanding = 0;
+  for (const key of directed.keys()) {
+    const [a, b] = key.split('|');
+    const canonicalKey = [a, b].sort().join('|');
+    if (seen.has(canonicalKey)) continue;
+    seen.add(canonicalKey);
+
+    const forward = directed.get(pairKey(a, b)) ?? 0;
+    const backward = directed.get(pairKey(b, a)) ?? 0;
+    totalOutstanding += Math.abs(forward - backward);
+  }
+
+  const score =
+    totalSpend > 0 ? Math.max(0, Math.round(100 - (totalOutstanding / totalSpend) * 100)) : 100;
+
+  const label: FlatHealth['label'] =
+    score >= 90 ? 'Excellent' : score >= 70 ? 'Good' : score >= 50 ? 'Fair' : 'Needs attention';
+
+  return {
+    score,
+    label,
+    totalOutstanding: Math.round(totalOutstanding * 100) / 100,
+    totalSpend: Math.round(totalSpend * 100) / 100,
+  };
+}
