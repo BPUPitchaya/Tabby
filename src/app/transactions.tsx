@@ -16,6 +16,7 @@ import {
   deleteTransaction,
   fetchCategories,
   fetchTransactions,
+  updateTransaction,
   type Category,
   type Transaction,
 } from '@/lib/transactions';
@@ -34,6 +35,7 @@ export default function TransactionsScreen() {
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -58,7 +60,22 @@ export default function TransactionsScreen() {
     setRefreshing(false);
   };
 
-  const handleAdd = async () => {
+  const resetForm = () => {
+    setAmount('');
+    setDescription('');
+    setCategoryId(null);
+    setEditingId(null);
+  };
+
+  const handleStartEdit = (item: Transaction) => {
+    setEditingId(item.id);
+    setAmount(String(item.amount));
+    setDescription(item.description ?? '');
+    setCategoryId(item.category_id);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
     if (!userId) return;
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -69,19 +86,26 @@ export default function TransactionsScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await addTransaction({
-        userId,
-        amount: parsedAmount,
-        description,
-        categoryId,
-        occurredAt: new Date().toISOString().slice(0, 10),
-      });
-      setAmount('');
-      setDescription('');
-      setCategoryId(null);
+      if (editingId) {
+        await updateTransaction(editingId, {
+          amount: parsedAmount,
+          description,
+          categoryId,
+          occurredAt: new Date().toISOString().slice(0, 10),
+        });
+      } else {
+        await addTransaction({
+          userId,
+          amount: parsedAmount,
+          description,
+          categoryId,
+          occurredAt: new Date().toISOString().slice(0, 10),
+        });
+      }
+      resetForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add transaction.');
+      setError(err instanceof Error ? err.message : 'Failed to save transaction.');
     } finally {
       setSubmitting(false);
     }
@@ -91,6 +115,7 @@ export default function TransactionsScreen() {
     try {
       await deleteTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
+      if (editingId === id) resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete transaction.');
     }
@@ -142,18 +167,32 @@ export default function TransactionsScreen() {
 
         {error && <Text className="text-red-500 text-sm">{error}</Text>}
 
-        <Pressable
-          onPress={handleAdd}
-          disabled={submitting}
-          className="bg-blue-600 rounded-lg py-2.5 items-center"
-          accessibilityRole="button"
-          accessibilityLabel="Add transaction">
-          {submitting ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text className="text-white font-semibold">Add Transaction</Text>
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={handleSubmit}
+            disabled={submitting}
+            className="flex-1 bg-blue-600 rounded-lg py-2.5 items-center"
+            accessibilityRole="button"
+            accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text className="text-white font-semibold">
+                {editingId ? 'Save Changes' : 'Add Transaction'}
+              </Text>
+            )}
+          </Pressable>
+
+          {editingId && (
+            <Pressable
+              onPress={resetForm}
+              className="px-4 py-2.5 items-center justify-center"
+              accessibilityRole="button"
+              accessibilityLabel="Cancel edit">
+              <Text className="text-gray-500 font-semibold">Cancel</Text>
+            </Pressable>
           )}
-        </Pressable>
+        </View>
       </View>
 
       <FlatList
@@ -167,7 +206,13 @@ export default function TransactionsScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <View className="flex-row items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+          <Pressable
+            onPress={() => handleStartEdit(item)}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
+            className={`flex-row items-center justify-between rounded-lg px-4 py-3 ${
+              editingId === item.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50'
+            }`}>
             <View className="flex-1">
               <Text className="font-semibold">
                 {item.description || item.categories?.name || 'Transaction'}
@@ -178,12 +223,15 @@ export default function TransactionsScreen() {
             </View>
             <Text className="font-semibold mr-3">${item.amount.toFixed(2)}</Text>
             <Pressable
-              onPress={() => handleDelete(item.id)}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDelete(item.id);
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
               <Text className="text-red-500">Delete</Text>
             </Pressable>
-          </View>
+          </Pressable>
         )}
       />
     </SafeAreaView>
