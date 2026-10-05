@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   addSharedExpense,
   computeBalances,
+  computeFlatHealth,
   createFlat,
   fetchFlatMembers,
   fetchMyFlat,
@@ -14,6 +15,7 @@ import {
   recordSettlement,
   type Balance,
   type Flat,
+  type FlatHealth,
   type FlatMember,
   type SharedExpense,
 } from '@/lib/flats';
@@ -105,6 +107,7 @@ function FlatView({ flat }: { flat: Flat }) {
   const [members, setMembers] = useState<FlatMember[]>([]);
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
+  const [health, setHealth] = useState<FlatHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,14 +119,16 @@ function FlatView({ flat }: { flat: Flat }) {
     if (!userId) return;
     try {
       setError(null);
-      const [memberList, expenseList, balanceList] = await Promise.all([
+      const [memberList, expenseList, balanceList, healthResult] = await Promise.all([
         fetchFlatMembers(flat.id),
         fetchSharedExpenses(flat.id),
         computeBalances(flat.id, userId),
+        computeFlatHealth(flat.id),
       ]);
       setMembers(memberList);
       setExpenses(expenseList);
       setBalances(balanceList);
+      setHealth(healthResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load flat data.');
     }
@@ -210,6 +215,30 @@ function FlatView({ flat }: { flat: Flat }) {
                 {members.length} member{members.length === 1 ? '' : 's'}
               </Text>
             </View>
+
+            {health && (
+              <View
+                className={`rounded-xl p-4 flex-row items-center justify-between ${
+                  health.score >= 90
+                    ? 'bg-green-50'
+                    : health.score >= 70
+                      ? 'bg-blue-50'
+                      : health.score >= 50
+                        ? 'bg-yellow-50'
+                        : 'bg-red-50'
+                }`}>
+                <View>
+                  <Text className="text-gray-500 text-sm">Flat Health</Text>
+                  <Text className="text-2xl font-bold">
+                    {health.score} · {health.label}
+                  </Text>
+                  <Text className="text-gray-400 text-xs mt-1">
+                    ${health.totalOutstanding.toFixed(2)} unsettled of $
+                    {health.totalSpend.toFixed(2)} total shared spend
+                  </Text>
+                </View>
+              </View>
+            )}
 
             <View className="gap-2">
               <Text className="text-lg font-bold">Add shared expense</Text>
