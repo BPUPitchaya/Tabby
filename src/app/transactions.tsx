@@ -50,7 +50,6 @@ export default function TransactionsScreen() {
   }, [userId]);
 
   useEffect(() => {
-    setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
 
