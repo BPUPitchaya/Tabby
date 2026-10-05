@@ -81,3 +81,19 @@ export async function deleteTransaction(id: string) {
   const { error } = await supabase.from('transactions').delete().eq('id', id);
   if (error) throw error;
 }
+
+export async function bulkAddTransactions(
+  userId: string,
+  rows: { amount: number; description: string; occurredAt: string }[]
+) {
+  const { error } = await supabase.from('transactions').insert(
+    rows.map((r) => ({
+      user_id: userId,
+      amount: r.amount,
+      description: r.description || null,
+      category_id: null,
+      occurred_at: r.occurredAt,
+    }))
+  );
+  if (error) throw error;
+}
