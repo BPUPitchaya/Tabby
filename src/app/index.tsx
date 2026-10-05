@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { generateMonthlySummary } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import { fetchDashboardData, type DashboardData } from '@/lib/dashboard';
 
@@ -47,6 +48,7 @@ export default function HomeScreen() {
   const userId = session?.user.id;
 
   const [data, setData] = useState<DashboardData | null>(null);
+  const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +57,16 @@ export default function HomeScreen() {
     if (!userId) return;
     try {
       setError(null);
+      setInsight(null);
       const result = await fetchDashboardData(userId);
       setData(result);
+
+      const lastMonthTotal = result.monthlyTotals[result.monthlyTotals.length - 2]?.total ?? 0;
+      generateMonthlySummary({
+        thisMonthTotal: result.thisMonthTotal,
+        lastMonthTotal,
+        topCategories: result.categoryTotals.slice(0, 3),
+      }).then(setInsight);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard.');
     }
@@ -106,6 +116,12 @@ export default function HomeScreen() {
             {data?.transactionCount ?? 0} transaction{data?.transactionCount === 1 ? '' : 's'}
           </Text>
         </View>
+
+        {insight && (
+          <View className="bg-blue-50 rounded-xl p-4">
+            <Text className="text-blue-900 text-sm">✨ {insight}</Text>
+          </View>
+        )}
 
         <View className="gap-3">
           <Text className="text-lg font-bold">Spending by category</Text>
