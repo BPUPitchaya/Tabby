@@ -18,6 +18,7 @@ function Row({
   return (
     <Pressable
       onPress={onPress}
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       accessibilityRole="button"
       accessibilityLabel={label}
       className="flex-row items-center gap-3 py-3.5 px-4 bg-gray-50 rounded-xl border border-gray-100">
