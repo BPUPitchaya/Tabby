@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
@@ -34,6 +35,10 @@ import {
   type FlatMember,
   type SharedExpense,
 } from '@/lib/flats';
+
+// Shared press-feedback style: a quick opacity dip on tap, applied via the
+// style prop (not className) since it needs the live `pressed` state.
+const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   const { session } = useAuth();
@@ -85,6 +90,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
         <Pressable
           onPress={handleCreate}
           disabled={submitting}
+          style={pressFeedback}
           className="bg-blue-600 rounded-lg py-3 items-center"
           accessibilityRole="button">
           <Text className="text-white font-semibold">Create Flat</Text>
@@ -103,6 +109,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
         <Pressable
           onPress={handleJoin}
           disabled={submitting}
+          style={pressFeedback}
           className="bg-gray-800 rounded-lg py-3 items-center"
           accessibilityRole="button">
           <Text className="text-white font-semibold">Join Flat</Text>
@@ -365,6 +372,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               </View>
               <Pressable
                 onPress={() => setShowSettings((v) => !v)}
+                style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Flat settings">
                 <Text className="text-blue-600 font-semibold text-sm">
@@ -375,6 +383,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
             <Pressable
               onPress={handleShareInvite}
+              style={pressFeedback}
               className="bg-gray-800 rounded-lg py-2.5 items-center"
               accessibilityRole="button"
               accessibilityLabel="Share invite">
@@ -400,6 +409,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                     <Pressable
                       onPress={handleAddByEmail}
                       disabled={settingsBusy}
+                      style={pressFeedback}
                       className="bg-blue-600 rounded-lg px-4 items-center justify-center"
                       accessibilityRole="button"
                       accessibilityLabel="Add member by email">
@@ -420,6 +430,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       <Pressable
                         onPress={handleRename}
                         disabled={settingsBusy}
+                        style={pressFeedback}
                         className="bg-blue-600 rounded-lg px-4 items-center justify-center"
                         accessibilityRole="button"
                         accessibilityLabel="Save flat name">
@@ -432,6 +443,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 <Pressable
                   onPress={handleLeave}
                   disabled={settingsBusy}
+                  style={pressFeedback}
                   className="py-2"
                   accessibilityRole="button"
                   accessibilityLabel="Leave flat">
@@ -442,6 +454,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   <Pressable
                     onPress={handleDelete}
                     disabled={settingsBusy}
+                    style={pressFeedback}
                     className="py-2"
                     accessibilityRole="button"
                     accessibilityLabel="Delete flat">
@@ -490,6 +503,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 <Pressable
                   onPress={handleQuickAdd}
                   disabled={aiBusy}
+                  style={pressFeedback}
                   className="bg-gray-800 rounded-lg px-4 items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel="Add with AI">
@@ -523,6 +537,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               <Pressable
                 onPress={handleAddExpense}
                 disabled={submitting}
+                style={pressFeedback}
                 className="bg-blue-600 rounded-lg py-2.5 items-center"
                 accessibilityRole="button">
                 {submitting ? (
@@ -540,28 +555,36 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 <Text className="text-gray-400">Invite flatmates to start splitting bills.</Text>
               )}
               {balances.map((b) => (
-                <View
-                  key={b.userId}
-                  className="flex-row items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
-                  <View>
-                    <Text className="font-semibold">{b.displayName}</Text>
-                    <Text className={`text-sm ${b.netAmount === 0 ? 'text-gray-400' : b.netAmount > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {b.netAmount === 0
-                        ? 'Settled up'
-                        : b.netAmount > 0
-                          ? `Owes you $${b.netAmount.toFixed(2)}`
-                          : `You owe $${Math.abs(b.netAmount).toFixed(2)}`}
-                    </Text>
+                <Animated.View key={b.userId} entering={FadeIn.duration(200)}>
+                  <View className="flex-row items-center justify-between bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                    <View>
+                      <Text className="font-semibold">{b.displayName}</Text>
+                      <Text
+                        className={`text-sm ${
+                          b.netAmount === 0
+                            ? 'text-gray-400'
+                            : b.netAmount > 0
+                              ? 'text-green-600'
+                              : 'text-red-500'
+                        }`}>
+                        {b.netAmount === 0
+                          ? 'Settled up'
+                          : b.netAmount > 0
+                            ? `Owes you $${b.netAmount.toFixed(2)}`
+                            : `You owe $${Math.abs(b.netAmount).toFixed(2)}`}
+                      </Text>
+                    </View>
+                    {b.netAmount !== 0 && (
+                      <Pressable
+                        onPress={() => handleSettle(b)}
+                        style={pressFeedback}
+                        accessibilityRole="button"
+                        className="px-3 py-1.5 bg-gray-800 rounded-full">
+                        <Text className="text-white text-xs font-semibold">Mark Settled</Text>
+                      </Pressable>
+                    )}
                   </View>
-                  {b.netAmount !== 0 && (
-                    <Pressable
-                      onPress={() => handleSettle(b)}
-                      accessibilityRole="button"
-                      className="px-3 py-1.5 bg-gray-800 rounded-full">
-                      <Text className="text-white text-xs font-semibold">Mark Settled</Text>
-                    </Pressable>
-                  )}
-                </View>
+                </Animated.View>
               ))}
             </View>
 
@@ -571,15 +594,17 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 <Text className="text-gray-400">No shared expenses yet.</Text>
               )}
               {expenses.map((e) => (
-                <View key={e.id} className="flex-row items-center justify-between py-2">
-                  <View className="flex-1">
-                    <Text className="font-semibold">{e.description || 'Shared expense'}</Text>
-                    <Text className="text-gray-500 text-sm">
-                      Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
-                    </Text>
+                <Animated.View key={e.id} entering={FadeIn.duration(200)}>
+                  <View className="flex-row items-center justify-between py-2">
+                    <View className="flex-1">
+                      <Text className="font-semibold">{e.description || 'Shared expense'}</Text>
+                      <Text className="text-gray-500 text-sm">
+                        Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
+                      </Text>
+                    </View>
+                    <Text className="font-semibold">${e.amount.toFixed(2)}</Text>
                   </View>
-                  <Text className="font-semibold">${e.amount.toFixed(2)}</Text>
-                </View>
+                </Animated.View>
               ))}
             </View>
           </View>
@@ -614,6 +639,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               <Pressable
                 onPress={handleConfirmAIAdd}
                 disabled={aiImporting}
+                style={pressFeedback}
                 className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm add">
@@ -626,6 +652,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               <Pressable
                 onPress={() => setAiPreview(null)}
                 disabled={aiImporting}
+                style={pressFeedback}
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel">
