@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
 
+const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
+
 export function AuthScreen() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
@@ -71,6 +73,7 @@ export function AuthScreen() {
         <Pressable
           onPress={handleSubmit}
           disabled={submitting}
+          style={pressFeedback}
           className="bg-blue-600 rounded-lg py-3 items-center mt-2"
           accessibilityRole="button"
           accessibilityLabel={mode === 'signIn' ? 'Log in' : 'Sign up'}>
@@ -88,6 +91,7 @@ export function AuthScreen() {
             setError(null);
             setMode(mode === 'signIn' ? 'signUp' : 'signIn');
           }}
+          style={pressFeedback}
           accessibilityRole="button">
           <Text className="text-blue-600 text-center text-sm mt-2">
             {mode === 'signIn' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}

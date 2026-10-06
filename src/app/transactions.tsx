@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categorizeTransaction, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
@@ -27,6 +28,10 @@ import {
   type Category,
   type Transaction,
 } from '@/lib/transactions';
+
+// Shared press-feedback style: a quick opacity dip on tap, applied via the
+// style prop (not className) since it needs the live `pressed` state.
+const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 export default function TransactionsScreen() {
   const { session } = useAuth();
@@ -248,6 +253,7 @@ export default function TransactionsScreen() {
           <Text className="text-2xl font-bold">Transactions</Text>
           <Pressable
             onPress={handlePickCSV}
+            style={pressFeedback}
             accessibilityRole="button"
             accessibilityLabel="Import CSV">
             <Text className="text-blue-600 font-semibold text-sm">Import CSV</Text>
@@ -264,6 +270,7 @@ export default function TransactionsScreen() {
           <Pressable
             onPress={handleQuickAdd}
             disabled={aiBusy}
+            style={pressFeedback}
             className="bg-gray-800 rounded-lg px-4 items-center justify-center"
             accessibilityRole="button"
             accessibilityLabel="Add with AI">
@@ -300,6 +307,7 @@ export default function TransactionsScreen() {
                 setCategoryId(cat.id === categoryId ? null : cat.id);
                 setCategorySource(cat.id === categoryId ? null : 'manual');
               }}
+              style={pressFeedback}
               className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
                 categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
               }`}>
@@ -318,6 +326,7 @@ export default function TransactionsScreen() {
           <Pressable
             onPress={handleSubmit}
             disabled={submitting}
+            style={pressFeedback}
             className="flex-1 bg-blue-600 rounded-lg py-2.5 items-center"
             accessibilityRole="button"
             accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
@@ -333,6 +342,7 @@ export default function TransactionsScreen() {
           {editingId && (
             <Pressable
               onPress={resetForm}
+              style={pressFeedback}
               className="px-4 py-2.5 items-center justify-center"
               accessibilityRole="button"
               accessibilityLabel="Cancel edit">
@@ -353,39 +363,43 @@ export default function TransactionsScreen() {
           </Text>
         }
         renderItem={({ item }) => (
-          <Pressable
-            onPress={() => handleStartEdit(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-            className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
-              editingId === item.id
-                ? 'bg-blue-50 border border-blue-300'
-                : 'bg-gray-50 border border-gray-100'
-            }`}>
-            <View className="flex-row items-center flex-1 gap-3">
-              <View className="w-9 h-9 rounded-full bg-white border border-gray-200 items-center justify-center">
-                <CategoryIcon name={item.categories?.icon} size={16} />
-              </View>
-              <View className="flex-1">
-                <Text className="font-semibold">
-                  {item.description || item.categories?.name || 'Transaction'}
-                </Text>
-                <Text className="text-gray-500 text-sm">
-                  {item.categories?.name ?? 'Uncategorized'} · {item.occurred_at}
-                </Text>
-              </View>
-            </View>
-            <Text className="font-semibold mr-3">${item.amount.toFixed(2)}</Text>
+          <Animated.View entering={FadeIn.duration(200)}>
             <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                handleDelete(item.id);
-              }}
+              onPress={() => handleStartEdit(item)}
+              style={pressFeedback}
               accessibilityRole="button"
-              accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
-              <Text className="text-red-500">Delete</Text>
+              accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
+              className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
+                editingId === item.id
+                  ? 'bg-blue-50 border border-blue-300'
+                  : 'bg-gray-50 border border-gray-100'
+              }`}>
+              <View className="flex-row items-center flex-1 gap-3">
+                <View className="w-9 h-9 rounded-full bg-white border border-gray-200 items-center justify-center">
+                  <CategoryIcon name={item.categories?.icon} size={16} />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-semibold">
+                    {item.description || item.categories?.name || 'Transaction'}
+                  </Text>
+                  <Text className="text-gray-500 text-sm">
+                    {item.categories?.name ?? 'Uncategorized'} · {item.occurred_at}
+                  </Text>
+                </View>
+              </View>
+              <Text className="font-semibold mr-3">${item.amount.toFixed(2)}</Text>
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDelete(item.id);
+                }}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
+                <Text className="text-red-500">Delete</Text>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </Animated.View>
         )}
       />
 
@@ -420,6 +434,7 @@ export default function TransactionsScreen() {
               <Pressable
                 onPress={handleConfirmCSVImport}
                 disabled={csvImporting}
+                style={pressFeedback}
                 className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm import">
@@ -432,6 +447,7 @@ export default function TransactionsScreen() {
               <Pressable
                 onPress={() => setCsvPreview(null)}
                 disabled={csvImporting}
+                style={pressFeedback}
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel import">
@@ -473,6 +489,7 @@ export default function TransactionsScreen() {
               <Pressable
                 onPress={handleConfirmAIAdd}
                 disabled={aiImporting}
+                style={pressFeedback}
                 className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm add">
@@ -485,6 +502,7 @@ export default function TransactionsScreen() {
               <Pressable
                 onPress={() => setAiPreview(null)}
                 disabled={aiImporting}
+                style={pressFeedback}
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel">
