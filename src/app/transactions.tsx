@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { categorizeTransaction, parseNaturalLanguageExpense } from '@/lib/ai';
+import { categorizeTransaction, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import {
@@ -49,6 +49,9 @@ export default function TransactionsScreen() {
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
+
+  const [aiPreview, setAiPreview] = useState<ParsedExpense[] | null>(null);
+  const [aiImporting, setAiImporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -102,19 +105,37 @@ export default function TransactionsScreen() {
     setAiBusy(true);
     setError(null);
     try {
-      const parsed = await parseNaturalLanguageExpense(quickAddText, categories);
+      const parsed = await parseNaturalLanguageExpenses(quickAddText, categories);
       if (!parsed) {
         setError('AI is briefly unavailable -- try again in a moment, or fill in the fields below.');
         return;
       }
-      setAmount(String(parsed.amount));
-      setDescription(parsed.description);
-      const matched = categories.find((c) => c.name === parsed.categoryName);
-      setCategoryId(matched?.id ?? null);
-      setCategorySource(matched ? 'ai' : null);
-      setQuickAddText('');
+      setAiPreview(parsed);
     } finally {
       setAiBusy(false);
+    }
+  };
+
+  const handleConfirmAIAdd = async () => {
+    if (!userId || !aiPreview) return;
+    setAiImporting(true);
+    try {
+      await bulkAddTransactions(
+        userId,
+        aiPreview.map((p) => ({
+          amount: p.amount,
+          description: p.description,
+          occurredAt: new Date().toISOString().slice(0, 10),
+          categoryId: categories.find((c) => c.name === p.categoryName)?.id ?? null,
+        }))
+      );
+      setAiPreview(null);
+      setQuickAddText('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add transactions.');
+    } finally {
+      setAiImporting(false);
     }
   };
 
@@ -236,7 +257,7 @@ export default function TransactionsScreen() {
           <TextInput
             value={quickAddText}
             onChangeText={setQuickAddText}
-            placeholder='Try "coffee $8.50 yesterday"'
+            placeholder='Try "coffee $8.50, lunch $12.50"'
             className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
           />
           <Pressable
@@ -244,11 +265,11 @@ export default function TransactionsScreen() {
             disabled={aiBusy}
             className="bg-gray-800 rounded-lg px-4 items-center justify-center"
             accessibilityRole="button"
-            accessibilityLabel="Fill form with AI">
+            accessibilityLabel="Add with AI">
             {aiBusy ? (
               <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text className="text-white font-semibold text-sm">✨ AI Fill</Text>
+              <Text className="text-white font-semibold text-sm">Add with AI</Text>
             )}
           </Pressable>
         </View>
@@ -286,9 +307,7 @@ export default function TransactionsScreen() {
               </Text>
             </Pressable>
           ))}
-          {categorySource === 'ai' && (
-            <Text className="text-xs text-blue-500">✨ AI suggested</Text>
-          )}
+          {categorySource === 'ai' && <Text className="text-xs text-blue-500">AI suggested</Text>}
         </View>
 
         {error && <Text className="text-red-500 text-sm">{error}</Text>}
@@ -407,6 +426,59 @@ export default function TransactionsScreen() {
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel import">
+                <Text className="text-gray-500 font-semibold">Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={aiPreview !== null} animationType="slide" transparent>
+        <View className="flex-1 bg-black/40 justify-end">
+          <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
+            <Text className="text-xl font-bold">
+              Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
+            </Text>
+            <Text className="text-gray-500 text-sm">
+              Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}
+            </Text>
+
+            <FlatList
+              data={aiPreview ?? []}
+              keyExtractor={(_, i) => String(i)}
+              style={{ maxHeight: 300 }}
+              renderItem={({ item }) => (
+                <View className="flex-row justify-between py-2 border-b border-gray-100">
+                  <View className="flex-1">
+                    <Text className="text-sm">{item.description}</Text>
+                    <Text className="text-xs text-gray-400">
+                      {item.categoryName ?? 'Uncategorized'}
+                    </Text>
+                  </View>
+                  <Text className="text-sm font-semibold">${item.amount.toFixed(2)}</Text>
+                </View>
+              )}
+            />
+
+            <View className="flex-row gap-2 pt-2">
+              <Pressable
+                onPress={handleConfirmAIAdd}
+                disabled={aiImporting}
+                className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                accessibilityRole="button"
+                accessibilityLabel="Confirm add">
+                {aiImporting ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-semibold">Confirm</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => setAiPreview(null)}
+                disabled={aiImporting}
+                className="px-4 py-3 items-center justify-center"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel">
                 <Text className="text-gray-500 font-semibold">Cancel</Text>
               </Pressable>
             </View>
