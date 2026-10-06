@@ -12,7 +12,9 @@
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
-async function callGemini(input: string, schema: Record<string, unknown>): Promise<unknown> {
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function callGeminiOnce(input: string, schema: Record<string, unknown>): Promise<unknown> {
   if (!GEMINI_API_KEY) {
     throw new Error('Missing EXPO_PUBLIC_GEMINI_API_KEY.');
   }
@@ -44,6 +46,21 @@ async function callGemini(input: string, schema: Record<string, unknown>): Promi
   if (!text) throw new Error('Gemini returned no output.');
 
   return JSON.parse(text);
+}
+
+// Gemini's flash model occasionally returns a transient 503 under demand
+// spikes (observed directly during dev/testing, not a one-off). One quick
+// retry clears most of these without the user ever noticing, rather than
+// immediately falling back to manual entry on what's usually a non-issue.
+async function callGemini(input: string, schema: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await callGeminiOnce(input, schema);
+  } catch (err) {
+    const isServerError = err instanceof Error && /Gemini API error: 5\d\d/.test(err.message);
+    if (!isServerError) throw err;
+    await sleep(800);
+    return await callGeminiOnce(input, schema);
+  }
 }
 
 export async function categorizeTransaction(
