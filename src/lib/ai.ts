@@ -99,31 +99,45 @@ export type ParsedExpense = {
   categoryName: string | null;
 };
 
-export async function parseNaturalLanguageExpense(
+// Handles both a single expense ("coffee $8.50") and a bulk list in one
+// sentence ("coffee $8.50, breakfast $12.50, lunch $22.20") -- always
+// returns an array so callers don't need two separate code paths.
+export async function parseNaturalLanguageExpenses(
   text: string,
   categories: { id: string; name: string }[]
-): Promise<ParsedExpense | null> {
+): Promise<ParsedExpense[] | null> {
   if (!text.trim()) return null;
 
   try {
     const result = (await callGemini(
-      `Extract an expense from this sentence: "${text}". The description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, or filler. Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. If no date is mentioned, assume today.`,
+      `Extract one or more expenses from this text -- it may describe a single purchase or a list of several, separated by commas or "and": "${text}". For each one, the description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, or filler. Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}.`,
       {
         type: 'object',
         properties: {
-          amount: { type: 'number' },
-          description: { type: 'string' },
-          categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+          expenses: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                amount: { type: 'number' },
+                description: { type: 'string' },
+                categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+              },
+              required: ['amount', 'description', 'categoryName'],
+            },
+          },
         },
-        required: ['amount', 'description', 'categoryName'],
+        required: ['expenses'],
       }
-    )) as { amount: number; description: string; categoryName: string };
+    )) as { expenses: { amount: number; description: string; categoryName: string }[] };
 
-    return {
-      amount: result.amount,
-      description: result.description,
-      categoryName: result.categoryName === 'None' ? null : result.categoryName,
-    };
+    if (!result.expenses?.length) return null;
+
+    return result.expenses.map((e) => ({
+      amount: e.amount,
+      description: e.description,
+      categoryName: e.categoryName === 'None' ? null : e.categoryName,
+    }));
   } catch {
     return null;
   }
