@@ -22,6 +22,7 @@ import {
   computeFlatHealth,
   createFlat,
   deleteFlat,
+  deleteSharedExpense,
   fetchFlatMembers,
   fetchMyFlat,
   fetchSharedExpenses,
@@ -29,6 +30,7 @@ import {
   leaveFlat,
   recordSettlement,
   renameFlat,
+  updateSharedExpense,
   type Balance,
   type Flat,
   type FlatHealth,
@@ -135,6 +137,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [quickAddText, setQuickAddText] = useState('');
@@ -212,6 +215,20 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     }
   };
 
+  const resetExpenseForm = () => {
+    setAmount('');
+    setDescription('');
+    setEditingExpenseId(null);
+  };
+
+  const handleStartEditExpense = (e: SharedExpense) => {
+    if (e.paid_by !== userId) return; // only the payer can edit/delete it
+    setEditingExpenseId(e.id);
+    setAmount(String(e.amount));
+    setDescription(e.description ?? '');
+    setError(null);
+  };
+
   const handleAddExpense = async () => {
     if (!userId) return;
     const parsedAmount = parseFloat(amount);
@@ -223,21 +240,48 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     setSubmitting(true);
     setError(null);
     try {
-      await addSharedExpense({
-        flatId: flat.id,
-        paidBy: userId,
-        amount: parsedAmount,
-        description,
-        memberIds: members.map((m) => m.user_id),
-      });
-      setAmount('');
-      setDescription('');
+      if (editingExpenseId) {
+        await updateSharedExpense({
+          expenseId: editingExpenseId,
+          amount: parsedAmount,
+          description,
+          memberIds: members.map((m) => m.user_id),
+        });
+      } else {
+        await addSharedExpense({
+          flatId: flat.id,
+          paidBy: userId,
+          amount: parsedAmount,
+          description,
+          memberIds: members.map((m) => m.user_id),
+        });
+      }
+      resetExpenseForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add shared expense.');
+      setError(err instanceof Error ? err.message : 'Failed to save shared expense.');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDeleteExpense = (e: SharedExpense) => {
+    Alert.alert('Delete this expense?', `"${e.description || 'Shared expense'}" will be removed and balances recalculated.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteSharedExpense(e.id);
+            if (editingExpenseId === e.id) resetExpenseForm();
+            await load();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete shared expense.');
+          }
+        },
+      },
+    ]);
   };
 
   const handleSettle = async (balance: Balance) => {
@@ -491,7 +535,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             )}
 
             <View className="gap-2">
-              <Text className="text-lg font-bold">Add shared expense</Text>
+              <Text className="text-lg font-bold">
+                {editingExpenseId ? 'Edit shared expense' : 'Add shared expense'}
+              </Text>
 
               <View className="flex-row gap-2">
                 <TextInput
@@ -534,18 +580,32 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 Splits equally across all {members.length} member
                 {members.length === 1 ? '' : 's'}.
               </Text>
-              <Pressable
-                onPress={handleAddExpense}
-                disabled={submitting}
-                style={pressFeedback}
-                className="bg-blue-600 rounded-lg py-2.5 items-center"
-                accessibilityRole="button">
-                {submitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-white font-semibold">Add Expense</Text>
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={handleAddExpense}
+                  disabled={submitting}
+                  style={pressFeedback}
+                  className="flex-1 bg-blue-600 rounded-lg py-2.5 items-center"
+                  accessibilityRole="button">
+                  {submitting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-white font-semibold">
+                      {editingExpenseId ? 'Save Changes' : 'Add Expense'}
+                    </Text>
+                  )}
+                </Pressable>
+                {editingExpenseId && (
+                  <Pressable
+                    onPress={resetExpenseForm}
+                    style={pressFeedback}
+                    className="px-4 py-2.5 items-center justify-center"
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel edit">
+                    <Text className="text-gray-500 font-semibold">Cancel</Text>
+                  </Pressable>
                 )}
-              </Pressable>
+              </View>
               {error && <Text className="text-red-500 text-sm">{error}</Text>}
             </View>
 
@@ -593,19 +653,46 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               {expenses.length === 0 && (
                 <Text className="text-gray-400">No shared expenses yet.</Text>
               )}
-              {expenses.map((e) => (
-                <Animated.View key={e.id} entering={FadeIn.duration(200)}>
-                  <View className="flex-row items-center justify-between bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
-                    <View className="flex-1">
-                      <Text className="font-semibold">{e.description || 'Shared expense'}</Text>
-                      <Text className="text-gray-500 text-sm">
-                        Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
-                      </Text>
-                    </View>
-                    <Text className="font-semibold">${e.amount.toFixed(2)}</Text>
-                  </View>
-                </Animated.View>
-              ))}
+              {expenses.map((e) => {
+                const canEdit = e.paid_by === userId;
+                return (
+                  <Animated.View key={e.id} entering={FadeIn.duration(200)}>
+                    <Pressable
+                      onPress={() => canEdit && handleStartEditExpense(e)}
+                      disabled={!canEdit}
+                      style={pressFeedback}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        canEdit ? `Edit shared expense ${e.description ?? ''}` : undefined
+                      }
+                      className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
+                        editingExpenseId === e.id
+                          ? 'bg-blue-50 border border-blue-300'
+                          : 'bg-gray-50 border border-gray-100'
+                      }`}>
+                      <View className="flex-1">
+                        <Text className="font-semibold">{e.description || 'Shared expense'}</Text>
+                        <Text className="text-gray-500 text-sm">
+                          Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
+                        </Text>
+                      </View>
+                      <Text className="font-semibold mr-3">${e.amount.toFixed(2)}</Text>
+                      {canEdit && (
+                        <Pressable
+                          onPress={(ev) => {
+                            ev.stopPropagation();
+                            handleDeleteExpense(e);
+                          }}
+                          style={pressFeedback}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete shared expense ${e.description ?? ''}`}>
+                          <Text className="text-red-500">Delete</Text>
+                        </Pressable>
+                      )}
+                    </Pressable>
+                  </Animated.View>
+                );
+              })}
             </View>
           </View>
         }
