@@ -141,6 +141,16 @@ export async function fetchSharedExpenses(flatId: string): Promise<SharedExpense
   return data as unknown as SharedExpense[];
 }
 
+export async function fetchExpenseSplitUserIds(expenseId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('shared_expense_splits')
+    .select('user_id')
+    .eq('shared_expense_id', expenseId);
+
+  if (error) throw error;
+  return (data ?? []).map((row) => row.user_id);
+}
+
 export async function addSharedExpense(params: {
   flatId: string;
   paidBy: string;
