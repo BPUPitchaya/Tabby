@@ -23,6 +23,7 @@ import {
   createFlat,
   deleteFlat,
   deleteSharedExpense,
+  fetchExpenseSplitUserIds,
   fetchFlatMembers,
   fetchMyFlat,
   fetchSharedExpenses,
@@ -138,6 +139,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const [quickAddText, setQuickAddText] = useState('');
@@ -174,6 +176,23 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Default the expense-split picker to "everyone" whenever the member
+  // list changes, but only when adding fresh -- while editing, the
+  // selection reflects that specific expense's actual splits instead.
+  useEffect(() => {
+    if (!editingExpenseId) {
+      setSelectedMemberIds(members.map((m) => m.user_id));
+    }
+  }, [members, editingExpenseId]);
+
+  const toggleMember = (userIdToToggle: string) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(userIdToToggle)
+        ? prev.filter((id) => id !== userIdToToggle)
+        : [...prev, userIdToToggle]
+    );
+  };
 
   const handleQuickAdd = async () => {
     if (!quickAddText.trim()) return;
@@ -219,14 +238,23 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     setAmount('');
     setDescription('');
     setEditingExpenseId(null);
+    setSelectedMemberIds(members.map((m) => m.user_id));
   };
 
-  const handleStartEditExpense = (e: SharedExpense) => {
+  const handleStartEditExpense = async (e: SharedExpense) => {
     if (e.paid_by !== userId) return; // only the payer can edit/delete it
     setEditingExpenseId(e.id);
     setAmount(String(e.amount));
     setDescription(e.description ?? '');
     setError(null);
+    try {
+      const splitUserIds = await fetchExpenseSplitUserIds(e.id);
+      setSelectedMemberIds(splitUserIds);
+    } catch {
+      // if this fails for any reason, fall back to "everyone" rather than
+      // leaving the picker empty and blocking the edit entirely
+      setSelectedMemberIds(members.map((m) => m.user_id));
+    }
   };
 
   const handleAddExpense = async () => {
@@ -234,6 +262,10 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       setError('Enter a valid amount.');
+      return;
+    }
+    if (selectedMemberIds.length === 0) {
+      setError('Select at least one person to split with.');
       return;
     }
 
@@ -245,7 +277,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           expenseId: editingExpenseId,
           amount: parsedAmount,
           description,
-          memberIds: members.map((m) => m.user_id),
+          memberIds: selectedMemberIds,
         });
       } else {
         await addSharedExpense({
@@ -253,7 +285,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           paidBy: userId,
           amount: parsedAmount,
           description,
-          memberIds: members.map((m) => m.user_id),
+          memberIds: selectedMemberIds,
         });
       }
       resetExpenseForm();
@@ -576,9 +608,29 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
                 />
               </View>
+              <Text className="text-sm font-semibold">Split with</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {members.map((m) => {
+                  const selected = selectedMemberIds.includes(m.user_id);
+                  return (
+                    <Pressable
+                      key={m.user_id}
+                      onPress={() => toggleMember(m.user_id)}
+                      style={pressFeedback}
+                      className={`px-3 py-1.5 rounded-full border ${
+                        selected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                      }`}>
+                      <Text className={selected ? 'text-white text-sm' : 'text-gray-700 text-sm'}>
+                        {m.profiles?.display_name ?? 'Unknown'}
+                        {m.user_id === userId ? ' (you)' : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Text className="text-gray-400 text-xs">
-                Splits equally across all {members.length} member
-                {members.length === 1 ? '' : 's'}.
+                Splits equally across {selectedMemberIds.length} selected member
+                {selectedMemberIds.length === 1 ? '' : 's'}.
               </Text>
               <View className="flex-row gap-2">
                 <Pressable
