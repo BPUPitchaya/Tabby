@@ -119,7 +119,7 @@ export default function HomeScreen() {
 
         {insight && (
           <View className="bg-blue-50 rounded-xl p-4">
-            <Text className="text-blue-900 text-sm">✨ {insight}</Text>
+            <Text className="text-blue-900 text-sm">{insight}</Text>
           </View>
         )}
 

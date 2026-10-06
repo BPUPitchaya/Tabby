@@ -84,14 +84,14 @@ export async function deleteTransaction(id: string) {
 
 export async function bulkAddTransactions(
   userId: string,
-  rows: { amount: number; description: string; occurredAt: string }[]
+  rows: { amount: number; description: string; occurredAt: string; categoryId?: string | null }[]
 ) {
   const { error } = await supabase.from('transactions').insert(
     rows.map((r) => ({
       user_id: userId,
       amount: r.amount,
       description: r.description || null,
-      category_id: null,
+      category_id: r.categoryId ?? null,
       occurred_at: r.occurredAt,
     }))
   );
