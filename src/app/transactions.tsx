@@ -104,7 +104,7 @@ export default function TransactionsScreen() {
     try {
       const parsed = await parseNaturalLanguageExpense(quickAddText, categories);
       if (!parsed) {
-        setError("Couldn't understand that -- try the fields below instead.");
+        setError('AI is briefly unavailable -- try again in a moment, or fill in the fields below.');
         return;
       }
       setAmount(String(parsed.amount));
