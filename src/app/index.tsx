@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { generateMonthlySummary } from '@/lib/ai';
+import { CategoryIcon } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { fetchDashboardData, type DashboardData } from '@/lib/dashboard';
 
-function CategoryBar({ name, total, max }: { name: string; total: number; max: number }) {
+function CategoryBar({
+  name,
+  icon,
+  total,
+  max,
+}: {
+  name: string;
+  icon: string | null;
+  total: number;
+  max: number;
+}) {
   const widthPct = max > 0 ? Math.max(4, (total / max) * 100) : 0;
   return (
-    <View className="gap-1">
-      <View className="flex-row justify-between">
-        <Text className="text-sm font-medium">{name}</Text>
+    <View className="gap-1.5">
+      <View className="flex-row justify-between items-center">
+        <View className="flex-row items-center gap-2">
+          <CategoryIcon name={icon} size={14} />
+          <Text className="text-sm font-medium">{name}</Text>
+        </View>
         <Text className="text-sm text-gray-500">${total.toFixed(2)}</Text>
       </View>
       <View className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -44,7 +58,7 @@ function MonthlyChart({ data }: { data: DashboardData['monthlyTotals'] }) {
 }
 
 export default function HomeScreen() {
-  const { session, signOut } = useAuth();
+  const { session } = useAuth();
   const userId = session?.user.id;
 
   const [data, setData] = useState<DashboardData | null>(null);
@@ -91,20 +105,17 @@ export default function HomeScreen() {
   }
 
   const maxCategory = Math.max(1, ...(data?.categoryTotals.map((c) => c.total) ?? [0]));
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <SafeAreaView className="flex-1 bg-white">
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-2xl font-bold">Tabby</Text>
-            <Text className="text-gray-500 text-sm">{session?.user.email}</Text>
-          </View>
-          <Pressable onPress={signOut} accessibilityRole="button" accessibilityLabel="Sign out">
-            <Text className="text-blue-600 font-semibold">Sign out</Text>
-          </Pressable>
+        <View>
+          <Text className="text-gray-400 text-sm">{greeting}</Text>
+          <Text className="text-2xl font-bold">{session?.user.email?.split('@')[0]}</Text>
         </View>
 
         {error && <Text className="text-red-500 text-sm">{error}</Text>}
@@ -130,6 +141,7 @@ export default function HomeScreen() {
               <CategoryBar
                 key={c.categoryId ?? 'uncategorized'}
                 name={c.name}
+                icon={c.icon}
                 total={c.total}
                 max={maxCategory}
               />

@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { categorizeTransaction, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
+import { CategoryIcon } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import {
@@ -299,9 +300,10 @@ export default function TransactionsScreen() {
                 setCategoryId(cat.id === categoryId ? null : cat.id);
                 setCategorySource(cat.id === categoryId ? null : 'manual');
               }}
-              className={`px-3 py-1.5 rounded-full border ${
+              className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
                 categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
               }`}>
+              <CategoryIcon name={cat.icon} size={13} color={categoryId === cat.id ? '#fff' : '#4b5563'} />
               <Text className={categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'}>
                 {cat.name}
               </Text>
@@ -355,16 +357,23 @@ export default function TransactionsScreen() {
             onPress={() => handleStartEdit(item)}
             accessibilityRole="button"
             accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-            className={`flex-row items-center justify-between rounded-lg px-4 py-3 ${
-              editingId === item.id ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50'
+            className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
+              editingId === item.id
+                ? 'bg-blue-50 border border-blue-300'
+                : 'bg-gray-50 border border-gray-100'
             }`}>
-            <View className="flex-1">
-              <Text className="font-semibold">
-                {item.description || item.categories?.name || 'Transaction'}
-              </Text>
-              <Text className="text-gray-500 text-sm">
-                {item.categories?.name ?? 'Uncategorized'} · {item.occurred_at}
-              </Text>
+            <View className="flex-row items-center flex-1 gap-3">
+              <View className="w-9 h-9 rounded-full bg-white border border-gray-200 items-center justify-center">
+                <CategoryIcon name={item.categories?.icon} size={16} />
+              </View>
+              <View className="flex-1">
+                <Text className="font-semibold">
+                  {item.description || item.categories?.name || 'Transaction'}
+                </Text>
+                <Text className="text-gray-500 text-sm">
+                  {item.categories?.name ?? 'Uncategorized'} · {item.occurred_at}
+                </Text>
+              </View>
             </View>
             <Text className="font-semibold mr-3">${item.amount.toFixed(2)}</Text>
             <Pressable
