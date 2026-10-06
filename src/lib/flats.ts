@@ -103,6 +103,23 @@ export async function leaveFlat(flatId: string, userId: string) {
   if (error) throw error;
 }
 
+export async function addMemberByEmail(flatId: string, email: string) {
+  const { data: foundUserId, error: rpcError } = await supabase.rpc('find_user_id_by_email', {
+    target_email: email.trim(),
+  });
+  if (rpcError) throw rpcError;
+  if (!foundUserId) throw new Error('No Tabby account found with that email.');
+
+  const { error } = await supabase
+    .from('flat_members')
+    .insert({ flat_id: flatId, user_id: foundUserId, role: 'member' });
+
+  if (error) {
+    if (error.code === '23505') throw new Error("That person's already in this flat.");
+    throw error;
+  }
+}
+
 export async function fetchFlatMembers(flatId: string): Promise<FlatMember[]> {
   const { data, error } = await supabase
     .from('flat_members')
