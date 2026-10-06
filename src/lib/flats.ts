@@ -84,6 +84,25 @@ export async function joinFlat(userId: string, inviteCode: string): Promise<Flat
   return flat as Flat;
 }
 
+export async function renameFlat(flatId: string, name: string) {
+  const { error } = await supabase.from('flats').update({ name }).eq('id', flatId);
+  if (error) throw error;
+}
+
+export async function deleteFlat(flatId: string) {
+  const { error } = await supabase.from('flats').delete().eq('id', flatId);
+  if (error) throw error;
+}
+
+export async function leaveFlat(flatId: string, userId: string) {
+  const { error } = await supabase
+    .from('flat_members')
+    .delete()
+    .eq('flat_id', flatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function fetchFlatMembers(flatId: string): Promise<FlatMember[]> {
   const { data, error } = await supabase
     .from('flat_members')
