@@ -172,6 +172,42 @@ export async function addSharedExpense(params: {
   if (splitsError) throw splitsError;
 }
 
+export async function updateSharedExpense(params: {
+  expenseId: string;
+  amount: number;
+  description: string;
+  memberIds: string[];
+}) {
+  const { error: expenseError } = await supabase
+    .from('shared_expenses')
+    .update({ amount: params.amount, description: params.description || null })
+    .eq('id', params.expenseId);
+  if (expenseError) throw expenseError;
+
+  // Recompute splits from scratch rather than trying to patch existing
+  // rows -- simpler and correct even if the member list changed since
+  // this expense was first logged.
+  const { error: deleteError } = await supabase
+    .from('shared_expense_splits')
+    .delete()
+    .eq('shared_expense_id', params.expenseId);
+  if (deleteError) throw deleteError;
+
+  const share = Math.round((params.amount / params.memberIds.length) * 100) / 100;
+  const splits = params.memberIds.map((userId) => ({
+    shared_expense_id: params.expenseId,
+    user_id: userId,
+    share_amount: share,
+  }));
+  const { error: insertError } = await supabase.from('shared_expense_splits').insert(splits);
+  if (insertError) throw insertError;
+}
+
+export async function deleteSharedExpense(expenseId: string) {
+  const { error } = await supabase.from('shared_expenses').delete().eq('id', expenseId);
+  if (error) throw error;
+}
+
 export async function recordSettlement(params: {
   flatId: string;
   fromUser: string;
