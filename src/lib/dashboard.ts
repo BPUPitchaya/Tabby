@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 export type CategoryTotal = {
   categoryId: string | null;
   name: string;
+  icon: string | null;
   total: number;
 };
 
@@ -31,7 +32,7 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
 
   const { data, error } = await supabase
     .from('transactions')
-    .select('amount, occurred_at, category_id, categories(name)')
+    .select('amount, occurred_at, category_id, categories(name, icon)')
     .eq('user_id', userId)
     .gte('occurred_at', sinceDate);
 
@@ -41,7 +42,7 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
     amount: number;
     occurred_at: string;
     category_id: string | null;
-    categories: { name: string } | null;
+    categories: { name: string; icon: string | null } | null;
   }[];
 
   const now = new Date();
@@ -69,6 +70,7 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
       categoryMap.set(key, {
         categoryId: row.category_id,
         name,
+        icon: row.categories?.icon ?? null,
         total: (existing?.total ?? 0) + row.amount,
       });
     }
