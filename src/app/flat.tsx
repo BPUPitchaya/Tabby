@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { parseNaturalLanguageExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
   addSharedExpense,
@@ -115,6 +116,9 @@ function FlatView({ flat }: { flat: Flat }) {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [quickAddText, setQuickAddText] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+
   const load = useCallback(async () => {
     if (!userId) return;
     try {
@@ -137,6 +141,24 @@ function FlatView({ flat }: { flat: Flat }) {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  const handleQuickAdd = async () => {
+    if (!quickAddText.trim()) return;
+    setAiBusy(true);
+    setError(null);
+    try {
+      const parsed = await parseNaturalLanguageExpense(quickAddText, []);
+      if (!parsed) {
+        setError('AI is briefly unavailable -- try again in a moment, or fill in the fields below.');
+        return;
+      }
+      setAmount(String(parsed.amount));
+      setDescription(parsed.description);
+      setQuickAddText('');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const handleAddExpense = async () => {
     if (!userId) return;
@@ -242,6 +264,28 @@ function FlatView({ flat }: { flat: Flat }) {
 
             <View className="gap-2">
               <Text className="text-lg font-bold">Add shared expense</Text>
+
+              <View className="flex-row gap-2">
+                <TextInput
+                  value={quickAddText}
+                  onChangeText={setQuickAddText}
+                  placeholder='Try "rent 500"'
+                  className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                />
+                <Pressable
+                  onPress={handleQuickAdd}
+                  disabled={aiBusy}
+                  className="bg-gray-800 rounded-lg px-4 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel="Fill form with AI">
+                  {aiBusy ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text className="text-white font-semibold text-sm">✨ AI Fill</Text>
+                  )}
+                </Pressable>
+              </View>
+
               <View className="flex-row gap-2">
                 <TextInput
                   value={amount}
