@@ -11,6 +11,14 @@
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+// 'latest' alias rather than a pinned version -- Google points this at
+// whichever current lite model is healthy/well-provisioned. Switched from
+// the pinned 'gemini-3.8-flash', which was hitting sustained 503s (not a
+// brief spike -- confirmed failing consistently across a full day of
+// testing), while this alias (currently resolving to gemini-3.5-flash-lite)
+// succeeded reliably across repeated tests. Lite is also a better fit for
+// our tasks anyway: simple categorization/extraction, not complex reasoning.
+const GEMINI_MODEL = 'gemini-flash-lite-latest';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -26,7 +34,7 @@ async function callGeminiOnce(input: string, schema: Record<string, unknown>): P
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gemini-3.8-flash',
+      model: GEMINI_MODEL,
       input,
       response_format: {
         type: 'text',
@@ -99,7 +107,7 @@ export async function parseNaturalLanguageExpense(
 
   try {
     const result = (await callGemini(
-      `Extract an expense from this sentence: "${text}". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. If no date is mentioned, assume today.`,
+      `Extract an expense from this sentence: "${text}". The description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, or filler. Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. If no date is mentioned, assume today.`,
       {
         type: 'object',
         properties: {
