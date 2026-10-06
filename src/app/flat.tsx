@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -17,11 +18,14 @@ import {
   computeBalances,
   computeFlatHealth,
   createFlat,
+  deleteFlat,
   fetchFlatMembers,
   fetchMyFlat,
   fetchSharedExpenses,
   joinFlat,
+  leaveFlat,
   recordSettlement,
+  renameFlat,
   type Balance,
   type Flat,
   type FlatHealth,
@@ -109,7 +113,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   );
 }
 
-function FlatView({ flat }: { flat: Flat }) {
+function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
 
@@ -128,6 +132,12 @@ function FlatView({ flat }: { flat: Flat }) {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiPreview, setAiPreview] = useState<ParsedExpense[] | null>(null);
   const [aiImporting, setAiImporting] = useState(false);
+
+  const [showSettings, setShowSettings] = useState(false);
+  const [newName, setNewName] = useState(flat.name);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+
+  const isAdmin = members.find((m) => m.user_id === userId)?.role === 'admin';
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -246,6 +256,65 @@ function FlatView({ flat }: { flat: Flat }) {
     }
   };
 
+  const handleRename = async () => {
+    if (!newName.trim() || newName.trim() === flat.name) return;
+    setSettingsBusy(true);
+    setError(null);
+    try {
+      await renameFlat(flat.id, newName.trim());
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename flat.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleLeave = () => {
+    Alert.alert('Leave flat?', `You'll need an invite code to rejoin "${flat.name}" later.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          if (!userId) return;
+          setSettingsBusy(true);
+          try {
+            await leaveFlat(flat.id, userId);
+            onLeftFlat();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to leave flat.');
+            setSettingsBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete flat?',
+      `This permanently deletes "${flat.name}" and all its shared expenses and balances for everyone. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setSettingsBusy(true);
+            try {
+              await deleteFlat(flat.id);
+              onLeftFlat();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to delete flat.');
+              setSettingsBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-white">
@@ -262,13 +331,70 @@ function FlatView({ flat }: { flat: Flat }) {
         renderItem={null}
         ListHeaderComponent={
           <View className="px-4 pt-4 gap-5">
-            <View>
-              <Text className="text-2xl font-bold">{flat.name}</Text>
-              <Text className="text-gray-500 text-sm">
-                Invite code: <Text className="font-mono font-semibold">{flat.invite_code}</Text> ·{' '}
-                {members.length} member{members.length === 1 ? '' : 's'}
-              </Text>
+            <View className="flex-row items-start justify-between">
+              <View>
+                <Text className="text-2xl font-bold">{flat.name}</Text>
+                <Text className="text-gray-500 text-sm">
+                  Invite code: <Text className="font-mono font-semibold">{flat.invite_code}</Text>{' '}
+                  · {members.length} member{members.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setShowSettings((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel="Flat settings">
+                <Text className="text-blue-600 font-semibold text-sm">
+                  {showSettings ? 'Close' : 'Settings'}
+                </Text>
+              </Pressable>
             </View>
+
+            {showSettings && (
+              <View className="bg-gray-50 rounded-xl p-4 gap-3">
+                {isAdmin && (
+                  <View className="gap-2">
+                    <Text className="text-sm font-semibold">Rename flat</Text>
+                    <View className="flex-row gap-2">
+                      <TextInput
+                        value={newName}
+                        onChangeText={setNewName}
+                        className="border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
+                      />
+                      <Pressable
+                        onPress={handleRename}
+                        disabled={settingsBusy}
+                        className="bg-blue-600 rounded-lg px-4 items-center justify-center"
+                        accessibilityRole="button"
+                        accessibilityLabel="Save flat name">
+                        <Text className="text-white font-semibold text-sm">Save</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+
+                <Pressable
+                  onPress={handleLeave}
+                  disabled={settingsBusy}
+                  className="py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Leave flat">
+                  <Text className="text-red-500 font-semibold text-sm">Leave Flat</Text>
+                </Pressable>
+
+                {isAdmin && (
+                  <Pressable
+                    onPress={handleDelete}
+                    disabled={settingsBusy}
+                    className="py-2"
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete flat">
+                    <Text className="text-red-700 font-semibold text-sm">Delete Flat</Text>
+                  </Pressable>
+                )}
+
+                {settingsBusy && <ActivityIndicator />}
+              </View>
+            )}
 
             {health && (
               <View
@@ -481,5 +607,9 @@ export default function FlatScreen() {
     );
   }
 
-  return flat ? <FlatView flat={flat} /> : <NoFlatView onFlatReady={load} />;
+  return flat ? (
+    <FlatView flat={flat} onLeftFlat={load} />
+  ) : (
+    <NoFlatView onFlatReady={load} />
+  );
 }
