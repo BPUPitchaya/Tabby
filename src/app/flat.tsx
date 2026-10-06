@@ -5,6 +5,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  Share,
   Text,
   TextInput,
   View,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
+  addMemberByEmail,
   addSharedExpense,
   computeBalances,
   computeFlatHealth,
@@ -136,6 +138,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   const [showSettings, setShowSettings] = useState(false);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [addEmail, setAddEmail] = useState('');
 
   const isAdmin = members.find((m) => m.user_id === userId)?.role === 'admin';
 
@@ -270,6 +273,27 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     }
   };
 
+  const handleAddByEmail = async () => {
+    if (!addEmail.trim()) return;
+    setSettingsBusy(true);
+    setError(null);
+    try {
+      await addMemberByEmail(flat.id, addEmail.trim());
+      setAddEmail('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add that person.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleShareInvite = () => {
+    Share.share({
+      message: `Join my flat "${flat.name}" on Tabby! Use invite code: ${flat.invite_code}`,
+    });
+  };
+
   const handleLeave = () => {
     Alert.alert('Leave flat?', `You'll need an invite code to rejoin "${flat.name}" later.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -349,8 +373,41 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               </Pressable>
             </View>
 
+            <Pressable
+              onPress={handleShareInvite}
+              className="bg-gray-800 rounded-lg py-2.5 items-center"
+              accessibilityRole="button"
+              accessibilityLabel="Share invite">
+              <Text className="text-white font-semibold">Share Invite</Text>
+            </Pressable>
+
             {showSettings && (
               <View className="bg-gray-50 rounded-xl p-4 gap-3">
+                <View className="gap-2">
+                  <Text className="text-sm font-semibold">Add a member by email</Text>
+                  <Text className="text-gray-400 text-xs">
+                    They need an existing Tabby account.
+                  </Text>
+                  <View className="flex-row gap-2">
+                    <TextInput
+                      value={addEmail}
+                      onChangeText={setAddEmail}
+                      placeholder="their@email.com"
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      className="border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
+                    />
+                    <Pressable
+                      onPress={handleAddByEmail}
+                      disabled={settingsBusy}
+                      className="bg-blue-600 rounded-lg px-4 items-center justify-center"
+                      accessibilityRole="button"
+                      accessibilityLabel="Add member by email">
+                      <Text className="text-white font-semibold text-sm">Add</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
                 {isAdmin && (
                   <View className="gap-2">
                     <Text className="text-sm font-semibold">Rename flat</Text>
