@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { generateMonthlySummary } from '@/lib/ai';
@@ -20,18 +21,20 @@ function CategoryBar({
 }) {
   const widthPct = max > 0 ? Math.max(4, (total / max) * 100) : 0;
   return (
-    <View className="gap-1.5">
-      <View className="flex-row justify-between items-center">
-        <View className="flex-row items-center gap-2">
-          <CategoryIcon name={icon} size={14} />
-          <Text className="text-sm font-medium">{name}</Text>
+    <Animated.View entering={FadeIn.duration(200)}>
+      <View className="gap-1.5">
+        <View className="flex-row justify-between items-center">
+          <View className="flex-row items-center gap-2">
+            <CategoryIcon name={icon} size={14} />
+            <Text className="text-sm font-medium">{name}</Text>
+          </View>
+          <Text className="text-sm text-gray-500">${total.toFixed(2)}</Text>
         </View>
-        <Text className="text-sm text-gray-500">${total.toFixed(2)}</Text>
+        <View className="h-2 bg-gray-100 rounded-full overflow-hidden">
+          <View className="h-2 bg-blue-600 rounded-full" style={{ width: `${widthPct}%` }} />
+        </View>
       </View>
-      <View className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <View className="h-2 bg-blue-600 rounded-full" style={{ width: `${widthPct}%` }} />
-      </View>
-    </View>
+    </Animated.View>
   );
 }
 

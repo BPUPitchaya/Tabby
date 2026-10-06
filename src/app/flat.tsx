@@ -595,7 +595,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               )}
               {expenses.map((e) => (
                 <Animated.View key={e.id} entering={FadeIn.duration(200)}>
-                  <View className="flex-row items-center justify-between py-2">
+                  <View className="flex-row items-center justify-between bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
                     <View className="flex-1">
                       <Text className="font-semibold">{e.description || 'Shared expense'}</Text>
                       <Text className="text-gray-500 text-sm">
