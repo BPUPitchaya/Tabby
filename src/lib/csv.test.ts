@@ -43,6 +43,7 @@ describe('parseTransactionsFromCSV', () => {
       amount: 84.2,
       description: 'Pak n Save, Wellington',
       occurredAt: '2026-10-05',
+      isIncome: false,
     });
     expect(result[3].description).toBe('Coffee "The Good One"');
   });
@@ -50,6 +51,14 @@ describe('parseTransactionsFromCSV', () => {
   it('normalizes negative (debit) amounts to positive', () => {
     const result = parseTransactionsFromCSV(sampleCSV);
     expect(result.every((t) => t.amount > 0)).toBe(true);
+  });
+
+  it('flags positive (credit) amounts as income, negative as expense', () => {
+    const result = parseTransactionsFromCSV(sampleCSV);
+    expect(result[0].isIncome).toBe(false); // -84.20
+    expect(result[1].isIncome).toBe(false); // -65.00
+    expect(result[2].isIncome).toBe(true); // 2500.00 "Salary, October"
+    expect(result[3].isIncome).toBe(false); // -5.50
   });
 
   it('parses both DD/MM/YYYY and ISO dates correctly', () => {

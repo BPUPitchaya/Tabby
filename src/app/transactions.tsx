@@ -27,6 +27,7 @@ import {
   fetchTransactions,
   updateTransaction,
   type Category,
+  type CategoryType,
   type Transaction,
 } from '@/lib/transactions';
 
@@ -49,6 +50,7 @@ export default function TransactionsScreen() {
   const [merchant, setMerchant] = useState('');
   const [recentMerchants, setRecentMerchants] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [transactionType, setTransactionType] = useState<CategoryType>('expense');
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -66,11 +68,13 @@ export default function TransactionsScreen() {
     if (!userId) return;
     try {
       setError(null);
-      const [tx, cats, merchants] = await Promise.all([
+      const [tx, expenseCats, incomeCats, merchants] = await Promise.all([
         fetchTransactions(userId),
-        fetchCategories(),
+        fetchCategories('expense'),
+        fetchCategories('income'),
         fetchRecentMerchants(userId),
       ]);
+      const cats = [...expenseCats, ...incomeCats];
       setTransactions(tx);
       setCategories(cats);
       setRecentMerchants(merchants);
@@ -96,6 +100,14 @@ export default function TransactionsScreen() {
     setCategoryId(null);
     setCategorySource(null);
     setEditingId(null);
+    setTransactionType('expense');
+  };
+
+  const handleSelectType = (type: CategoryType) => {
+    setTransactionType(type);
+    // a category chosen under the old type won't be valid for the new one
+    setCategoryId(null);
+    setCategorySource(null);
   };
 
   const handleDescriptionBlur = async () => {
@@ -200,6 +212,7 @@ export default function TransactionsScreen() {
     setMerchant(item.merchant ?? '');
     setCategoryId(item.category_id);
     setCategorySource(item.category_id ? 'manual' : null);
+    setTransactionType(item.is_income ? 'income' : 'expense');
     setError(null);
   };
 
@@ -214,6 +227,7 @@ export default function TransactionsScreen() {
     setSubmitting(true);
     setError(null);
     try {
+      const isIncome = transactionType === 'income';
       if (editingId) {
         await updateTransaction(editingId, {
           amount: parsedAmount,
@@ -221,6 +235,7 @@ export default function TransactionsScreen() {
           merchant,
           categoryId,
           occurredAt: new Date().toISOString().slice(0, 10),
+          isIncome,
         });
       } else {
         await addTransaction({
@@ -230,6 +245,7 @@ export default function TransactionsScreen() {
           merchant,
           categoryId,
           occurredAt: new Date().toISOString().slice(0, 10),
+          isIncome,
         });
       }
       resetForm();
@@ -295,6 +311,39 @@ export default function TransactionsScreen() {
           </Pressable>
         </View>
 
+        <View className="flex-row bg-gray-100 rounded-lg p-1">
+          <Pressable
+            onPress={() => handleSelectType('expense')}
+            style={pressFeedback}
+            accessibilityRole="button"
+            accessibilityLabel="Expense"
+            className={`flex-1 rounded-md py-1.5 items-center ${
+              transactionType === 'expense' ? 'bg-white shadow-sm' : ''
+            }`}>
+            <Text
+              className={`font-semibold text-sm ${
+                transactionType === 'expense' ? 'text-gray-900' : 'text-gray-500'
+              }`}>
+              Expense
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => handleSelectType('income')}
+            style={pressFeedback}
+            accessibilityRole="button"
+            accessibilityLabel="Income"
+            className={`flex-1 rounded-md py-1.5 items-center ${
+              transactionType === 'income' ? 'bg-white shadow-sm' : ''
+            }`}>
+            <Text
+              className={`font-semibold text-sm ${
+                transactionType === 'income' ? 'text-green-700' : 'text-gray-500'
+              }`}>
+              Income
+            </Text>
+          </Pressable>
+        </View>
+
         <View className="flex-row gap-2">
           <TextInput
             value={amount}
@@ -338,7 +387,9 @@ export default function TransactionsScreen() {
         )}
 
         <View className="flex-row flex-wrap gap-2 items-center">
-          {categories.map((cat) => (
+          {categories
+            .filter((cat) => cat.type === transactionType)
+            .map((cat) => (
             <Pressable
               key={cat.id}
               onPress={() => {
@@ -413,8 +464,15 @@ export default function TransactionsScreen() {
                   : 'bg-gray-50 border border-gray-100'
               }`}>
               <View className="flex-row items-center flex-1 gap-3">
-                <View className="w-9 h-9 rounded-full bg-white border border-gray-200 items-center justify-center">
-                  <CategoryIcon name={item.categories?.icon} size={16} />
+                <View
+                  className={`w-9 h-9 rounded-full border items-center justify-center ${
+                    item.is_income ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
+                  }`}>
+                  <CategoryIcon
+                    name={item.categories?.icon}
+                    size={16}
+                    color={item.is_income ? '#15803d' : undefined}
+                  />
                 </View>
                 <View className="flex-1">
                   <Text className="font-semibold">
@@ -426,7 +484,9 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
-              <Text className="font-semibold mr-3">${item.amount.toFixed(2)}</Text>
+              <Text className={`font-semibold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
+                {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
+              </Text>
               <Pressable
                 onPress={(e) => {
                   e.stopPropagation();
@@ -449,9 +509,11 @@ export default function TransactionsScreen() {
               Import {csvPreview?.length ?? 0} transaction{csvPreview?.length === 1 ? '' : 's'}?
             </Text>
             <Text className="text-gray-500 text-sm">
-              Total: $
-              {csvPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}. All imported
-              as Uncategorized -- edit them afterwards to assign categories.
+              Net: $
+              {csvPreview
+                ?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0)
+                .toFixed(2) ?? '0.00'}
+              . All imported as Uncategorized -- edit them afterwards to assign categories.
             </Text>
 
             <FlatList
@@ -462,9 +524,14 @@ export default function TransactionsScreen() {
                 <View className="flex-row justify-between py-2 border-b border-gray-100">
                   <View className="flex-1">
                     <Text className="text-sm">{item.description || '(no description)'}</Text>
-                    <Text className="text-xs text-gray-400">{item.occurredAt}</Text>
+                    <Text className="text-xs text-gray-400">
+                      {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
+                    </Text>
                   </View>
-                  <Text className="text-sm font-semibold">${item.amount.toFixed(2)}</Text>
+                  <Text
+                    className={`text-sm font-semibold ${item.isIncome ? 'text-green-700' : ''}`}>
+                    {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
+                  </Text>
                 </View>
               )}
             />

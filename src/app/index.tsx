@@ -123,9 +123,29 @@ export default function HomeScreen() {
 
         {error && <Text className="text-red-500 text-sm">{error}</Text>}
 
-        <View className="bg-gray-50 rounded-xl p-4 gap-1">
-          <Text className="text-gray-500 text-sm">This month</Text>
-          <Text className="text-3xl font-bold">${data?.thisMonthTotal.toFixed(2) ?? '0.00'}</Text>
+        <View className="bg-gray-50 rounded-xl p-4 gap-2">
+          <Text className="text-gray-500 text-sm">This month, net</Text>
+          <Text
+            className={`text-3xl font-bold ${
+              (data?.thisMonthNet ?? 0) < 0 ? 'text-red-600' : 'text-green-700'
+            }`}>
+            {(data?.thisMonthNet ?? 0) < 0 ? '-' : '+'}$
+            {Math.abs(data?.thisMonthNet ?? 0).toFixed(2)}
+          </Text>
+          <View className="flex-row gap-4 pt-1">
+            <View className="flex-row items-center gap-1.5">
+              <View className="w-2 h-2 rounded-full bg-green-600" />
+              <Text className="text-gray-500 text-xs">
+                Earned ${data?.thisMonthIncome.toFixed(2) ?? '0.00'}
+              </Text>
+            </View>
+            <View className="flex-row items-center gap-1.5">
+              <View className="w-2 h-2 rounded-full bg-gray-400" />
+              <Text className="text-gray-500 text-xs">
+                Spent ${data?.thisMonthTotal.toFixed(2) ?? '0.00'}
+              </Text>
+            </View>
+          </View>
           <Text className="text-gray-400 text-xs">
             {data?.transactionCount ?? 0} transaction{data?.transactionCount === 1 ? '' : 's'}
           </Text>

@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase';
 
+export type CategoryType = 'expense' | 'income';
+
 export type Category = {
   id: string;
   name: string;
   icon: string | null;
+  type: CategoryType;
 };
 
 export type Transaction = {
@@ -13,13 +16,15 @@ export type Transaction = {
   merchant: string | null;
   occurred_at: string;
   category_id: string | null;
+  is_income: boolean;
   categories: Category | null;
 };
 
-export async function fetchCategories() {
+export async function fetchCategories(type: CategoryType) {
   const { data, error } = await supabase
     .from('categories')
-    .select('id, name, icon')
+    .select('id, name, icon, type')
+    .eq('type', type)
     .order('name', { ascending: true });
 
   if (error) throw error;
@@ -29,7 +34,9 @@ export async function fetchCategories() {
 export async function fetchTransactions(userId: string) {
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, amount, description, merchant, occurred_at, category_id, categories(id, name, icon)')
+    .select(
+      'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type)'
+    )
     .eq('user_id', userId)
     .order('occurred_at', { ascending: false })
     .order('created_at', { ascending: false });
@@ -71,6 +78,7 @@ export async function addTransaction(params: {
   merchant?: string | null;
   categoryId: string | null;
   occurredAt: string;
+  isIncome?: boolean;
 }) {
   const { error } = await supabase.from('transactions').insert({
     user_id: params.userId,
@@ -79,6 +87,7 @@ export async function addTransaction(params: {
     merchant: params.merchant?.trim() || null,
     category_id: params.categoryId,
     occurred_at: params.occurredAt,
+    is_income: params.isIncome ?? false,
   });
 
   if (error) throw error;
@@ -92,6 +101,7 @@ export async function updateTransaction(
     merchant?: string | null;
     categoryId: string | null;
     occurredAt: string;
+    isIncome?: boolean;
   }
 ) {
   const { error } = await supabase
@@ -102,6 +112,7 @@ export async function updateTransaction(
       merchant: params.merchant?.trim() || null,
       category_id: params.categoryId,
       occurred_at: params.occurredAt,
+      is_income: params.isIncome ?? false,
     })
     .eq('id', id);
 
@@ -121,6 +132,7 @@ export async function bulkAddTransactions(
     merchant?: string | null;
     occurredAt: string;
     categoryId?: string | null;
+    isIncome?: boolean;
   }[]
 ) {
   const { error } = await supabase.from('transactions').insert(
@@ -131,6 +143,7 @@ export async function bulkAddTransactions(
       merchant: r.merchant?.trim() || null,
       category_id: r.categoryId ?? null,
       occurred_at: r.occurredAt,
+      is_income: r.isIncome ?? false,
     }))
   );
   if (error) throw error;
