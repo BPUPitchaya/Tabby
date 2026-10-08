@@ -1,0 +1,36 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(512 535) scale(0.82) translate(-512 -535)">
+    <!-- ears -->
+    <circle cx="290" cy="300" r="120" fill="#8B5A2B"/>
+    <circle cx="290" cy="300" r="62" fill="#E8C39E"/>
+    <circle cx="734" cy="300" r="120" fill="#8B5A2B"/>
+    <circle cx="734" cy="300" r="62" fill="#E8C39E"/>
+
+    <!-- head -->
+    <circle cx="512" cy="560" r="330" fill="#8B5A2B"/>
+
+    <!-- cheeks -->
+    <circle cx="320" cy="660" r="52" fill="#C98A52" opacity="0.55"/>
+    <circle cx="704" cy="660" r="52" fill="#C98A52" opacity="0.55"/>
+
+    <!-- muzzle -->
+    <ellipse cx="512" cy="650" rx="215" ry="175" fill="#E8C39E"/>
+
+    <!-- eyes -->
+    <ellipse cx="412" cy="545" rx="30" ry="38" fill="#2B1810"/>
+    <ellipse cx="612" cy="545" rx="30" ry="38" fill="#2B1810"/>
+    <circle cx="422" cy="532" r="9" fill="#FFFFFF"/>
+    <circle cx="622" cy="532" r="9" fill="#FFFFFF"/>
+
+    <!-- eyebrow hints -->
+    <path d="M 375 480 Q 412 460 448 478" stroke="#4A2F1F" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <path d="M 576 478 Q 612 460 649 480" stroke="#4A2F1F" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+    <!-- nose -->
+    <ellipse cx="512" cy="600" rx="58" ry="40" fill="#2B1810"/>
+
+    <!-- mouth -->
+    <path d="M 440 672 Q 512 730 584 672" stroke="#2B1810" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <path d="M 512 640 L 512 672" stroke="#2B1810" stroke-width="10" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
