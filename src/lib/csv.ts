@@ -67,6 +67,7 @@ export type ParsedCSVTransaction = {
   amount: number;
   description: string;
   occurredAt: string;
+  isIncome: boolean;
 };
 
 export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
@@ -84,10 +85,16 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
     .slice(1)
     .map((row) => {
       const rawAmount = (row[amountIdx] ?? '').replace(/[^0-9.-]/g, '');
-      const amount = Math.abs(parseFloat(rawAmount));
+      const parsedRaw = parseFloat(rawAmount);
+      // Standard bank-statement convention: negative = money out (expense),
+      // positive = money in (income/credit). A row with just "45" and no
+      // sign at all is ambiguous -- treated as an expense, since that's the
+      // far more common case in a personal spending export.
+      const isIncome = parsedRaw > 0;
+      const amount = Math.abs(parsedRaw);
       const description = descIdx !== -1 ? row[descIdx] : '';
       const occurredAt = dateIdx !== -1 ? parseDate(row[dateIdx]) : new Date().toISOString().slice(0, 10);
-      return { amount, description, occurredAt };
+      return { amount, description, occurredAt, isIncome };
     })
     .filter((t) => !isNaN(t.amount) && t.amount > 0);
 }
