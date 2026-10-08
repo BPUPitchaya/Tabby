@@ -1,7 +1,10 @@
 import { Feather } from '@expo/vector-icons';
+import { useState } from 'react';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LegalModal } from '@/components/legal-modal';
+import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
 
 function Row({
@@ -33,6 +36,7 @@ function Row({
 
 export default function ProfileScreen() {
   const { session, signOut } = useAuth();
+  const [legalDoc, setLegalDoc] = useState<LegalDoc | null>(null);
 
   const handleSignOut = () => {
     Alert.alert('Sign out?', undefined, [
@@ -53,11 +57,23 @@ export default function ProfileScreen() {
         </View>
 
         <View className="gap-2">
+          <Row
+            icon="shield"
+            label="Privacy Policy"
+            onPress={() => setLegalDoc(PRIVACY_POLICY)}
+          />
+          <Row
+            icon="file-text"
+            label="Terms of Service"
+            onPress={() => setLegalDoc(TERMS_OF_SERVICE)}
+          />
           <Row icon="log-out" label="Sign Out" onPress={handleSignOut} destructive />
         </View>
 
         <Text className="text-center text-gray-300 text-xs mt-auto">Tabby v1.0.0</Text>
       </View>
+
+      <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
     </SafeAreaView>
   );
 }
