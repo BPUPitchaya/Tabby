@@ -48,6 +48,7 @@ export async function categorizeTransaction(
 export type ParsedExpense = {
   amount: number;
   description: string;
+  merchant: string | null;
   categoryName: string | null;
 };
 
@@ -62,7 +63,7 @@ export async function parseNaturalLanguageExpenses(
 
   try {
     const result = (await callGemini(
-      `Extract one or more expenses from this text -- it may describe a single purchase or a list of several, separated by commas or "and": "${text}". For each one, the description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, or filler. Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}.`,
+      `Extract one or more expenses from this text -- it may describe a single purchase or a list of several, separated by commas or "and": "${text}". For each one: the description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, merchant names, or filler. If a specific shop/business/brand name is mentioned (e.g. "at Starbucks", "from Pak'nSave"), extract it separately as the merchant -- otherwise merchant is "None". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}.`,
       {
         type: 'object',
         properties: {
@@ -73,21 +74,25 @@ export async function parseNaturalLanguageExpenses(
               properties: {
                 amount: { type: 'number' },
                 description: { type: 'string' },
+                merchant: { type: 'string' },
                 categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
               },
-              required: ['amount', 'description', 'categoryName'],
+              required: ['amount', 'description', 'merchant', 'categoryName'],
             },
           },
         },
         required: ['expenses'],
       }
-    )) as { expenses: { amount: number; description: string; categoryName: string }[] };
+    )) as {
+      expenses: { amount: number; description: string; merchant: string; categoryName: string }[];
+    };
 
     if (!result.expenses?.length) return null;
 
     return result.expenses.map((e) => ({
       amount: e.amount,
       description: e.description,
+      merchant: e.merchant === 'None' || !e.merchant.trim() ? null : e.merchant,
       categoryName: e.categoryName === 'None' ? null : e.categoryName,
     }));
   } catch {
