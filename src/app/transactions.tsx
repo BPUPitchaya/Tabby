@@ -23,6 +23,7 @@ import {
   bulkAddTransactions,
   deleteTransaction,
   fetchCategories,
+  fetchRecentMerchants,
   fetchTransactions,
   updateTransaction,
   type Category,
@@ -45,6 +46,8 @@ export default function TransactionsScreen() {
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [recentMerchants, setRecentMerchants] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,9 +66,14 @@ export default function TransactionsScreen() {
     if (!userId) return;
     try {
       setError(null);
-      const [tx, cats] = await Promise.all([fetchTransactions(userId), fetchCategories()]);
+      const [tx, cats, merchants] = await Promise.all([
+        fetchTransactions(userId),
+        fetchCategories(),
+        fetchRecentMerchants(userId),
+      ]);
       setTransactions(tx);
       setCategories(cats);
+      setRecentMerchants(merchants);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load transactions.');
     }
@@ -84,6 +92,7 @@ export default function TransactionsScreen() {
   const resetForm = () => {
     setAmount('');
     setDescription('');
+    setMerchant('');
     setCategoryId(null);
     setCategorySource(null);
     setEditingId(null);
@@ -131,6 +140,7 @@ export default function TransactionsScreen() {
         aiPreview.map((p) => ({
           amount: p.amount,
           description: p.description,
+          merchant: p.merchant,
           occurredAt: new Date().toISOString().slice(0, 10),
           categoryId: categories.find((c) => c.name === p.categoryName)?.id ?? null,
         }))
@@ -187,6 +197,7 @@ export default function TransactionsScreen() {
     setEditingId(item.id);
     setAmount(String(item.amount));
     setDescription(item.description ?? '');
+    setMerchant(item.merchant ?? '');
     setCategoryId(item.category_id);
     setCategorySource(item.category_id ? 'manual' : null);
     setError(null);
@@ -207,6 +218,7 @@ export default function TransactionsScreen() {
         await updateTransaction(editingId, {
           amount: parsedAmount,
           description,
+          merchant,
           categoryId,
           occurredAt: new Date().toISOString().slice(0, 10),
         });
@@ -215,6 +227,7 @@ export default function TransactionsScreen() {
           userId,
           amount: parsedAmount,
           description,
+          merchant,
           categoryId,
           occurredAt: new Date().toISOString().slice(0, 10),
         });
@@ -298,6 +311,31 @@ export default function TransactionsScreen() {
             className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
           />
         </View>
+
+        <TextInput
+          value={merchant}
+          onChangeText={setMerchant}
+          placeholder="Where? (e.g. Pak'nSave) -- optional"
+          className="border border-gray-300 rounded-lg px-3 py-2"
+        />
+
+        {recentMerchants.length > 0 && (
+          <View className="flex-row flex-wrap gap-2">
+            {recentMerchants.map((m) => (
+              <Pressable
+                key={m}
+                onPress={() => setMerchant(m === merchant ? '' : m)}
+                style={pressFeedback}
+                className={`px-3 py-1 rounded-full border ${
+                  merchant === m ? 'bg-gray-800 border-gray-800' : 'border-gray-300'
+                }`}>
+                <Text className={merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}>
+                  {m}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         <View className="flex-row flex-wrap gap-2 items-center">
           {categories.map((cat) => (
@@ -383,7 +421,8 @@ export default function TransactionsScreen() {
                     {item.description || item.categories?.name || 'Transaction'}
                   </Text>
                   <Text className="text-gray-500 text-sm">
-                    {item.categories?.name ?? 'Uncategorized'} · {item.occurred_at}
+                    {item.categories?.name ?? 'Uncategorized'}
+                    {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
                   </Text>
                 </View>
               </View>
@@ -478,6 +517,7 @@ export default function TransactionsScreen() {
                     <Text className="text-sm">{item.description}</Text>
                     <Text className="text-xs text-gray-400">
                       {item.categoryName ?? 'Uncategorized'}
+                      {item.merchant ? ` · ${item.merchant}` : ''}
                     </Text>
                   </View>
                   <Text className="text-sm font-semibold">${item.amount.toFixed(2)}</Text>
