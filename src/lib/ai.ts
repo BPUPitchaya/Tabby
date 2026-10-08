@@ -1,74 +1,26 @@
-// Gemini API client for Tabby's AI features: auto-categorization,
-// natural-language expense entry, and monthly insight summaries.
+// Client for Tabby's AI features: auto-categorization, natural-language
+// expense entry, and monthly insight summaries.
 //
-// NOTE on architecture: this calls the Gemini API directly from the app,
-// which means the API key ships inside the app bundle. That's an accepted
-// tradeoff for this MVP (free tier, no billing risk -- worst case someone
-// else burns the rate limit) rather than standard practice for production
-// (where this key should sit behind a server-side proxy, e.g. a Supabase
-// Edge Function). Documented here and in the R&D report as a known
-// limitation / future work item.
+// This calls the `ai-proxy` Supabase Edge Function rather than Gemini
+// directly. Earlier versions called Gemini straight from the app, which
+// meant the API key shipped inside the app bundle -- fine for early dev
+// but a real problem for anything actually distributed, since a published
+// app binary can be decompiled and the key extracted. The proxy
+// (supabase/functions/ai-proxy) holds the real Gemini key as a server
+// secret; this file only ever sends the user's own Supabase session,
+// which `supabase.functions.invoke` attaches automatically. All retry-on-
+// transient-error logic now lives server-side in the proxy itself.
 
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-// 'latest' alias rather than a pinned version -- Google points this at
-// whichever current lite model is healthy/well-provisioned. Switched from
-// the pinned 'gemini-3.8-flash', which was hitting sustained 503s (not a
-// brief spike -- confirmed failing consistently across a full day of
-// testing), while this alias (currently resolving to gemini-3.5-flash-lite)
-// succeeded reliably across repeated tests. Lite is also a better fit for
-// our tasks anyway: simple categorization/extraction, not complex reasoning.
-const GEMINI_MODEL = 'gemini-flash-lite-latest';
+import { supabase } from '@/lib/supabase';
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function callGeminiOnce(input: string, schema: Record<string, unknown>): Promise<unknown> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('Missing EXPO_PUBLIC_GEMINI_API_KEY.');
-  }
-
-  const response = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': GEMINI_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: GEMINI_MODEL,
-      input,
-      response_format: {
-        type: 'text',
-        mime_type: 'application/json',
-        schema,
-      },
-    }),
+async function callGemini(input: string, schema: Record<string, unknown>): Promise<unknown> {
+  const { data, error } = await supabase.functions.invoke('ai-proxy', {
+    body: { input, schema },
   });
 
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const outputStep = data.steps?.find((s: { type: string }) => s.type === 'model_output');
-  const text = outputStep?.content?.[0]?.text;
-  if (!text) throw new Error('Gemini returned no output.');
-
-  return JSON.parse(text);
-}
-
-// Gemini's flash model occasionally returns a transient 503 under demand
-// spikes (observed directly during dev/testing, not a one-off). One quick
-// retry clears most of these without the user ever noticing, rather than
-// immediately falling back to manual entry on what's usually a non-issue.
-async function callGemini(input: string, schema: Record<string, unknown>): Promise<unknown> {
-  try {
-    return await callGeminiOnce(input, schema);
-  } catch (err) {
-    const isServerError = err instanceof Error && /Gemini API error: 5\d\d/.test(err.message);
-    if (!isServerError) throw err;
-    await sleep(800);
-    return await callGeminiOnce(input, schema);
-  }
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data.result;
 }
 
 export async function categorizeTransaction(
