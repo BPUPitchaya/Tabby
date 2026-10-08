@@ -233,6 +233,61 @@ export async function recordSettlement(params: {
   if (error) throw error;
 }
 
+export type SplitRow = {
+  user_id: string;
+  share_amount: number;
+  shared_expenses: { paid_by: string; flat_id: string } | null;
+};
+
+export type SettlementRow = { from_user: string; to_user: string; amount: number };
+
+/**
+ * Pure calculation, no network calls -- extracted so it can be unit
+ * tested directly with fixture data instead of only ever being verified
+ * by hand against a live database. See flats.test.ts.
+ *
+ * Computes, for the current user, their net balance with every other flat
+ * member: positive = they owe you, negative = you owe them.
+ */
+export function computeBalancesFromData(
+  flatId: string,
+  currentUserId: string,
+  splits: SplitRow[],
+  settlements: SettlementRow[],
+  members: FlatMember[]
+): Balance[] {
+  const net = new Map<string, number>();
+
+  for (const split of splits) {
+    const expense = split.shared_expenses;
+    if (!expense || expense.flat_id !== flatId) continue;
+
+    if (split.user_id === currentUserId && expense.paid_by !== currentUserId) {
+      // current user owes the payer their share
+      net.set(expense.paid_by, (net.get(expense.paid_by) ?? 0) - split.share_amount);
+    } else if (split.user_id !== currentUserId && expense.paid_by === currentUserId) {
+      // the other member owes the current user their share
+      net.set(split.user_id, (net.get(split.user_id) ?? 0) + split.share_amount);
+    }
+  }
+
+  for (const settlement of settlements) {
+    if (settlement.from_user === currentUserId) {
+      net.set(settlement.to_user, (net.get(settlement.to_user) ?? 0) + settlement.amount);
+    } else if (settlement.to_user === currentUserId) {
+      net.set(settlement.from_user, (net.get(settlement.from_user) ?? 0) - settlement.amount);
+    }
+  }
+
+  return members
+    .filter((m) => m.user_id !== currentUserId)
+    .map((m) => ({
+      userId: m.user_id,
+      displayName: m.profiles?.display_name ?? 'Unknown',
+      netAmount: Math.round((net.get(m.user_id) ?? 0) * 100) / 100,
+    }));
+}
+
 /**
  * Computes, for the current user, their net balance with every other flat
  * member: positive = they owe you, negative = you owe them.
@@ -249,41 +304,14 @@ export async function computeBalances(flatId: string, currentUserId: string): Pr
   if (splitsError) throw splitsError;
   if (settlementsError) throw settlementsError;
 
-  const net = new Map<string, number>();
-
-  for (const split of (splits ?? []) as unknown as {
-    user_id: string;
-    share_amount: number;
-    shared_expenses: { paid_by: string; flat_id: string } | null;
-  }[]) {
-    const expense = split.shared_expenses;
-    if (!expense || expense.flat_id !== flatId) continue;
-
-    if (split.user_id === currentUserId && expense.paid_by !== currentUserId) {
-      // current user owes the payer their share
-      net.set(expense.paid_by, (net.get(expense.paid_by) ?? 0) - split.share_amount);
-    } else if (split.user_id !== currentUserId && expense.paid_by === currentUserId) {
-      // the other member owes the current user their share
-      net.set(split.user_id, (net.get(split.user_id) ?? 0) + split.share_amount);
-    }
-  }
-
-  for (const settlement of settlements ?? []) {
-    if (settlement.from_user === currentUserId) {
-      net.set(settlement.to_user, (net.get(settlement.to_user) ?? 0) + settlement.amount);
-    } else if (settlement.to_user === currentUserId) {
-      net.set(settlement.from_user, (net.get(settlement.from_user) ?? 0) - settlement.amount);
-    }
-  }
-
   const members = await fetchFlatMembers(flatId);
-  return members
-    .filter((m) => m.user_id !== currentUserId)
-    .map((m) => ({
-      userId: m.user_id,
-      displayName: m.profiles?.display_name ?? 'Unknown',
-      netAmount: Math.round((net.get(m.user_id) ?? 0) * 100) / 100,
-    }));
+  return computeBalancesFromData(
+    flatId,
+    currentUserId,
+    (splits ?? []) as unknown as SplitRow[],
+    settlements ?? [],
+    members
+  );
 }
 
 export type FlatHealth = {
@@ -293,34 +321,33 @@ export type FlatHealth = {
   totalSpend: number;
 };
 
+export type HealthSplitRow = {
+  user_id: string;
+  share_amount: number;
+  shared_expenses: { paid_by: string; flat_id: string; amount: number } | null;
+};
+
 /**
+ * Pure calculation, no network calls -- see computeBalancesFromData's
+ * comment above for why this is split out. See flats.test.ts.
+ *
  * Flat-wide health score: what fraction of all shared spending in this flat
  * is still unsettled between members, across every pair of members (not
  * just relative to one person). 100 = everyone is fully settled up.
  * Formula is deliberately simple and explainable:
  *   score = 100 - (total outstanding between all pairs / total shared spend) * 100
  */
-export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
-  const [{ data: splits, error: splitsError }, { data: settlements, error: settlementsError }] =
-    await Promise.all([
-      supabase
-        .from('shared_expense_splits')
-        .select('user_id, share_amount, shared_expenses(paid_by, flat_id, amount)'),
-      supabase.from('settlements').select('from_user, to_user, amount').eq('flat_id', flatId),
-    ]);
-
-  if (splitsError) throw splitsError;
-  if (settlementsError) throw settlementsError;
-
+export function computeFlatHealthFromData(
+  flatId: string,
+  splits: HealthSplitRow[],
+  settlements: SettlementRow[],
+  totalSpend: number
+): FlatHealth {
   // directed[ower][owed] = how much "ower" owes "owed", before settlements
   const directed = new Map<string, number>();
   const pairKey = (a: string, b: string) => `${a}|${b}`;
 
-  for (const split of (splits ?? []) as unknown as {
-    user_id: string;
-    share_amount: number;
-    shared_expenses: { paid_by: string; flat_id: string; amount: number } | null;
-  }[]) {
+  for (const split of splits) {
     const expense = split.shared_expenses;
     if (!expense || expense.flat_id !== flatId) continue;
 
@@ -330,15 +357,7 @@ export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
     }
   }
 
-  // each row from this table is already a distinct expense, no dedup needed
-  const { data: expenses, error: expensesError } = await supabase
-    .from('shared_expenses')
-    .select('amount')
-    .eq('flat_id', flatId);
-  if (expensesError) throw expensesError;
-  const totalSpend = (expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
-
-  for (const s of settlements ?? []) {
+  for (const s of settlements) {
     const key = pairKey(s.from_user, s.to_user);
     directed.set(key, (directed.get(key) ?? 0) - s.amount);
   }
@@ -369,4 +388,32 @@ export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
     totalOutstanding: Math.round(totalOutstanding * 100) / 100,
     totalSpend: Math.round(totalSpend * 100) / 100,
   };
+}
+
+export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
+  const [{ data: splits, error: splitsError }, { data: settlements, error: settlementsError }] =
+    await Promise.all([
+      supabase
+        .from('shared_expense_splits')
+        .select('user_id, share_amount, shared_expenses(paid_by, flat_id, amount)'),
+      supabase.from('settlements').select('from_user, to_user, amount').eq('flat_id', flatId),
+    ]);
+
+  if (splitsError) throw splitsError;
+  if (settlementsError) throw settlementsError;
+
+  // each row from this table is already a distinct expense, no dedup needed
+  const { data: expenses, error: expensesError } = await supabase
+    .from('shared_expenses')
+    .select('amount')
+    .eq('flat_id', flatId);
+  if (expensesError) throw expensesError;
+  const totalSpend = (expenses ?? []).reduce((sum, e) => sum + e.amount, 0);
+
+  return computeFlatHealthFromData(
+    flatId,
+    (splits ?? []) as unknown as HealthSplitRow[],
+    settlements ?? [],
+    totalSpend
+  );
 }
