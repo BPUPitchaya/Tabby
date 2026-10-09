@@ -17,21 +17,23 @@ export function LegalModal({ doc, onClose }: { doc: LegalDoc | null; onClose: ()
       <SafeAreaProvider>
         <SafeAreaView className="flex-1 bg-white">
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-            <Text className="text-xl font-bold">{doc?.title}</Text>
+            <Text className="font-fredoka-semibold text-xl">{doc?.title}</Text>
             <Pressable
               onPress={onClose}
               style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
               accessibilityRole="button"
               accessibilityLabel="Close">
-              <Text className="text-blue-600 font-semibold">Done</Text>
+              <Text className="font-nunito-semibold text-tabby-600">Done</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-            <Text className="text-gray-400 text-xs">Last updated: {doc?.lastUpdated}</Text>
+            <Text className="font-nunito text-gray-500 text-xs">
+              Last updated: {doc?.lastUpdated}
+            </Text>
             {doc?.sections.map((section) => (
               <View key={section.heading} className="gap-1.5">
-                <Text className="font-bold text-base">{section.heading}</Text>
-                <Text className="text-gray-600 text-sm leading-5">{section.body}</Text>
+                <Text className="font-fredoka-semibold text-base">{section.heading}</Text>
+                <Text className="font-nunito text-gray-600 text-sm leading-5">{section.body}</Text>
               </View>
             ))}
           </ScrollView>
