@@ -1,10 +1,13 @@
+import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   Text,
@@ -35,6 +38,33 @@ import {
 // style prop (not className) since it needs the live `pressed` state.
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
+// Small round icon button used in the header -- Feather icon only, no label,
+// consistent 40x40 tap target.
+function HeaderIconButton({
+  icon,
+  onPress,
+  label,
+  tone = 'default',
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  onPress: () => void;
+  label: string;
+  tone?: 'default' | 'primary';
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={pressFeedback}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      className={`w-10 h-10 rounded-full items-center justify-center ${
+        tone === 'primary' ? 'bg-blue-600' : 'bg-gray-100'
+      }`}>
+      <Feather name={icon} size={18} color={tone === 'primary' ? '#fff' : '#374151'} />
+    </Pressable>
+  );
+}
+
 export default function TransactionsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
@@ -45,6 +75,10 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Manual add/edit now lives in its own bottom-sheet modal, triggered by
+  // the "+" button or by tapping an existing transaction -- rather than a
+  // permanently-visible form taking up the top of the screen.
+  const [manualOpen, setManualOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [merchant, setMerchant] = useState('');
@@ -53,10 +87,12 @@ export default function TransactionsScreen() {
   const [transactionType, setTransactionType] = useState<CategoryType>('expense');
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [categorySource, setCategorySource] = useState<'manual' | 'ai' | null>(null);
 
+  // The chat-style composer pinned to the bottom of the screen -- type a
+  // sentence, AI extracts one or more expenses from it.
   const [quickAddText, setQuickAddText] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
-  const [categorySource, setCategorySource] = useState<'manual' | 'ai' | null>(null);
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -103,6 +139,17 @@ export default function TransactionsScreen() {
     setTransactionType('expense');
   };
 
+  const openManualAdd = () => {
+    resetForm();
+    setError(null);
+    setManualOpen(true);
+  };
+
+  const closeManualForm = () => {
+    setManualOpen(false);
+    resetForm();
+  };
+
   const handleSelectType = (type: CategoryType) => {
     setTransactionType(type);
     // a category chosen under the old type won't be valid for the new one
@@ -134,7 +181,7 @@ export default function TransactionsScreen() {
     try {
       const parsed = await parseNaturalLanguageExpenses(quickAddText, categories);
       if (!parsed) {
-        setError('AI is briefly unavailable -- try again in a moment, or fill in the fields below.');
+        setError('AI is briefly unavailable -- try again in a moment, or use the + button below.');
         return;
       }
       setAiPreview(parsed);
@@ -165,6 +212,21 @@ export default function TransactionsScreen() {
     } finally {
       setAiImporting(false);
     }
+  };
+
+  // AI's first guess isn't always right -- these let the user correct the
+  // amount, description, or category right in the preview before anything
+  // is actually saved, instead of an all-or-nothing Confirm/Cancel.
+  const updateAiPreviewItem = (index: number, patch: Partial<ParsedExpense>) => {
+    setAiPreview((prev) => (prev ? prev.map((item, i) => (i === index ? { ...item, ...patch } : item)) : prev));
+  };
+
+  const removeAiPreviewItem = (index: number) => {
+    setAiPreview((prev) => {
+      if (!prev) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      return next.length > 0 ? next : null;
+    });
   };
 
   const handlePickCSV = async () => {
@@ -214,6 +276,7 @@ export default function TransactionsScreen() {
     setCategorySource(item.category_id ? 'manual' : null);
     setTransactionType(item.is_income ? 'income' : 'expense');
     setError(null);
+    setManualOpen(true);
   };
 
   const handleSubmit = async () => {
@@ -248,6 +311,7 @@ export default function TransactionsScreen() {
           isIncome,
         });
       }
+      setManualOpen(false);
       resetForm();
       await load();
     } catch (err) {
@@ -261,7 +325,7 @@ export default function TransactionsScreen() {
     try {
       await deleteTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
-      if (editingId === id) resetForm();
+      if (editingId === id) closeManualForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete transaction.');
     }
@@ -277,230 +341,270 @@ export default function TransactionsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="px-4 pt-4 gap-3 border-b border-gray-200 pb-4">
-        <View className="flex-row items-center justify-between">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+        <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100">
           <Text className="text-2xl font-bold">Transactions</Text>
-          <Pressable
-            onPress={handlePickCSV}
-            style={pressFeedback}
-            accessibilityRole="button"
-            accessibilityLabel="Import CSV">
-            <Text className="text-blue-600 font-semibold text-sm">Import CSV</Text>
-          </Pressable>
+          <View className="flex-row gap-2">
+            <HeaderIconButton icon="upload" onPress={handlePickCSV} label="Import CSV" />
+            <HeaderIconButton icon="plus" onPress={openManualAdd} label="Add transaction" tone="primary" />
+          </View>
         </View>
 
-        <View className="flex-row gap-2">
+        {error && (
+          <View className="px-4 py-2 bg-red-50 border-b border-red-100">
+            <Text className="text-red-600 text-sm">{error}</Text>
+          </View>
+        )}
+
+        <FlatList
+          data={transactions}
+          keyExtractor={(item) => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={{ padding: 16, gap: 8, flexGrow: 1 }}
+          ListEmptyComponent={
+            <View className="flex-1 items-center justify-center gap-3 py-16">
+              <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center">
+                <Feather name="file-text" size={22} color="#9ca3af" />
+              </View>
+              <Text className="text-center text-gray-400">
+                No transactions yet.{'\n'}Type one below, or tap + to add one manually.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <Animated.View entering={FadeIn.duration(200)}>
+              <Pressable
+                onPress={() => handleStartEdit(item)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
+                className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 border border-gray-100">
+                <View className="flex-row items-center flex-1 gap-3">
+                  <View
+                    className={`w-9 h-9 rounded-full border items-center justify-center ${
+                      item.is_income ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
+                    }`}>
+                    <CategoryIcon
+                      name={item.categories?.icon}
+                      size={16}
+                      color={item.is_income ? '#15803d' : undefined}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-semibold">
+                      {item.description || item.categories?.name || 'Transaction'}
+                    </Text>
+                    <Text className="text-gray-500 text-sm">
+                      {item.categories?.name ?? 'Uncategorized'}
+                      {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
+                    </Text>
+                  </View>
+                </View>
+                <Text className={`font-semibold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
+                  {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
+                </Text>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleDelete(item.id);
+                  }}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
+                  <Feather name="trash-2" size={16} color="#ef4444" />
+                </Pressable>
+              </Pressable>
+            </Animated.View>
+          )}
+        />
+
+        {/* Chat-style composer, pinned to the bottom of the screen. */}
+        <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 bg-white">
           <TextInput
             value={quickAddText}
             onChangeText={setQuickAddText}
             placeholder='Try "coffee $8.50, lunch $12.50"'
-            className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
+            multiline
+            className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 max-h-28 text-base"
           />
           <Pressable
             onPress={handleQuickAdd}
-            disabled={aiBusy}
+            disabled={aiBusy || !quickAddText.trim()}
             style={pressFeedback}
-            className="bg-gray-800 rounded-lg px-4 items-center justify-center"
             accessibilityRole="button"
-            accessibilityLabel="Add with AI">
+            accessibilityLabel="Send"
+            className={`w-10 h-10 rounded-full items-center justify-center ${
+              quickAddText.trim() ? 'bg-blue-600' : 'bg-gray-200'
+            }`}>
             {aiBusy ? (
               <ActivityIndicator color="white" size="small" />
             ) : (
-              <Text className="text-white font-semibold text-sm">Add with AI</Text>
+              <Feather name="arrow-up" size={18} color={quickAddText.trim() ? '#fff' : '#9ca3af'} />
             )}
           </Pressable>
         </View>
+      </KeyboardAvoidingView>
 
-        <View className="flex-row bg-gray-100 rounded-lg p-1">
-          <Pressable
-            onPress={() => handleSelectType('expense')}
-            style={pressFeedback}
-            accessibilityRole="button"
-            accessibilityLabel="Expense"
-            className={`flex-1 rounded-md py-1.5 items-center ${
-              transactionType === 'expense' ? 'bg-white shadow-sm' : ''
-            }`}>
-            <Text
-              className={`font-semibold text-sm ${
-                transactionType === 'expense' ? 'text-gray-900' : 'text-gray-500'
-              }`}>
-              Expense
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleSelectType('income')}
-            style={pressFeedback}
-            accessibilityRole="button"
-            accessibilityLabel="Income"
-            className={`flex-1 rounded-md py-1.5 items-center ${
-              transactionType === 'income' ? 'bg-white shadow-sm' : ''
-            }`}>
-            <Text
-              className={`font-semibold text-sm ${
-                transactionType === 'income' ? 'text-green-700' : 'text-gray-500'
-              }`}>
-              Income
-            </Text>
-          </Pressable>
-        </View>
-
-        <View className="flex-row gap-2">
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="Amount"
-            keyboardType="decimal-pad"
-            className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
-          />
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            onBlur={handleDescriptionBlur}
-            placeholder="Description"
-            className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
-          />
-        </View>
-
-        <TextInput
-          value={merchant}
-          onChangeText={setMerchant}
-          placeholder="Where? (e.g. Pak'nSave) -- optional"
-          className="border border-gray-300 rounded-lg px-3 py-2"
-        />
-
-        {recentMerchants.length > 0 && (
-          <View className="flex-row flex-wrap gap-2">
-            {recentMerchants.map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => setMerchant(m === merchant ? '' : m)}
-                style={pressFeedback}
-                className={`px-3 py-1 rounded-full border ${
-                  merchant === m ? 'bg-gray-800 border-gray-800' : 'border-gray-300'
-                }`}>
-                <Text className={merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}>
-                  {m}
+      {/* Manual add/edit -- opened via the + button or by tapping a transaction. */}
+      <Modal visible={manualOpen} animationType="slide" transparent onRequestClose={closeManualForm}>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View className="flex-1 bg-black/40 justify-end">
+            <View className="bg-white rounded-t-2xl p-4 gap-3">
+              <View className="flex-row items-center justify-between">
+                <Text className="text-xl font-bold">
+                  {editingId ? 'Edit Transaction' : 'Add Transaction'}
                 </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        <View className="flex-row flex-wrap gap-2 items-center">
-          {categories
-            .filter((cat) => cat.type === transactionType)
-            .map((cat) => (
-            <Pressable
-              key={cat.id}
-              onPress={() => {
-                setCategoryId(cat.id === categoryId ? null : cat.id);
-                setCategorySource(cat.id === categoryId ? null : 'manual');
-              }}
-              style={pressFeedback}
-              className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
-                categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-              }`}>
-              <CategoryIcon name={cat.icon} size={13} color={categoryId === cat.id ? '#fff' : '#4b5563'} />
-              <Text className={categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'}>
-                {cat.name}
-              </Text>
-            </Pressable>
-          ))}
-          {categorySource === 'ai' && <Text className="text-xs text-blue-500">AI suggested</Text>}
-        </View>
-
-        {error && <Text className="text-red-500 text-sm">{error}</Text>}
-
-        <View className="flex-row gap-2">
-          <Pressable
-            onPress={handleSubmit}
-            disabled={submitting}
-            style={pressFeedback}
-            className="flex-1 bg-blue-600 rounded-lg py-2.5 items-center"
-            accessibilityRole="button"
-            accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
-            {submitting ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white font-semibold">
-                {editingId ? 'Save Changes' : 'Add Transaction'}
-              </Text>
-            )}
-          </Pressable>
-
-          {editingId && (
-            <Pressable
-              onPress={resetForm}
-              style={pressFeedback}
-              className="px-4 py-2.5 items-center justify-center"
-              accessibilityRole="button"
-              accessibilityLabel="Cancel edit">
-              <Text className="text-gray-500 font-semibold">Cancel</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <FlatList
-        data={transactions}
-        keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={{ padding: 16, gap: 8 }}
-        ListEmptyComponent={
-          <Text className="text-center text-gray-400 mt-8">
-            No transactions yet. Add your first one above.
-          </Text>
-        }
-        renderItem={({ item }) => (
-          <Animated.View entering={FadeIn.duration(200)}>
-            <Pressable
-              onPress={() => handleStartEdit(item)}
-              style={pressFeedback}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-              className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
-                editingId === item.id
-                  ? 'bg-blue-50 border border-blue-300'
-                  : 'bg-gray-50 border border-gray-100'
-              }`}>
-              <View className="flex-row items-center flex-1 gap-3">
-                <View
-                  className={`w-9 h-9 rounded-full border items-center justify-center ${
-                    item.is_income ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-                  }`}>
-                  <CategoryIcon
-                    name={item.categories?.icon}
-                    size={16}
-                    color={item.is_income ? '#15803d' : undefined}
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-semibold">
-                    {item.description || item.categories?.name || 'Transaction'}
-                  </Text>
-                  <Text className="text-gray-500 text-sm">
-                    {item.categories?.name ?? 'Uncategorized'}
-                    {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
-                  </Text>
-                </View>
+                <Pressable
+                  onPress={closeManualForm}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                  className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center">
+                  <Feather name="x" size={16} color="#374151" />
+                </Pressable>
               </View>
-              <Text className={`font-semibold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
-                {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
-              </Text>
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDelete(item.id);
-                }}
-                style={pressFeedback}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
-                <Text className="text-red-500">Delete</Text>
-              </Pressable>
-            </Pressable>
-          </Animated.View>
-        )}
-      />
+
+              <View className="flex-row bg-gray-100 rounded-lg p-1">
+                <Pressable
+                  onPress={() => handleSelectType('expense')}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel="Expense"
+                  className={`flex-1 rounded-md py-1.5 items-center ${
+                    transactionType === 'expense' ? 'bg-white shadow-sm' : ''
+                  }`}>
+                  <Text
+                    className={`font-semibold text-sm ${
+                      transactionType === 'expense' ? 'text-gray-900' : 'text-gray-500'
+                    }`}>
+                    Expense
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleSelectType('income')}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel="Income"
+                  className={`flex-1 rounded-md py-1.5 items-center ${
+                    transactionType === 'income' ? 'bg-white shadow-sm' : ''
+                  }`}>
+                  <Text
+                    className={`font-semibold text-sm ${
+                      transactionType === 'income' ? 'text-green-700' : 'text-gray-500'
+                    }`}>
+                    Income
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View className="flex-row gap-2">
+                <TextInput
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="Amount"
+                  keyboardType="decimal-pad"
+                  className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                />
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  onBlur={handleDescriptionBlur}
+                  placeholder="Description"
+                  className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
+                />
+              </View>
+
+              <TextInput
+                value={merchant}
+                onChangeText={setMerchant}
+                placeholder="Where? (e.g. Pak'nSave) -- optional"
+                className="border border-gray-300 rounded-lg px-3 py-2"
+              />
+
+              {recentMerchants.length > 0 && (
+                <View className="flex-row flex-wrap gap-2">
+                  {recentMerchants.map((m) => (
+                    <Pressable
+                      key={m}
+                      onPress={() => setMerchant(m === merchant ? '' : m)}
+                      style={pressFeedback}
+                      className={`px-3 py-1 rounded-full border ${
+                        merchant === m ? 'bg-gray-800 border-gray-800' : 'border-gray-300'
+                      }`}>
+                      <Text className={merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}>
+                        {m}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              <View className="flex-row flex-wrap gap-2 items-center">
+                {categories
+                  .filter((cat) => cat.type === transactionType)
+                  .map((cat) => (
+                    <Pressable
+                      key={cat.id}
+                      onPress={() => {
+                        setCategoryId(cat.id === categoryId ? null : cat.id);
+                        setCategorySource(cat.id === categoryId ? null : 'manual');
+                      }}
+                      style={pressFeedback}
+                      className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
+                        categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                      }`}>
+                      <CategoryIcon
+                        name={cat.icon}
+                        size={13}
+                        color={categoryId === cat.id ? '#fff' : '#4b5563'}
+                      />
+                      <Text className={categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'}>
+                        {cat.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                {categorySource === 'ai' && <Text className="text-xs text-blue-500">AI suggested</Text>}
+              </View>
+
+              <View className="flex-row gap-2 pt-1">
+                <Pressable
+                  onPress={handleSubmit}
+                  disabled={submitting}
+                  style={pressFeedback}
+                  className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                  accessibilityRole="button"
+                  accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
+                  {submitting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-white font-semibold">
+                      {editingId ? 'Save Changes' : 'Add Transaction'}
+                    </Text>
+                  )}
+                </Pressable>
+
+                {editingId && (
+                  <Pressable
+                    onPress={() => {
+                      handleDelete(editingId);
+                    }}
+                    style={pressFeedback}
+                    className="px-4 py-3 items-center justify-center rounded-lg bg-red-50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete transaction">
+                    <Feather name="trash-2" size={18} color="#ef4444" />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal visible={csvPreview !== null} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
@@ -565,59 +669,118 @@ export default function TransactionsScreen() {
       </Modal>
 
       <Modal visible={aiPreview !== null} animationType="slide" transparent>
-        <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
-            <Text className="text-xl font-bold">
-              Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
-            </Text>
-            <Text className="text-gray-500 text-sm">
-              Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}
-            </Text>
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View className="flex-1 bg-black/40 justify-end">
+            <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[85%]">
+              <View>
+                <Text className="text-xl font-bold">
+                  Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
+                </Text>
+                <Text className="text-gray-500 text-sm">
+                  AI&apos;s first guess -- tap anything below to fix it before adding.
+                </Text>
+              </View>
 
-            <FlatList
-              data={aiPreview ?? []}
-              keyExtractor={(_, i) => String(i)}
-              style={{ maxHeight: 300 }}
-              renderItem={({ item }) => (
-                <View className="flex-row justify-between py-2 border-b border-gray-100">
-                  <View className="flex-1">
-                    <Text className="text-sm">{item.description}</Text>
-                    <Text className="text-xs text-gray-400">
-                      {item.categoryName ?? 'Uncategorized'}
-                      {item.merchant ? ` · ${item.merchant}` : ''}
-                    </Text>
+              <FlatList
+                data={aiPreview ?? []}
+                keyExtractor={(_, i) => String(i)}
+                style={{ maxHeight: 420 }}
+                contentContainerStyle={{ gap: 10 }}
+                renderItem={({ item, index }) => (
+                  <View className="gap-2 py-3 border-b border-gray-100">
+                    <View className="flex-row items-center gap-2">
+                      <TextInput
+                        value={item.description}
+                        onChangeText={(text) => updateAiPreviewItem(index, { description: text })}
+                        placeholder="Description"
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      />
+                      <View className="flex-row items-center border border-gray-300 rounded-lg px-2">
+                        <Text className="text-gray-400 text-sm">$</Text>
+                        <TextInput
+                          value={String(item.amount)}
+                          onChangeText={(text) =>
+                            updateAiPreviewItem(index, { amount: parseFloat(text) || 0 })
+                          }
+                          keyboardType="decimal-pad"
+                          className="w-16 py-2 text-sm text-right"
+                        />
+                      </View>
+                      <Pressable
+                        onPress={() => removeAiPreviewItem(index)}
+                        style={pressFeedback}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${item.description}`}>
+                        <Feather name="x" size={16} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {categories
+                        .filter((c) => c.type === 'expense')
+                        .map((cat) => (
+                          <Pressable
+                            key={cat.id}
+                            onPress={() =>
+                              updateAiPreviewItem(index, {
+                                categoryName: item.categoryName === cat.name ? null : cat.name,
+                              })
+                            }
+                            style={pressFeedback}
+                            className={`px-2.5 py-1 rounded-full border ${
+                              item.categoryName === cat.name
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'border-gray-300'
+                            }`}>
+                            <Text
+                              className={`text-xs ${
+                                item.categoryName === cat.name ? 'text-white' : 'text-gray-600'
+                              }`}>
+                              {cat.name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                    </View>
+                    {item.merchant && (
+                      <Text className="text-xs text-gray-400">at {item.merchant}</Text>
+                    )}
                   </View>
-                  <Text className="text-sm font-semibold">${item.amount.toFixed(2)}</Text>
-                </View>
-              )}
-            />
-
-            <View className="flex-row gap-2 pt-2">
-              <Pressable
-                onPress={handleConfirmAIAdd}
-                disabled={aiImporting}
-                style={pressFeedback}
-                className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
-                accessibilityRole="button"
-                accessibilityLabel="Confirm add">
-                {aiImporting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text className="text-white font-semibold">Confirm</Text>
                 )}
-              </Pressable>
-              <Pressable
-                onPress={() => setAiPreview(null)}
-                disabled={aiImporting}
-                style={pressFeedback}
-                className="px-4 py-3 items-center justify-center"
-                accessibilityRole="button"
-                accessibilityLabel="Cancel">
-                <Text className="text-gray-500 font-semibold">Cancel</Text>
-              </Pressable>
+              />
+
+              <Text className="text-gray-500 text-sm">
+                Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}
+              </Text>
+
+              <View className="flex-row gap-2 pt-1">
+                <Pressable
+                  onPress={handleConfirmAIAdd}
+                  disabled={aiImporting || !aiPreview?.every((p) => p.amount > 0)}
+                  style={pressFeedback}
+                  className={`flex-1 rounded-lg py-3 items-center ${
+                    aiPreview?.every((p) => p.amount > 0) ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm add">
+                  {aiImporting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text className="text-white font-semibold">Confirm</Text>
+                  )}
+                </Pressable>
+                <Pressable
+                  onPress={() => setAiPreview(null)}
+                  disabled={aiImporting}
+                  style={pressFeedback}
+                  className="px-4 py-3 items-center justify-center"
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel">
+                  <Text className="text-gray-500 font-semibold">Cancel</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
