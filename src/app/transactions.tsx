@@ -58,7 +58,7 @@ function HeaderIconButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       className={`w-10 h-10 rounded-full items-center justify-center ${
-        tone === 'primary' ? 'bg-blue-600' : 'bg-gray-100'
+        tone === 'primary' ? 'bg-tabby-600' : 'bg-gray-100'
       }`}>
       <Feather name={icon} size={18} color={tone === 'primary' ? '#fff' : '#374151'} />
     </Pressable>
@@ -346,7 +346,7 @@ export default function TransactionsScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
         <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100">
-          <Text className="text-2xl font-bold">Transactions</Text>
+          <Text className="font-fredoka-semibold text-2xl">Transactions</Text>
           <View className="flex-row gap-2">
             <HeaderIconButton icon="upload" onPress={handlePickCSV} label="Import CSV" />
             <HeaderIconButton icon="plus" onPress={openManualAdd} label="Add transaction" tone="primary" />
@@ -355,7 +355,7 @@ export default function TransactionsScreen() {
 
         {error && (
           <View className="px-4 py-2 bg-red-50 border-b border-red-100">
-            <Text className="text-red-600 text-sm">{error}</Text>
+            <Text className="font-nunito text-red-600 text-sm">{error}</Text>
           </View>
         )}
 
@@ -369,7 +369,7 @@ export default function TransactionsScreen() {
               <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center">
                 <Feather name="file-text" size={22} color="#9ca3af" />
               </View>
-              <Text className="text-center text-gray-400">
+              <Text className="font-nunito text-center text-gray-500">
                 No transactions yet.{'\n'}Type one below, or tap + to add one manually.
               </Text>
             </View>
@@ -394,16 +394,16 @@ export default function TransactionsScreen() {
                     />
                   </View>
                   <View className="flex-1">
-                    <Text className="font-semibold">
+                    <Text className="font-nunito-semibold">
                       {item.description || item.categories?.name || 'Transaction'}
                     </Text>
-                    <Text className="text-gray-500 text-sm">
+                    <Text className="font-nunito text-gray-500 text-sm">
                       {item.categories?.name ?? 'Uncategorized'}
                       {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
                     </Text>
                   </View>
                 </View>
-                <Text className={`font-semibold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
+                <Text className={`font-nunito-bold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
                   {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
                 </Text>
                 <Pressable
@@ -428,7 +428,7 @@ export default function TransactionsScreen() {
             onChangeText={setQuickAddText}
             placeholder='Try "coffee $8.50, lunch $12.50"'
             multiline
-            className="flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 max-h-28 text-base"
+            className="font-nunito flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 max-h-28 text-base"
           />
           <Pressable
             onPress={handleQuickAdd}
@@ -437,7 +437,7 @@ export default function TransactionsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Send"
             className={`w-10 h-10 rounded-full items-center justify-center ${
-              quickAddText.trim() ? 'bg-blue-600' : 'bg-gray-200'
+              quickAddText.trim() ? 'bg-tabby-600' : 'bg-gray-200'
             }`}>
             {aiBusy ? (
               <ActivityIndicator color="white" size="small" />
@@ -456,7 +456,7 @@ export default function TransactionsScreen() {
           <View className="flex-1 bg-black/40 justify-end">
             <View className="bg-white rounded-t-2xl p-4 gap-3">
               <View className="flex-row items-center justify-between">
-                <Text className="text-xl font-bold">
+                <Text className="font-fredoka-semibold text-xl">
                   {editingId ? 'Edit Transaction' : 'Add Transaction'}
                 </Text>
                 <Pressable
@@ -479,7 +479,7 @@ export default function TransactionsScreen() {
                     transactionType === 'expense' ? 'bg-white shadow-sm' : ''
                   }`}>
                   <Text
-                    className={`font-semibold text-sm ${
+                    className={`font-nunito-semibold text-sm ${
                       transactionType === 'expense' ? 'text-gray-900' : 'text-gray-500'
                     }`}>
                     Expense
@@ -494,7 +494,7 @@ export default function TransactionsScreen() {
                     transactionType === 'income' ? 'bg-white shadow-sm' : ''
                   }`}>
                   <Text
-                    className={`font-semibold text-sm ${
+                    className={`font-nunito-semibold text-sm ${
                       transactionType === 'income' ? 'text-green-700' : 'text-gray-500'
                     }`}>
                     Income
@@ -508,14 +508,14 @@ export default function TransactionsScreen() {
                   onChangeText={setAmount}
                   placeholder="Amount"
                   keyboardType="decimal-pad"
-                  className="border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1"
                 />
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
                   onBlur={handleDescriptionBlur}
                   placeholder="Description"
-                  className="border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
+                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
                 />
               </View>
 
@@ -523,7 +523,7 @@ export default function TransactionsScreen() {
                 value={merchant}
                 onChangeText={setMerchant}
                 placeholder="Where? (e.g. Pak'nSave) -- optional"
-                className="border border-gray-300 rounded-lg px-3 py-2"
+                className="font-nunito border border-gray-300 rounded-lg px-3 py-2"
               />
 
               {recentMerchants.length > 0 && (
@@ -536,7 +536,8 @@ export default function TransactionsScreen() {
                       className={`px-3 py-1 rounded-full border ${
                         merchant === m ? 'bg-gray-800 border-gray-800' : 'border-gray-300'
                       }`}>
-                      <Text className={merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}>
+                      <Text
+                        className={`font-nunito ${merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}`}>
                         {m}
                       </Text>
                     </Pressable>
@@ -556,19 +557,24 @@ export default function TransactionsScreen() {
                       }}
                       style={pressFeedback}
                       className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
-                        categoryId === cat.id ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                        categoryId === cat.id ? 'bg-tabby-600 border-tabby-600' : 'border-gray-300'
                       }`}>
                       <CategoryIcon
                         name={cat.icon}
                         size={13}
                         color={categoryId === cat.id ? '#fff' : '#4b5563'}
                       />
-                      <Text className={categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'}>
+                      <Text
+                        className={`font-nunito-medium ${
+                          categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'
+                        }`}>
                         {cat.name}
                       </Text>
                     </Pressable>
                   ))}
-                {categorySource === 'ai' && <Text className="text-xs text-blue-500">AI suggested</Text>}
+                {categorySource === 'ai' && (
+                  <Text className="font-nunito text-xs text-tabby-500">AI suggested</Text>
+                )}
               </View>
 
               <View className="flex-row gap-2 pt-1">
@@ -576,13 +582,13 @@ export default function TransactionsScreen() {
                   onPress={handleSubmit}
                   disabled={submitting}
                   style={pressFeedback}
-                  className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                  className="flex-1 bg-tabby-600 rounded-lg py-3 items-center"
                   accessibilityRole="button"
                   accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
                   {submitting ? (
                     <ActivityIndicator color="white" />
                   ) : (
-                    <Text className="text-white font-semibold">
+                    <Text className="font-nunito-semibold text-white">
                       {editingId ? 'Save Changes' : 'Add Transaction'}
                     </Text>
                   )}
@@ -609,10 +615,10 @@ export default function TransactionsScreen() {
       <Modal visible={csvPreview !== null} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
           <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
-            <Text className="text-xl font-bold">
+            <Text className="font-fredoka-semibold text-xl">
               Import {csvPreview?.length ?? 0} transaction{csvPreview?.length === 1 ? '' : 's'}?
             </Text>
-            <Text className="text-gray-500 text-sm">
+            <Text className="font-nunito text-gray-500 text-sm">
               Net: $
               {csvPreview
                 ?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0)
@@ -627,13 +633,13 @@ export default function TransactionsScreen() {
               renderItem={({ item }) => (
                 <View className="flex-row justify-between py-2 border-b border-gray-100">
                   <View className="flex-1">
-                    <Text className="text-sm">{item.description || '(no description)'}</Text>
-                    <Text className="text-xs text-gray-400">
+                    <Text className="font-nunito text-sm">{item.description || '(no description)'}</Text>
+                    <Text className="font-nunito text-xs text-gray-500">
                       {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
                     </Text>
                   </View>
                   <Text
-                    className={`text-sm font-semibold ${item.isIncome ? 'text-green-700' : ''}`}>
+                    className={`font-nunito-semibold text-sm ${item.isIncome ? 'text-green-700' : ''}`}>
                     {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
                   </Text>
                 </View>
@@ -645,13 +651,13 @@ export default function TransactionsScreen() {
                 onPress={handleConfirmCSVImport}
                 disabled={csvImporting}
                 style={pressFeedback}
-                className="flex-1 bg-blue-600 rounded-lg py-3 items-center"
+                className="flex-1 bg-tabby-600 rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm import">
                 {csvImporting ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text className="text-white font-semibold">Import</Text>
+                  <Text className="font-nunito-semibold text-white">Import</Text>
                 )}
               </Pressable>
               <Pressable
@@ -661,7 +667,7 @@ export default function TransactionsScreen() {
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel import">
-                <Text className="text-gray-500 font-semibold">Cancel</Text>
+                <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -673,10 +679,10 @@ export default function TransactionsScreen() {
           <View className="flex-1 bg-black/40 justify-end">
             <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[85%]">
               <View>
-                <Text className="text-xl font-bold">
+                <Text className="font-fredoka-semibold text-xl">
                   Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
                 </Text>
-                <Text className="text-gray-500 text-sm">
+                <Text className="font-nunito text-gray-500 text-sm">
                   AI&apos;s first guess -- tap anything below to fix it before adding.
                 </Text>
               </View>
@@ -693,17 +699,17 @@ export default function TransactionsScreen() {
                         value={item.description}
                         onChangeText={(text) => updateAiPreviewItem(index, { description: text })}
                         placeholder="Description"
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="font-nunito flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
                       />
                       <View className="flex-row items-center border border-gray-300 rounded-lg px-2">
-                        <Text className="text-gray-400 text-sm">$</Text>
+                        <Text className="font-nunito text-gray-500 text-sm">$</Text>
                         <TextInput
                           value={String(item.amount)}
                           onChangeText={(text) =>
                             updateAiPreviewItem(index, { amount: parseFloat(text) || 0 })
                           }
                           keyboardType="decimal-pad"
-                          className="w-16 py-2 text-sm text-right"
+                          className="font-nunito w-16 py-2 text-sm text-right"
                         />
                       </View>
                       <Pressable
@@ -729,11 +735,11 @@ export default function TransactionsScreen() {
                             style={pressFeedback}
                             className={`px-2.5 py-1 rounded-full border ${
                               item.categoryName === cat.name
-                                ? 'bg-blue-600 border-blue-600'
+                                ? 'bg-tabby-600 border-tabby-600'
                                 : 'border-gray-300'
                             }`}>
                             <Text
-                              className={`text-xs ${
+                              className={`font-nunito-medium text-xs ${
                                 item.categoryName === cat.name ? 'text-white' : 'text-gray-600'
                               }`}>
                               {cat.name}
@@ -742,13 +748,13 @@ export default function TransactionsScreen() {
                         ))}
                     </View>
                     {item.merchant && (
-                      <Text className="text-xs text-gray-400">at {item.merchant}</Text>
+                      <Text className="font-nunito text-xs text-gray-500">at {item.merchant}</Text>
                     )}
                   </View>
                 )}
               />
 
-              <Text className="text-gray-500 text-sm">
+              <Text className="font-nunito text-gray-500 text-sm">
                 Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}
               </Text>
 
@@ -758,14 +764,14 @@ export default function TransactionsScreen() {
                   disabled={aiImporting || !aiPreview?.every((p) => p.amount > 0)}
                   style={pressFeedback}
                   className={`flex-1 rounded-lg py-3 items-center ${
-                    aiPreview?.every((p) => p.amount > 0) ? 'bg-blue-600' : 'bg-gray-300'
+                    aiPreview?.every((p) => p.amount > 0) ? 'bg-tabby-600' : 'bg-gray-300'
                   }`}
                   accessibilityRole="button"
                   accessibilityLabel="Confirm add">
                   {aiImporting ? (
                     <ActivityIndicator color="white" />
                   ) : (
-                    <Text className="text-white font-semibold">Confirm</Text>
+                    <Text className="font-nunito-semibold text-white">Confirm</Text>
                   )}
                 </Pressable>
                 <Pressable
@@ -775,7 +781,7 @@ export default function TransactionsScreen() {
                   className="px-4 py-3 items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel="Cancel">
-                  <Text className="text-gray-500 font-semibold">Cancel</Text>
+                  <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
                 </Pressable>
               </View>
             </View>
