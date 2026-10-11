@@ -2,6 +2,11 @@
 module.exports = {
   content: ['./src/app/**/*.{js,jsx,ts,tsx}', './src/components/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+  // 'class' (rather than the default 'media') lets the Settings screen
+  // override the OS appearance via nativewind's colorScheme.set() --
+  // 'media' would only ever follow the system setting and throws if you
+  // try to set it manually.
+  darkMode: 'class',
   theme: {
     extend: {
       fontFamily: {
@@ -40,6 +45,33 @@ module.exports = {
         // The soft sky blue used behind the bear on the splash screen,
         // app icon background, and avatar badges.
         'tabby-sky': '#BEE3F8',
+        // Semantic money colors, re-tinted off stock Tailwind green/red so
+        // "earned" and "over budget" still sit in the same warm family as
+        // the brand palette instead of reading as a cold, generic alert.
+        sage: {
+          50: '#EDF3E7',
+          100: '#DBE7CE',
+          200: '#BBD6A4',
+          300: '#99C178',
+          400: '#86BD63',
+          500: '#5F8F42',
+          600: '#4C7535',
+          700: '#3D5E2B',
+          800: '#304A22',
+          900: '#253A1B',
+        },
+        rust: {
+          50: '#F7E8E1',
+          100: '#EFD0C1',
+          200: '#E1AC93',
+          300: '#D08765',
+          400: '#C06B47',
+          500: '#A8503A',
+          600: '#8E3F2C',
+          700: '#723323',
+          800: '#592A1E',
+          900: '#3E1F17',
+        },
       },
     },
   },
