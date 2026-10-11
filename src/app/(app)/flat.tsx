@@ -8,11 +8,14 @@ import {
   Share,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 
+import { logFlatTabView } from '@/lib/analytics';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -81,46 +84,46 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white px-6 pt-10 gap-8">
+    <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900 px-6 pt-10 gap-8">
       <View className="gap-3">
-        <Text className="font-fredoka-semibold text-xl">Create a flat</Text>
+        <Text className="font-fredoka-semibold text-xl dark:text-white">Create a flat</Text>
         <TextInput
           value={flatName}
           onChangeText={setFlatName}
           placeholder="Flat name"
-          className="font-nunito border border-gray-300 rounded-lg px-4 py-3"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3"
         />
         <Pressable
           onPress={handleCreate}
           disabled={submitting}
           style={pressFeedback}
-          className="bg-tabby-600 rounded-lg py-3 items-center"
+          className="bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
           accessibilityRole="button">
-          <Text className="font-nunito-semibold text-white">Create Flat</Text>
+          <Text className="font-nunito-semibold text-white dark:text-tabby-900">Create Flat</Text>
         </Pressable>
       </View>
 
       <View className="gap-3">
-        <Text className="font-fredoka-semibold text-xl">Join a flat</Text>
+        <Text className="font-fredoka-semibold text-xl dark:text-white">Join a flat</Text>
         <TextInput
           value={inviteCode}
           onChangeText={setInviteCode}
           placeholder="Invite code"
           autoCapitalize="none"
-          className="font-nunito border border-gray-300 rounded-lg px-4 py-3"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3"
         />
         <Pressable
           onPress={handleJoin}
           disabled={submitting}
           style={pressFeedback}
-          className="bg-gray-800 rounded-lg py-3 items-center"
+          className="bg-gray-800 dark:bg-tabby-700 rounded-lg py-3 items-center"
           accessibilityRole="button">
           <Text className="font-nunito-semibold text-white">Join Flat</Text>
         </Pressable>
       </View>
 
       {submitting && <ActivityIndicator />}
-      {error && <Text className="font-nunito text-red-500 text-sm text-center">{error}</Text>}
+      {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>}
     </SafeAreaView>
   );
 }
@@ -128,6 +131,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
 function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
+  const isDark = useColorScheme() === 'dark';
 
   const [members, setMembers] = useState<FlatMember[]>([]);
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
@@ -372,8 +376,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   };
 
   const handleShareInvite = () => {
+    // The link only opens anything for someone who already has Tabby
+    // installed (it's a bare custom-scheme link, not a Universal Link --
+    // no public distribution channel exists yet to redirect to if it
+    // isn't). The code stays in the message as plain text too, so it still
+    // works for anyone who has to install first and type it in manually.
     Share.share({
-      message: `Join my flat "${flat.name}" on Tabby! Use invite code: ${flat.invite_code}`,
+      message: `Join my flat "${flat.name}" on Tabby! tabby://join/${flat.invite_code}\n\nOr open Tabby and enter invite code: ${flat.invite_code}`,
     });
   };
 
@@ -424,14 +433,14 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white">
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-tabby-900">
         <ActivityIndicator />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
       <FlatList
         data={[]}
         keyExtractor={() => 'none'}
@@ -440,9 +449,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           <View className="px-4 pt-4 gap-5">
             <View className="flex-row items-start justify-between">
               <View>
-                <Text className="font-nunito-bold text-2xl">{flat.name}</Text>
-                <Text className="font-nunito text-gray-500 text-sm">
-                  Invite code: <Text className="font-mono font-semibold">{flat.invite_code}</Text>{' '}
+                <Text className="font-nunito-bold text-2xl dark:text-white">{flat.name}</Text>
+                <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                  Invite code: <Text className="font-mono font-semibold dark:text-white">{flat.invite_code}</Text>{' '}
                   · {members.length} member{members.length === 1 ? '' : 's'}
                 </Text>
               </View>
@@ -451,7 +460,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Flat settings">
-                <Text className="font-nunito-semibold text-tabby-600 text-sm">
+                <Text className="font-nunito-semibold text-tabby-600 dark:text-white text-sm">
                   {showSettings ? 'Close' : 'Settings'}
                 </Text>
               </Pressable>
@@ -460,17 +469,17 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             <Pressable
               onPress={handleShareInvite}
               style={pressFeedback}
-              className="bg-gray-800 rounded-lg py-2.5 items-center"
+              className="bg-gray-800 dark:bg-tabby-700 rounded-lg py-2.5 items-center"
               accessibilityRole="button"
               accessibilityLabel="Share invite">
               <Text className="font-nunito-semibold text-white">Share Invite</Text>
             </Pressable>
 
             {showSettings && (
-              <View className="bg-gray-50 rounded-xl p-4 gap-3">
+              <View className="bg-gray-50 dark:bg-tabby-800 rounded-xl p-4 gap-3">
                 <View className="gap-2">
-                  <Text className="font-nunito-semibold text-sm">Add a member by email</Text>
-                  <Text className="font-nunito text-gray-500 text-xs">
+                  <Text className="font-nunito-semibold text-sm dark:text-white">Add a member by email</Text>
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
                     They need an existing Tabby account.
                   </Text>
                   <View className="flex-row gap-2">
@@ -480,37 +489,37 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       placeholder="their@email.com"
                       autoCapitalize="none"
                       keyboardType="email-address"
-                      className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
+                      className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900"
                     />
                     <Pressable
                       onPress={handleAddByEmail}
                       disabled={settingsBusy}
                       style={pressFeedback}
-                      className="bg-tabby-600 rounded-lg px-4 items-center justify-center"
+                      className="bg-tabby-600 dark:bg-white rounded-lg px-4 items-center justify-center"
                       accessibilityRole="button"
                       accessibilityLabel="Add member by email">
-                      <Text className="font-nunito-semibold text-white text-sm">Add</Text>
+                      <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">Add</Text>
                     </Pressable>
                   </View>
                 </View>
 
                 {isAdmin && (
                   <View className="gap-2">
-                    <Text className="font-nunito-semibold text-sm">Rename flat</Text>
+                    <Text className="font-nunito-semibold text-sm dark:text-white">Rename flat</Text>
                     <View className="flex-row gap-2">
                       <TextInput
                         value={newName}
                         onChangeText={setNewName}
-                        className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1 bg-white"
+                        className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900"
                       />
                       <Pressable
                         onPress={handleRename}
                         disabled={settingsBusy}
                         style={pressFeedback}
-                        className="bg-tabby-600 rounded-lg px-4 items-center justify-center"
+                        className="bg-tabby-600 dark:bg-white rounded-lg px-4 items-center justify-center"
                         accessibilityRole="button"
                         accessibilityLabel="Save flat name">
-                        <Text className="font-nunito-semibold text-white text-sm">Save</Text>
+                        <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">Save</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -523,7 +532,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   className="py-2"
                   accessibilityRole="button"
                   accessibilityLabel="Leave flat">
-                  <Text className="font-nunito-semibold text-red-500 text-sm">Leave Flat</Text>
+                  <Text className="font-nunito-semibold text-red-500 dark:text-red-400 text-sm">Leave Flat</Text>
                 </Pressable>
 
                 {isAdmin && (
@@ -534,7 +543,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                     className="py-2"
                     accessibilityRole="button"
                     accessibilityLabel="Delete flat">
-                    <Text className="font-nunito-semibold text-red-700 text-sm">Delete Flat</Text>
+                    <Text className="font-nunito-semibold text-red-700 dark:text-red-400 text-sm">Delete Flat</Text>
                   </Pressable>
                 )}
 
@@ -550,29 +559,34 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               <View
                 className={`rounded-3xl p-5 flex-row items-center gap-4 ${
                   health.score >= 90
-                    ? 'bg-green-50'
+                    ? 'bg-green-50 dark:bg-green-950'
                     : health.score >= 70
-                      ? 'bg-tabby-50'
+                      ? 'bg-tabby-50 dark:bg-tabby-800'
                       : health.score >= 50
-                        ? 'bg-yellow-50'
-                        : 'bg-red-50'
+                        ? 'bg-yellow-50 dark:bg-yellow-950'
+                        : 'bg-red-50 dark:bg-red-950'
                 }`}>
                 <View
                   className={`w-20 h-20 rounded-full items-center justify-center ${
                     health.score >= 90
                       ? 'bg-green-600'
                       : health.score >= 70
-                        ? 'bg-tabby-600'
+                        ? 'bg-tabby-600 dark:bg-white'
                         : health.score >= 50
                           ? 'bg-yellow-500'
                           : 'bg-red-500'
                   }`}>
-                  <Text className="font-nunito-extrabold text-white text-2xl">{health.score}</Text>
+                  <Text
+                    className={`font-nunito-extrabold text-2xl ${
+                      health.score >= 70 && health.score < 90 ? 'text-white dark:text-tabby-900' : 'text-white'
+                    }`}>
+                    {health.score}
+                  </Text>
                 </View>
                 <View className="flex-1">
-                  <Text className="font-nunito text-gray-500 text-sm">Flat Health</Text>
-                  <Text className="font-nunito-bold text-xl">{health.label}</Text>
-                  <Text className="font-nunito text-gray-500 text-xs mt-1">
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">Flat Health</Text>
+                  <Text className="font-nunito-bold text-xl dark:text-white">{health.label}</Text>
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs mt-1">
                     ${health.totalOutstanding.toFixed(2)} unsettled of $
                     {health.totalSpend.toFixed(2)} total shared spend
                   </Text>
@@ -581,7 +595,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             )}
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg">
+              <Text className="font-fredoka-semibold text-lg dark:text-white">
                 {editingExpenseId ? 'Edit shared expense' : 'Add shared expense'}
               </Text>
 
@@ -590,13 +604,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   value={quickAddText}
                   onChangeText={setQuickAddText}
                   placeholder='Try "rent 500, power 120"'
-                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1"
                 />
                 <Pressable
                   onPress={handleQuickAdd}
                   disabled={aiBusy}
                   style={pressFeedback}
-                  className="bg-gray-800 rounded-lg px-4 items-center justify-center"
+                  className="bg-gray-800 dark:bg-tabby-700 rounded-lg px-4 items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel="Add with AI">
                   {aiBusy ? (
@@ -613,16 +627,16 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   onChangeText={setAmount}
                   placeholder="Amount"
                   keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1"
                 />
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Description"
-                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-[2]"
                 />
               </View>
-              <Text className="font-nunito-semibold text-sm">Split with</Text>
+              <Text className="font-nunito-semibold text-sm dark:text-white">Split with</Text>
               <View className="flex-row flex-wrap gap-2">
                 {members.map((m) => {
                   const selected = selectedMemberIds.includes(m.user_id);
@@ -632,11 +646,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       onPress={() => toggleMember(m.user_id)}
                       style={pressFeedback}
                       className={`px-3 py-1.5 rounded-full border ${
-                        selected ? 'bg-tabby-600 border-tabby-600' : 'border-gray-300'
+                        selected ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white' : 'border-gray-300 dark:border-tabby-600'
                       }`}>
                       <Text
                         className={`font-nunito-medium ${
-                          selected ? 'text-white text-sm' : 'text-gray-700 text-sm'
+                          selected
+                            ? 'text-white dark:text-tabby-900 text-sm'
+                            : 'text-gray-700 dark:text-tabby-200 text-sm'
                         }`}>
                         {m.profiles?.display_name ?? 'Unknown'}
                         {m.user_id === userId ? ' (you)' : ''}
@@ -645,7 +661,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   );
                 })}
               </View>
-              <Text className="font-nunito text-gray-500 text-xs">
+              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
                 Splits equally across {selectedMemberIds.length} selected member
                 {selectedMemberIds.length === 1 ? '' : 's'}.
               </Text>
@@ -654,12 +670,12 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   onPress={handleAddExpense}
                   disabled={submitting}
                   style={pressFeedback}
-                  className="flex-1 bg-tabby-600 rounded-lg py-2.5 items-center"
+                  className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-2.5 items-center"
                   accessibilityRole="button">
                   {submitting ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
-                    <Text className="font-nunito-semibold text-white">
+                    <Text className="font-nunito-semibold text-white dark:text-tabby-900">
                       {editingExpenseId ? 'Save Changes' : 'Add Expense'}
                     </Text>
                   )}
@@ -671,32 +687,32 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                     className="px-4 py-2.5 items-center justify-center"
                     accessibilityRole="button"
                     accessibilityLabel="Cancel edit">
-                    <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
+                    <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
                   </Pressable>
                 )}
               </View>
-              {error && <Text className="font-nunito text-red-500 text-sm">{error}</Text>}
+              {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
             </View>
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg">Balances</Text>
+              <Text className="font-fredoka-semibold text-lg dark:text-white">Balances</Text>
               {balances.length === 0 && (
-                <Text className="font-nunito text-gray-500">
+                <Text className="font-nunito text-gray-500 dark:text-tabby-300">
                   Invite flatmates to start splitting bills.
                 </Text>
               )}
               {balances.map((b) => (
                 <Animated.View key={b.userId} entering={FadeIn.duration(200)}>
-                  <View className="flex-row items-center justify-between bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3">
+                  <View className="flex-row items-center justify-between bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl px-4 py-3">
                     <View>
-                      <Text className="font-nunito-semibold">{b.displayName}</Text>
+                      <Text className="font-nunito-semibold dark:text-white">{b.displayName}</Text>
                       <Text
                         className={`font-nunito text-sm ${
                           b.netAmount === 0
-                            ? 'text-gray-500'
+                            ? 'text-gray-500 dark:text-tabby-300'
                             : b.netAmount > 0
-                              ? 'text-green-600'
-                              : 'text-red-500'
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-500 dark:text-red-400'
                         }`}>
                         {b.netAmount === 0
                           ? 'Settled up'
@@ -710,7 +726,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                         onPress={() => handleSettle(b)}
                         style={pressFeedback}
                         accessibilityRole="button"
-                        className="px-3 py-1.5 bg-gray-800 rounded-full">
+                        className="px-3 py-1.5 bg-gray-800 dark:bg-tabby-700 rounded-full">
                         <Text className="font-nunito-semibold text-white text-xs">Mark Settled</Text>
                       </Pressable>
                     )}
@@ -720,9 +736,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             </View>
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg">Recent shared expenses</Text>
+              <Text className="font-fredoka-semibold text-lg dark:text-white">Recent shared expenses</Text>
               {expenses.length === 0 && (
-                <Text className="font-nunito text-gray-500">No shared expenses yet.</Text>
+                <Text className="font-nunito text-gray-500 dark:text-tabby-300">No shared expenses yet.</Text>
               )}
               {expenses.map((e) => {
                 const canEdit = e.paid_by === userId;
@@ -738,18 +754,18 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       }
                       className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
                         editingExpenseId === e.id
-                          ? 'bg-tabby-50 border border-tabby-300'
-                          : 'bg-gray-50 border border-gray-100'
+                          ? 'bg-tabby-50 dark:bg-tabby-800 border border-tabby-300 dark:border-tabby-600'
+                          : 'bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700'
                       }`}>
                       <View className="flex-1">
-                        <Text className="font-nunito-semibold">
+                        <Text className="font-nunito-semibold dark:text-white">
                           {e.description || 'Shared expense'}
                         </Text>
-                        <Text className="font-nunito text-gray-500 text-sm">
+                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                           Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
                         </Text>
                       </View>
-                      <Text className="font-nunito-bold mr-3">${e.amount.toFixed(2)}</Text>
+                      <Text className="font-nunito-bold mr-3 dark:text-white">${e.amount.toFixed(2)}</Text>
                       {canEdit && (
                         <Pressable
                           onPress={(ev) => {
@@ -759,7 +775,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Delete shared expense ${e.description ?? ''}`}>
-                          <Text className="font-nunito text-red-500">Delete</Text>
+                          <Text className="font-nunito text-red-500 dark:text-red-400">Delete</Text>
                         </Pressable>
                       )}
                     </Pressable>
@@ -773,11 +789,11 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
       <Modal visible={aiPreview !== null} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
-            <Text className="font-fredoka-semibold text-xl">
+          <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 max-h-[80%]">
+            <Text className="font-fredoka-semibold text-xl dark:text-white">
               Add {aiPreview?.length ?? 0} shared expense{aiPreview?.length === 1 ? '' : 's'}?
             </Text>
-            <Text className="font-nunito text-gray-500 text-sm">
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
               Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}. Each
               one splits equally across all {members.length} member
               {members.length === 1 ? '' : 's'}.
@@ -788,9 +804,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               keyExtractor={(_, i) => String(i)}
               style={{ maxHeight: 300 }}
               renderItem={({ item }) => (
-                <View className="flex-row justify-between py-2 border-b border-gray-100">
-                  <Text className="font-nunito text-sm flex-1">{item.description}</Text>
-                  <Text className="font-nunito-semibold text-sm">${item.amount.toFixed(2)}</Text>
+                <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
+                  <Text className="font-nunito text-sm flex-1 dark:text-tabby-200">{item.description}</Text>
+                  <Text className="font-nunito-semibold text-sm dark:text-white">${item.amount.toFixed(2)}</Text>
                 </View>
               )}
             />
@@ -800,13 +816,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 onPress={handleConfirmAIAdd}
                 disabled={aiImporting}
                 style={pressFeedback}
-                className="flex-1 bg-tabby-600 rounded-lg py-3 items-center"
+                className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm add">
                 {aiImporting ? (
-                  <ActivityIndicator color="white" />
+                  <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                 ) : (
-                  <Text className="font-nunito-semibold text-white">Confirm</Text>
+                  <Text className="font-nunito-semibold text-white dark:text-tabby-900">Confirm</Text>
                 )}
               </Pressable>
               <Pressable
@@ -816,7 +832,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel">
-                <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
+                <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -843,9 +859,19 @@ export default function FlatScreen() {
     load().finally(() => setLoading(false));
   }, [load]);
 
+  // Decides whether the Flat tab is worth gating behind an onboarding
+  // question (see flat_tab_views migration) -- deliberately counts every
+  // focus, not just the first, since "opened it 3 times and left" is a
+  // different signal from "opened it once by accident."
+  useFocusEffect(
+    useCallback(() => {
+      if (!loading && userId) logFlatTabView(userId, flat !== null);
+    }, [loading, userId, flat])
+  );
+
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white">
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-tabby-900">
         <ActivityIndicator />
       </SafeAreaView>
     );
