@@ -15,25 +15,25 @@ export function LegalModal({ doc, onClose }: { doc: LegalDoc | null; onClose: ()
     // physically under the Dynamic Island / notch on affected devices.
     <Modal visible={doc !== null} animationType="slide">
       <SafeAreaProvider>
-        <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
-            <Text className="font-fredoka-semibold text-xl">{doc?.title}</Text>
+        <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
+          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-tabby-700">
+            <Text className="font-fredoka-semibold text-xl dark:text-white">{doc?.title}</Text>
             <Pressable
               onPress={onClose}
               style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
               accessibilityRole="button"
               accessibilityLabel="Close">
-              <Text className="font-nunito-semibold text-tabby-600">Done</Text>
+              <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-            <Text className="font-nunito text-gray-500 text-xs">
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
               Last updated: {doc?.lastUpdated}
             </Text>
             {doc?.sections.map((section) => (
               <View key={section.heading} className="gap-1.5">
-                <Text className="font-fredoka-semibold text-base">{section.heading}</Text>
-                <Text className="font-nunito text-gray-600 text-sm leading-5">{section.body}</Text>
+                <Text className="font-fredoka-semibold text-base dark:text-white">{section.heading}</Text>
+                <Text className="font-nunito text-gray-600 dark:text-tabby-200 text-sm leading-5">{section.body}</Text>
               </View>
             ))}
           </ScrollView>

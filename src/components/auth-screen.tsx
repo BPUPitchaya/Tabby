@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
@@ -9,6 +9,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 
 export function AuthScreen() {
   const { signIn, signUp } = useAuth();
+  const isDark = useColorScheme() === 'dark';
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -35,7 +36,7 @@ export function AuthScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
       <View className="flex-1 justify-center px-6 gap-4">
         <View className="items-center mb-2">
           <View
@@ -46,9 +47,9 @@ export function AuthScreen() {
               style={{ width: 56, height: 56 }}
             />
           </View>
-          <Text className="font-fredoka-bold text-3xl text-center">Tabby</Text>
+          <Text className="font-fredoka-bold text-3xl text-center dark:text-white">Tabby</Text>
         </View>
-        <Text className="font-nunito text-base text-center text-gray-500 mb-6">
+        <Text className="font-nunito text-base text-center text-gray-500 dark:text-tabby-300 mb-6">
           {mode === 'signIn' ? 'Welcome back' : 'Create your account'}
         </Text>
 
@@ -58,7 +59,7 @@ export function AuthScreen() {
             onChangeText={setDisplayName}
             placeholder="Display name"
             autoCapitalize="words"
-            className="font-nunito border border-gray-300 rounded-lg px-4 py-3 text-base"
+            className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
           />
         )}
 
@@ -68,7 +69,7 @@ export function AuthScreen() {
           placeholder="Email"
           autoCapitalize="none"
           keyboardType="email-address"
-          className="font-nunito border border-gray-300 rounded-lg px-4 py-3 text-base"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
         />
 
         <TextInput
@@ -76,22 +77,22 @@ export function AuthScreen() {
           onChangeText={setPassword}
           placeholder="Password"
           secureTextEntry
-          className="font-nunito border border-gray-300 rounded-lg px-4 py-3 text-base"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
         />
 
-        {error && <Text className="font-nunito text-red-500 text-sm text-center">{error}</Text>}
+        {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>}
 
         <Pressable
           onPress={handleSubmit}
           disabled={submitting}
           style={pressFeedback}
-          className="bg-tabby-600 rounded-lg py-3 items-center mt-2"
+          className="bg-tabby-600 dark:bg-white rounded-lg py-3 items-center mt-2"
           accessibilityRole="button"
           accessibilityLabel={mode === 'signIn' ? 'Log in' : 'Sign up'}>
           {submitting ? (
-            <ActivityIndicator color="white" />
+            <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
           ) : (
-            <Text className="font-nunito-semibold text-white text-base">
+            <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-base">
               {mode === 'signIn' ? 'Log In' : 'Sign Up'}
             </Text>
           )}
@@ -104,7 +105,7 @@ export function AuthScreen() {
           }}
           style={pressFeedback}
           accessibilityRole="button">
-          <Text className="font-nunito text-tabby-600 text-center text-sm mt-2">
+          <Text className="font-nunito text-tabby-600 dark:text-white text-center text-sm mt-2">
             {mode === 'signIn' ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
           </Text>
         </Pressable>
