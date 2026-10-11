@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -51,6 +52,14 @@ function HeaderIconButton({
   label: string;
   tone?: 'default' | 'primary';
 }) {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  // The primary button's background flips brown<->white between light and
+  // dark mode (see tailwind.config.js's `tabby` scale), so its icon has to
+  // flip the opposite way or it disappears against its own background.
+  const iconColor =
+    tone === 'primary' ? (isDark ? '#2B1810' : '#fff') : isDark ? '#E8C39E' : '#374151';
+
   return (
     <Pressable
       onPress={onPress}
@@ -58,9 +67,9 @@ function HeaderIconButton({
       accessibilityRole="button"
       accessibilityLabel={label}
       className={`w-10 h-10 rounded-full items-center justify-center ${
-        tone === 'primary' ? 'bg-tabby-600' : 'bg-gray-100'
+        tone === 'primary' ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-100 dark:bg-tabby-700'
       }`}>
-      <Feather name={icon} size={18} color={tone === 'primary' ? '#fff' : '#374151'} />
+      <Feather name={icon} size={18} color={iconColor} />
     </Pressable>
   );
 }
@@ -68,6 +77,7 @@ function HeaderIconButton({
 export default function TransactionsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
+  const isDark = useColorScheme() === 'dark';
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -333,20 +343,20 @@ export default function TransactionsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white">
+      <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-tabby-900">
         <ActivityIndicator />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
-        <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100">
-          <Text className="font-fredoka-semibold text-2xl">Transactions</Text>
+        <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100 dark:border-tabby-700">
+          <Text className="font-fredoka-semibold text-2xl dark:text-white">Transactions</Text>
           <View className="flex-row gap-2">
             <HeaderIconButton icon="upload" onPress={handlePickCSV} label="Import CSV" />
             <HeaderIconButton icon="plus" onPress={openManualAdd} label="Add transaction" tone="primary" />
@@ -354,8 +364,8 @@ export default function TransactionsScreen() {
         </View>
 
         {error && (
-          <View className="px-4 py-2 bg-red-50 border-b border-red-100">
-            <Text className="font-nunito text-red-600 text-sm">{error}</Text>
+          <View className="px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-100 dark:border-red-800">
+            <Text className="font-nunito text-red-600 dark:text-red-400 text-sm">{error}</Text>
           </View>
         )}
 
@@ -366,10 +376,10 @@ export default function TransactionsScreen() {
           contentContainerStyle={{ padding: 16, gap: 8, flexGrow: 1 }}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center gap-3 py-16">
-              <View className="w-14 h-14 rounded-full bg-gray-100 items-center justify-center">
+              <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center">
                 <Feather name="file-text" size={22} color="#9ca3af" />
               </View>
-              <Text className="font-nunito text-center text-gray-500">
+              <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300">
                 No transactions yet.{'\n'}Type one below, or tap + to add one manually.
               </Text>
             </View>
@@ -381,11 +391,11 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-                className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 border border-gray-100">
+                className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700">
                 <View className="flex-row items-center flex-1 gap-3">
                   <View
                     className={`w-9 h-9 rounded-full border items-center justify-center ${
-                      item.is_income ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
+                      item.is_income ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' : 'bg-white dark:bg-tabby-900 border-gray-200 dark:border-tabby-700'
                     }`}>
                     <CategoryIcon
                       name={item.categories?.icon}
@@ -394,16 +404,19 @@ export default function TransactionsScreen() {
                     />
                   </View>
                   <View className="flex-1">
-                    <Text className="font-nunito-semibold">
+                    <Text className="font-nunito-semibold dark:text-white">
                       {item.description || item.categories?.name || 'Transaction'}
                     </Text>
-                    <Text className="font-nunito text-gray-500 text-sm">
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                       {item.categories?.name ?? 'Uncategorized'}
                       {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
                     </Text>
                   </View>
                 </View>
-                <Text className={`font-nunito-bold mr-3 ${item.is_income ? 'text-green-700' : ''}`}>
+                <Text
+                  className={`font-nunito-bold mr-3 ${
+                    item.is_income ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
+                  }`}>
                   {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
                 </Text>
                 <Pressable
@@ -422,13 +435,13 @@ export default function TransactionsScreen() {
         />
 
         {/* Chat-style composer, pinned to the bottom of the screen. */}
-        <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 bg-white">
+        <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
           <TextInput
             value={quickAddText}
             onChangeText={setQuickAddText}
             placeholder='Try "coffee $8.50, lunch $12.50"'
             multiline
-            className="font-nunito flex-1 bg-gray-100 rounded-2xl px-4 py-2.5 max-h-28 text-base"
+            className="font-nunito flex-1 bg-gray-100 dark:bg-tabby-700 rounded-2xl px-4 py-2.5 max-h-28 text-base"
           />
           <Pressable
             onPress={handleQuickAdd}
@@ -437,12 +450,16 @@ export default function TransactionsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Send"
             className={`w-10 h-10 rounded-full items-center justify-center ${
-              quickAddText.trim() ? 'bg-tabby-600' : 'bg-gray-200'
+              quickAddText.trim() ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-200 dark:bg-tabby-700'
             }`}>
             {aiBusy ? (
-              <ActivityIndicator color="white" size="small" />
+              <ActivityIndicator color={isDark ? '#2B1810' : 'white'} size="small" />
             ) : (
-              <Feather name="arrow-up" size={18} color={quickAddText.trim() ? '#fff' : '#9ca3af'} />
+              <Feather
+                name="arrow-up"
+                size={18}
+                color={quickAddText.trim() ? (isDark ? '#2B1810' : '#fff') : '#9ca3af'}
+              />
             )}
           </Pressable>
         </View>
@@ -454,9 +471,9 @@ export default function TransactionsScreen() {
           className="flex-1"
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View className="flex-1 bg-black/40 justify-end">
-            <View className="bg-white rounded-t-2xl p-4 gap-3">
+            <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3">
               <View className="flex-row items-center justify-between">
-                <Text className="font-fredoka-semibold text-xl">
+                <Text className="font-fredoka-semibold text-xl dark:text-white">
                   {editingId ? 'Edit Transaction' : 'Add Transaction'}
                 </Text>
                 <Pressable
@@ -464,23 +481,23 @@ export default function TransactionsScreen() {
                   style={pressFeedback}
                   accessibilityRole="button"
                   accessibilityLabel="Close"
-                  className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center">
-                  <Feather name="x" size={16} color="#374151" />
+                  className="w-8 h-8 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center">
+                  <Feather name="x" size={16} color={isDark ? '#E8C39E' : '#374151'} />
                 </Pressable>
               </View>
 
-              <View className="flex-row bg-gray-100 rounded-lg p-1">
+              <View className="flex-row bg-gray-100 dark:bg-tabby-700 rounded-lg p-1">
                 <Pressable
                   onPress={() => handleSelectType('expense')}
                   style={pressFeedback}
                   accessibilityRole="button"
                   accessibilityLabel="Expense"
                   className={`flex-1 rounded-md py-1.5 items-center ${
-                    transactionType === 'expense' ? 'bg-white shadow-sm' : ''
+                    transactionType === 'expense' ? 'bg-white dark:bg-tabby-900 shadow-sm' : ''
                   }`}>
                   <Text
                     className={`font-nunito-semibold text-sm ${
-                      transactionType === 'expense' ? 'text-gray-900' : 'text-gray-500'
+                      transactionType === 'expense' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
                     }`}>
                     Expense
                   </Text>
@@ -491,11 +508,11 @@ export default function TransactionsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Income"
                   className={`flex-1 rounded-md py-1.5 items-center ${
-                    transactionType === 'income' ? 'bg-white shadow-sm' : ''
+                    transactionType === 'income' ? 'bg-white dark:bg-tabby-900 shadow-sm' : ''
                   }`}>
                   <Text
                     className={`font-nunito-semibold text-sm ${
-                      transactionType === 'income' ? 'text-green-700' : 'text-gray-500'
+                      transactionType === 'income' ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-tabby-300'
                     }`}>
                     Income
                   </Text>
@@ -508,14 +525,14 @@ export default function TransactionsScreen() {
                   onChangeText={setAmount}
                   placeholder="Amount"
                   keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1"
                 />
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
                   onBlur={handleDescriptionBlur}
                   placeholder="Description"
-                  className="font-nunito border border-gray-300 rounded-lg px-3 py-2 flex-[2]"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-[2]"
                 />
               </View>
 
@@ -523,7 +540,7 @@ export default function TransactionsScreen() {
                 value={merchant}
                 onChangeText={setMerchant}
                 placeholder="Where? (e.g. Pak'nSave) -- optional"
-                className="font-nunito border border-gray-300 rounded-lg px-3 py-2"
+                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2"
               />
 
               {recentMerchants.length > 0 && (
@@ -534,10 +551,10 @@ export default function TransactionsScreen() {
                       onPress={() => setMerchant(m === merchant ? '' : m)}
                       style={pressFeedback}
                       className={`px-3 py-1 rounded-full border ${
-                        merchant === m ? 'bg-gray-800 border-gray-800' : 'border-gray-300'
+                        merchant === m ? 'bg-gray-800 dark:bg-tabby-700 border-gray-800 dark:border-tabby-700' : 'border-gray-300 dark:border-tabby-600'
                       }`}>
                       <Text
-                        className={`font-nunito ${merchant === m ? 'text-white text-xs' : 'text-gray-600 text-xs'}`}>
+                        className={`font-nunito ${merchant === m ? 'text-white text-xs' : 'text-gray-600 dark:text-tabby-200 text-xs'}`}>
                         {m}
                       </Text>
                     </Pressable>
@@ -557,23 +574,27 @@ export default function TransactionsScreen() {
                       }}
                       style={pressFeedback}
                       className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
-                        categoryId === cat.id ? 'bg-tabby-600 border-tabby-600' : 'border-gray-300'
+                        categoryId === cat.id ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white' : 'border-gray-300 dark:border-tabby-600'
                       }`}>
                       <CategoryIcon
                         name={cat.icon}
                         size={13}
-                        color={categoryId === cat.id ? '#fff' : '#4b5563'}
+                        color={
+                          categoryId === cat.id ? (isDark ? '#2B1810' : '#fff') : isDark ? '#E8C39E' : '#4b5563'
+                        }
                       />
                       <Text
                         className={`font-nunito-medium ${
-                          categoryId === cat.id ? 'text-white text-sm' : 'text-gray-700 text-sm'
+                          categoryId === cat.id
+                            ? 'text-white dark:text-tabby-900 text-sm'
+                            : 'text-gray-700 dark:text-tabby-200 text-sm'
                         }`}>
                         {cat.name}
                       </Text>
                     </Pressable>
                   ))}
                 {categorySource === 'ai' && (
-                  <Text className="font-nunito text-xs text-tabby-500">AI suggested</Text>
+                  <Text className="font-nunito text-xs text-tabby-500 dark:text-tabby-200">AI suggested</Text>
                 )}
               </View>
 
@@ -582,13 +603,13 @@ export default function TransactionsScreen() {
                   onPress={handleSubmit}
                   disabled={submitting}
                   style={pressFeedback}
-                  className="flex-1 bg-tabby-600 rounded-lg py-3 items-center"
+                  className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                   accessibilityRole="button"
                   accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
                   {submitting ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
-                    <Text className="font-nunito-semibold text-white">
+                    <Text className="font-nunito-semibold text-white dark:text-tabby-900">
                       {editingId ? 'Save Changes' : 'Add Transaction'}
                     </Text>
                   )}
@@ -600,7 +621,7 @@ export default function TransactionsScreen() {
                       handleDelete(editingId);
                     }}
                     style={pressFeedback}
-                    className="px-4 py-3 items-center justify-center rounded-lg bg-red-50"
+                    className="px-4 py-3 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
                     accessibilityRole="button"
                     accessibilityLabel="Delete transaction">
                     <Feather name="trash-2" size={18} color="#ef4444" />
@@ -614,11 +635,11 @@ export default function TransactionsScreen() {
 
       <Modal visible={csvPreview !== null} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[80%]">
-            <Text className="font-fredoka-semibold text-xl">
+          <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 max-h-[80%]">
+            <Text className="font-fredoka-semibold text-xl dark:text-white">
               Import {csvPreview?.length ?? 0} transaction{csvPreview?.length === 1 ? '' : 's'}?
             </Text>
-            <Text className="font-nunito text-gray-500 text-sm">
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
               Net: $
               {csvPreview
                 ?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0)
@@ -631,15 +652,17 @@ export default function TransactionsScreen() {
               keyExtractor={(_, i) => String(i)}
               style={{ maxHeight: 300 }}
               renderItem={({ item }) => (
-                <View className="flex-row justify-between py-2 border-b border-gray-100">
+                <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
                   <View className="flex-1">
-                    <Text className="font-nunito text-sm">{item.description || '(no description)'}</Text>
-                    <Text className="font-nunito text-xs text-gray-500">
+                    <Text className="font-nunito text-sm dark:text-tabby-200">{item.description || '(no description)'}</Text>
+                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
                       {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
                     </Text>
                   </View>
                   <Text
-                    className={`font-nunito-semibold text-sm ${item.isIncome ? 'text-green-700' : ''}`}>
+                    className={`font-nunito-semibold text-sm ${
+                      item.isIncome ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
+                    }`}>
                     {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
                   </Text>
                 </View>
@@ -651,13 +674,13 @@ export default function TransactionsScreen() {
                 onPress={handleConfirmCSVImport}
                 disabled={csvImporting}
                 style={pressFeedback}
-                className="flex-1 bg-tabby-600 rounded-lg py-3 items-center"
+                className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm import">
                 {csvImporting ? (
-                  <ActivityIndicator color="white" />
+                  <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                 ) : (
-                  <Text className="font-nunito-semibold text-white">Import</Text>
+                  <Text className="font-nunito-semibold text-white dark:text-tabby-900">Import</Text>
                 )}
               </Pressable>
               <Pressable
@@ -667,7 +690,7 @@ export default function TransactionsScreen() {
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
                 accessibilityLabel="Cancel import">
-                <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
+                <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
               </Pressable>
             </View>
           </View>
@@ -677,12 +700,12 @@ export default function TransactionsScreen() {
       <Modal visible={aiPreview !== null} animationType="slide" transparent>
         <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View className="flex-1 bg-black/40 justify-end">
-            <View className="bg-white rounded-t-2xl p-4 gap-3 max-h-[85%]">
+            <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 max-h-[85%]">
               <View>
-                <Text className="font-fredoka-semibold text-xl">
+                <Text className="font-fredoka-semibold text-xl dark:text-white">
                   Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
                 </Text>
-                <Text className="font-nunito text-gray-500 text-sm">
+                <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                   AI&apos;s first guess -- tap anything below to fix it before adding.
                 </Text>
               </View>
@@ -693,16 +716,16 @@ export default function TransactionsScreen() {
                 style={{ maxHeight: 420 }}
                 contentContainerStyle={{ gap: 10 }}
                 renderItem={({ item, index }) => (
-                  <View className="gap-2 py-3 border-b border-gray-100">
+                  <View className="gap-2 py-3 border-b border-gray-100 dark:border-tabby-700">
                     <View className="flex-row items-center gap-2">
                       <TextInput
                         value={item.description}
                         onChangeText={(text) => updateAiPreviewItem(index, { description: text })}
                         placeholder="Description"
-                        className="font-nunito flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        className="font-nunito flex-1 border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm"
                       />
-                      <View className="flex-row items-center border border-gray-300 rounded-lg px-2">
-                        <Text className="font-nunito text-gray-500 text-sm">$</Text>
+                      <View className="flex-row items-center border border-gray-300 dark:border-tabby-600 rounded-lg px-2">
+                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">$</Text>
                         <TextInput
                           value={String(item.amount)}
                           onChangeText={(text) =>
@@ -735,12 +758,14 @@ export default function TransactionsScreen() {
                             style={pressFeedback}
                             className={`px-2.5 py-1 rounded-full border ${
                               item.categoryName === cat.name
-                                ? 'bg-tabby-600 border-tabby-600'
-                                : 'border-gray-300'
+                                ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                                : 'border-gray-300 dark:border-tabby-600'
                             }`}>
                             <Text
                               className={`font-nunito-medium text-xs ${
-                                item.categoryName === cat.name ? 'text-white' : 'text-gray-600'
+                                item.categoryName === cat.name
+                                  ? 'text-white dark:text-tabby-900'
+                                  : 'text-gray-600 dark:text-tabby-200'
                               }`}>
                               {cat.name}
                             </Text>
@@ -748,13 +773,13 @@ export default function TransactionsScreen() {
                         ))}
                     </View>
                     {item.merchant && (
-                      <Text className="font-nunito text-xs text-gray-500">at {item.merchant}</Text>
+                      <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">at {item.merchant}</Text>
                     )}
                   </View>
                 )}
               />
 
-              <Text className="font-nunito text-gray-500 text-sm">
+              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                 Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}
               </Text>
 
@@ -764,14 +789,19 @@ export default function TransactionsScreen() {
                   disabled={aiImporting || !aiPreview?.every((p) => p.amount > 0)}
                   style={pressFeedback}
                   className={`flex-1 rounded-lg py-3 items-center ${
-                    aiPreview?.every((p) => p.amount > 0) ? 'bg-tabby-600' : 'bg-gray-300'
+                    aiPreview?.every((p) => p.amount > 0) ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-300 dark:bg-tabby-700'
                   }`}
                   accessibilityRole="button"
                   accessibilityLabel="Confirm add">
                   {aiImporting ? (
-                    <ActivityIndicator color="white" />
+                    <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
-                    <Text className="font-nunito-semibold text-white">Confirm</Text>
+                    <Text
+                      className={`font-nunito-semibold text-white ${
+                        aiPreview?.every((p) => p.amount > 0) ? 'dark:text-tabby-900' : ''
+                      }`}>
+                      Confirm
+                    </Text>
                   )}
                 </Pressable>
                 <Pressable
@@ -781,7 +811,7 @@ export default function TransactionsScreen() {
                   className="px-4 py-3 items-center justify-center"
                   accessibilityRole="button"
                   accessibilityLabel="Cancel">
-                  <Text className="font-nunito-semibold text-gray-500">Cancel</Text>
+                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
                 </Pressable>
               </View>
             </View>
