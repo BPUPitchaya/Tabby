@@ -13,6 +13,7 @@ import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
 import { useAuth } from '@/lib/auth-context';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
 import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
+import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
 import {
   computeIncomeCycle,
   fetchIncomeProgress,
@@ -173,24 +174,26 @@ function CategoryBar({
   );
 }
 
-function MonthlyChart({ data }: { data: DashboardData['monthlyTotals'] }) {
+type TrendPoint = { key: string; label: string; total: number };
+
+function TrendChart({ data }: { data: TrendPoint[] }) {
   const max = Math.max(1, ...data.map((d) => d.total));
   return (
     <View className="flex-row items-end justify-between h-36 gap-2">
       {data.map((d) => {
         const heightPct = Math.max(2, (d.total / max) * 100);
-        const isCurrentMonth = d.month === data[data.length - 1]?.month;
+        const isCurrent = d.key === data[data.length - 1]?.key;
         return (
-          <View key={d.month} className="flex-1 items-center gap-1.5">
+          <View key={d.key} className="flex-1 items-center gap-1.5">
             <View className="w-full flex-1 justify-end">
               <View
-                className={`w-full rounded-full ${isCurrentMonth ? 'bg-tabby-600 dark:bg-white' : 'bg-tabby-200 dark:bg-tabby-700'}`}
+                className={`w-full rounded-full ${isCurrent ? 'bg-tabby-600 dark:bg-white' : 'bg-tabby-200 dark:bg-tabby-700'}`}
                 style={{ height: `${heightPct}%` }}
               />
             </View>
             <Text
               className={
-                isCurrentMonth ? 'font-nunito-bold text-xs text-tabby-700 dark:text-tabby-100' : 'font-nunito text-xs text-gray-500 dark:text-tabby-300'
+                isCurrent ? 'font-nunito-bold text-xs text-tabby-700 dark:text-tabby-100' : 'font-nunito text-xs text-gray-500 dark:text-tabby-300'
               }>
               {d.label}
             </Text>
@@ -199,6 +202,20 @@ function MonthlyChart({ data }: { data: DashboardData['monthlyTotals'] }) {
       })}
     </View>
   );
+}
+
+// Thin history (< ~8 weeks of data) makes a 6-month chart mostly empty
+// bars, so 'auto' mode shows weekly instead until there's enough history
+// for monthly to be the more useful view.
+function resolveTrendView(
+  preference: TrendPeriodPreference,
+  earliestOccurredAt: string | null,
+  now: Date
+): 'weekly' | 'monthly' {
+  if (preference !== 'auto') return preference;
+  if (!earliestOccurredAt) return 'weekly';
+  const daysSinceEarliest = (now.getTime() - new Date(`${earliestOccurredAt}T00:00:00`).getTime()) / 86_400_000;
+  return daysSinceEarliest < 56 ? 'weekly' : 'monthly';
 }
 
 export default function HomeScreen() {
@@ -211,6 +228,7 @@ export default function HomeScreen() {
   // the user picked "Always this month" in Settings). Non-null = Earned/
   // Spent/category breakdown follow this pay cycle instead.
   const [periodFrequency, setPeriodFrequency] = useState<IncomeFrequency | null>(null);
+  const [trendPreference, setTrendPreference] = useState<TrendPeriodPreference>('auto');
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -224,10 +242,12 @@ export default function HomeScreen() {
       setError(null);
       setInsight(null);
 
-      const [periodPreference, incomeSettings] = await Promise.all([
+      const [periodPreference, trendPref, incomeSettings] = await Promise.all([
         loadDashboardPeriodPreference(),
+        loadTrendPeriodPreference(),
         fetchIncomeSettings(userId),
       ]);
+      setTrendPreference(trendPref);
       // computeIncomeCycle only needs frequency/payday, which income
       // settings always has once set -- unlike IncomeProgress, this isn't
       // gated on a budget amount existing too, since Earned/Spent
@@ -284,6 +304,7 @@ export default function HomeScreen() {
   }
 
   const maxCategory = Math.max(1, ...(data?.categoryTotals.map((c) => c.total) ?? [0]));
+  const trendView = resolveTrendView(trendPreference, data?.earliestOccurredAt ?? null, new Date());
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   // The hero is the only card that gets a fill, so it's the one place a
@@ -379,8 +400,18 @@ export default function HomeScreen() {
             rather than a gray fill, so the hero stays the only solid-filled
             card on the screen and this doesn't read as "another gray box." */}
         <View className="border border-tabby-100 dark:border-tabby-700 rounded-3xl p-4 gap-3">
-          <Text className="font-nunito-bold text-lg dark:text-white">Last 6 months</Text>
-          {data && <MonthlyChart data={data.monthlyTotals} />}
+          <Text className="font-nunito-bold text-lg dark:text-white">
+            {trendView === 'weekly' ? 'Last 6 weeks' : 'Last 6 months'}
+          </Text>
+          {data && (
+            <TrendChart
+              data={
+                trendView === 'weekly'
+                  ? data.weeklyTotals.map((w) => ({ key: w.weekStart, label: w.label, total: w.total }))
+                  : data.monthlyTotals.map((m) => ({ key: m.month, label: m.label, total: m.total }))
+              }
+            />
+          )}
         </View>
       </ScrollView>
 
