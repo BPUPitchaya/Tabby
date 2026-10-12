@@ -2,9 +2,13 @@ import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -19,7 +23,7 @@ import {
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { categorizeTransaction, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
+import { categorizeTransaction, parseFinancialDocument, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { CategoryIcon } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
@@ -298,6 +302,80 @@ export default function TransactionsScreen() {
     }
   };
 
+  // Shared by all three scan entry points (camera, photo library, file) --
+  // reuses the same aiPreview modal as the chat quick-add, just sourced
+  // from a document instead of typed text.
+  const scanDocument = async (base64Data: string, mimeType: string) => {
+    setError(null);
+    setAiBusy(true);
+    try {
+      const parsed = await parseFinancialDocument(base64Data, mimeType, categories);
+      if (!parsed) {
+        setError("Couldn't find any transactions in that -- try a clearer photo, or add it manually.");
+        return;
+      }
+      setAiPreview(parsed);
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setError('Camera access is off for Tabby -- enable it in Settings to scan a receipt.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) return;
+    await scanDocument(asset.base64, asset.mimeType ?? 'image/jpeg');
+  };
+
+  const handleChoosePhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError('Photo access is off for Tabby -- enable it in Settings to scan a receipt.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6 });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) return;
+    await scanDocument(asset.base64, asset.mimeType ?? 'image/jpeg');
+  };
+
+  const handleChooseStatementFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/*'],
+      copyToCacheDirectory: true,
+    });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset) return;
+
+    try {
+      const base64Data = await FileSystemLegacy.readAsStringAsync(asset.uri, { encoding: 'base64' });
+      await scanDocument(base64Data, asset.mimeType ?? 'application/pdf');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read that file.');
+    }
+  };
+
+  const handleScanReceipt = () => {
+    const options = ['Take Photo', 'Choose Photo', 'Choose File (PDF)', 'Cancel'];
+    const actions = [handleTakePhoto, handleChoosePhoto, handleChooseStatementFile];
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex: options.length - 1 },
+        (index) => actions[index]?.()
+      );
+    } else {
+      Alert.alert('Scan a receipt or statement', undefined, [
+        ...options.slice(0, -1).map((label, i) => ({ text: label, onPress: actions[i] })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
+    }
+  };
+
   const handleConfirmCSVImport = async () => {
     if (!userId || !csvPreview) return;
     setCsvImporting(true);
@@ -472,6 +550,15 @@ export default function TransactionsScreen() {
 
         {/* Chat-style composer, pinned to the bottom of the screen. */}
         <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
+          <Pressable
+            onPress={handleScanReceipt}
+            disabled={aiBusy}
+            style={pressFeedback}
+            accessibilityRole="button"
+            accessibilityLabel="Scan a receipt or statement"
+            className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700">
+            <Feather name="camera" size={18} color={isDark ? '#E8C39E' : '#4b5563'} />
+          </Pressable>
           <TextInput
             value={quickAddText}
             onChangeText={setQuickAddText}
@@ -730,7 +817,7 @@ export default function TransactionsScreen() {
 
       <Modal visible={csvPreview !== null} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 max-h-[80%]">
+          <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 h-[80%]">
             <Text className="font-fredoka-semibold text-xl dark:text-white">
               Import {csvPreview?.length ?? 0} transaction{csvPreview?.length === 1 ? '' : 's'}?
             </Text>
@@ -745,7 +832,7 @@ export default function TransactionsScreen() {
             <FlatList
               data={csvPreview ?? []}
               keyExtractor={(_, i) => String(i)}
-              style={{ maxHeight: 300 }}
+              style={{ flex: 1 }}
               renderItem={({ item }) => (
                 <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
                   <View className="flex-1">
@@ -795,7 +882,7 @@ export default function TransactionsScreen() {
       <Modal visible={aiPreview !== null} animationType="slide" transparent>
         <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View className="flex-1 bg-black/40 justify-end">
-            <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 max-h-[85%]">
+            <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3 h-[85%]">
               <View>
                 <Text className="font-fredoka-semibold text-xl dark:text-white">
                   Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
@@ -808,7 +895,7 @@ export default function TransactionsScreen() {
               <FlatList
                 data={aiPreview ?? []}
                 keyExtractor={(_, i) => String(i)}
-                style={{ maxHeight: 420 }}
+                style={{ flex: 1 }}
                 contentContainerStyle={{ gap: 10 }}
                 renderItem={({ item, index }) => (
                   <View className="gap-2 py-3 border-b border-gray-100 dark:border-tabby-700">
