@@ -14,12 +14,22 @@ export type MonthlyTotal = {
 };
 
 export type DashboardData = {
-  thisMonthTotal: number; // expenses only -- "spend" has always meant this
-  thisMonthIncome: number;
-  thisMonthNet: number; // income - total, can go negative
+  periodTotal: number; // expenses only -- "spend" has always meant this
+  periodIncome: number;
+  periodNet: number; // income - total, can go negative
   transactionCount: number;
   categoryTotals: CategoryTotal[];
   monthlyTotals: MonthlyTotal[];
+};
+
+// The hero/flow-row figures' window -- calendar month by default, or the
+// user's own pay cycle when they've set one and prefer that (see
+// dashboard-period-preference.ts). The 6-month trend chart always stays
+// calendar-month-bucketed regardless -- it's a monthly history view, a
+// different concern from "the current period."
+export type DashboardPeriod = {
+  startDate: string; // inclusive, 'YYYY-MM-DD'
+  endDate: string; // exclusive, 'YYYY-MM-DD'
 };
 
 export type DashboardRow = {
@@ -41,24 +51,35 @@ const MONTH_LABELS = [
 // mixing income in would make "spending by category" misleading (a salary
 // deposit isn't a spending category) and would make the trend chart look
 // like spending dropped in months you just happened to earn more.
-export function computeDashboardFromRows(rows: DashboardRow[], now: Date = new Date()): DashboardData {
+//
+// `period` is null for the calendar-month default; when given (the user's
+// pay cycle), it governs periodTotal/periodIncome/categoryTotals -- the
+// 6-month trend stays calendar-month-bucketed either way.
+export function computeDashboardFromRows(
+  rows: DashboardRow[],
+  period: DashboardPeriod | null = null,
+  now: Date = new Date()
+): DashboardData {
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const inPeriod = (occurredAt: string) =>
+    period ? occurredAt >= period.startDate && occurredAt < period.endDate : occurredAt.slice(0, 7) === currentMonthKey;
 
-  // category totals, for the current month only, expenses only
+  // category totals, for the current period only, expenses only
   const categoryMap = new Map<string, CategoryTotal>();
-  // monthly totals, for the last 6 months, expenses only
+  // monthly totals, for the last 6 months, expenses only -- always
+  // calendar-month buckets, independent of `period`
   const monthlyMap = new Map<string, number>();
 
-  let thisMonthTotal = 0;
-  let thisMonthIncome = 0;
+  let periodTotal = 0;
+  let periodIncome = 0;
   let transactionCount = 0;
 
   for (const row of rows) {
     const monthKey = row.occurred_at.slice(0, 7); // 'YYYY-MM'
 
     if (row.is_income) {
-      if (monthKey === currentMonthKey) {
-        thisMonthIncome += row.amount;
+      if (inPeriod(row.occurred_at)) {
+        periodIncome += row.amount;
         transactionCount += 1;
       }
       continue;
@@ -66,8 +87,8 @@ export function computeDashboardFromRows(rows: DashboardRow[], now: Date = new D
 
     monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + row.amount);
 
-    if (monthKey === currentMonthKey) {
-      thisMonthTotal += row.amount;
+    if (inPeriod(row.occurred_at)) {
+      periodTotal += row.amount;
       transactionCount += 1;
 
       const key = row.category_id ?? 'uncategorized';
@@ -98,24 +119,28 @@ export function computeDashboardFromRows(rows: DashboardRow[], now: Date = new D
     .map((c) => ({ ...c, total: Math.round(c.total * 100) / 100 }))
     .sort((a, b) => b.total - a.total);
 
-  thisMonthTotal = Math.round(thisMonthTotal * 100) / 100;
-  thisMonthIncome = Math.round(thisMonthIncome * 100) / 100;
+  periodTotal = Math.round(periodTotal * 100) / 100;
+  periodIncome = Math.round(periodIncome * 100) / 100;
 
   return {
-    thisMonthTotal,
-    thisMonthIncome,
-    thisMonthNet: Math.round((thisMonthIncome - thisMonthTotal) * 100) / 100,
+    periodTotal,
+    periodIncome,
+    periodNet: Math.round((periodIncome - periodTotal) * 100) / 100,
     transactionCount,
     categoryTotals,
     monthlyTotals,
   };
 }
 
-export async function fetchDashboardData(userId: string): Promise<DashboardData> {
+export async function fetchDashboardData(userId: string, period: DashboardPeriod | null = null): Promise<DashboardData> {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
-  const sinceDate = sixMonthsAgo.toISOString().slice(0, 10);
+  // The 6-month chart always needs 6 calendar months back regardless of
+  // `period` -- but if the pay cycle itself starts earlier than that (only
+  // possible right at a month boundary), widen the fetch so period totals
+  // aren't silently missing rows.
+  const sinceDate = [sixMonthsAgo.toISOString().slice(0, 10), period?.startDate].filter(Boolean).sort()[0]!;
 
   const { data, error } = await supabase
     .from('transactions')
@@ -126,5 +151,5 @@ export async function fetchDashboardData(userId: string): Promise<DashboardData>
   if (error) throw error;
 
   const rows = (data ?? []) as unknown as DashboardRow[];
-  return computeDashboardFromRows(rows);
+  return computeDashboardFromRows(rows, period);
 }

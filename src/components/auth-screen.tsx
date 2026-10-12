@@ -59,7 +59,7 @@ export function AuthScreen() {
             onChangeText={setDisplayName}
             placeholder="Display name"
             autoCapitalize="words"
-            className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
+            className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
           />
         )}
 
@@ -69,7 +69,7 @@ export function AuthScreen() {
           placeholder="Email"
           autoCapitalize="none"
           keyboardType="email-address"
-          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
         />
 
         <TextInput
@@ -77,7 +77,7 @@ export function AuthScreen() {
           onChangeText={setPassword}
           placeholder="Password"
           secureTextEntry
-          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
         />
 
         {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>}

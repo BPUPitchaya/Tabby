@@ -50,11 +50,18 @@ export type ParsedExpense = {
   description: string;
   merchant: string | null;
   categoryName: string | null;
+  isIncome: boolean;
+  occurredAt: string; // 'YYYY-MM-DD'
 };
 
 // Handles both a single expense ("coffee $8.50") and a bulk list in one
 // sentence ("coffee $8.50, breakfast $12.50, lunch $22.20") -- always
-// returns an array so callers don't need two separate code paths.
+// returns an array so callers don't need two separate code paths. Despite
+// the function's name (kept for now to avoid a wider rename), this also
+// picks up income lines ("got $500 for my birthday") -- isIncome is model-
+// judged per item, same as the manual form's Expense/Income toggle, so a
+// mixed quick-add like "got $500 for my bday, spent $20 on lunch" comes
+// back correctly split.
 export async function parseNaturalLanguageExpenses(
   text: string,
   categories: { id: string; name: string }[]
@@ -62,8 +69,9 @@ export async function parseNaturalLanguageExpenses(
   if (!text.trim()) return null;
 
   try {
+    const today = new Date().toISOString().slice(0, 10);
     const result = (await callGemini(
-      `Extract one or more expenses from this text -- it may describe a single purchase or a list of several, separated by commas or "and": "${text}". For each one: the description should be just what was purchased (e.g. "Coffee"), excluding any date words, dollar amounts, merchant names, or filler. If a specific shop/business/brand name is mentioned (e.g. "at Starbucks", "from Pak'nSave"), extract it separately as the merchant -- otherwise merchant is "None". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}.`,
+      `Today's date is ${today}. Extract one or more transactions from this text -- it may describe a single purchase or payment, or a list of several, separated by commas or "and": "${text}". For each one, decide isIncome: true if money came IN (a gift, salary, refund, being paid back, selling something), false if money went OUT (a purchase, bill, payment). The description should be just what the money was for (e.g. "Coffee", "Birthday gift"), excluding any date words, dollar amounts, merchant names, or filler. If a specific shop/business/brand/person name is mentioned (e.g. "at Starbucks", "from Pak'nSave"), extract it separately as the merchant -- otherwise merchant is "None". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. For the date: if a specific day is mentioned ("on the 9th of September", "yesterday", "last Tuesday", "July 10th"), resolve it to YYYY-MM-DD relative to today's date above -- for a month/day with no year, assume this year unless that would be in the future, in which case assume last year (these are things that already happened). If no date is mentioned at all, use today's date.`,
       {
         type: 'object',
         properties: {
@@ -76,21 +84,32 @@ export async function parseNaturalLanguageExpenses(
                 description: { type: 'string' },
                 merchant: { type: 'string' },
                 categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+                isIncome: { type: 'boolean' },
+                occurredAt: { type: 'string', description: 'YYYY-MM-DD' },
               },
-              required: ['amount', 'description', 'merchant', 'categoryName'],
+              required: ['amount', 'description', 'merchant', 'categoryName', 'isIncome', 'occurredAt'],
             },
           },
         },
         required: ['expenses'],
       }
     )) as {
-      expenses: { amount: number; description: string; merchant: string; categoryName: string }[];
+      expenses: {
+        amount: number;
+        description: string;
+        merchant: string;
+        categoryName: string;
+        isIncome: boolean;
+        occurredAt: string;
+      }[];
     };
 
     if (!result.expenses?.length) return null;
 
     return result.expenses.map((e) => ({
       amount: e.amount,
+      isIncome: e.isIncome,
+      occurredAt: e.occurredAt,
       description: e.description,
       merchant: e.merchant === 'None' || !e.merchant.trim() ? null : e.merchant,
       categoryName: e.categoryName === 'None' ? null : e.categoryName,
@@ -107,7 +126,7 @@ export async function generateMonthlySummary(params: {
 }): Promise<string | null> {
   try {
     const result = (await callGemini(
-      `Write a single short, friendly sentence (max 25 words) summarizing this person's spending this month compared to last month. This month: $${params.thisMonthTotal.toFixed(2)}. Last month: $${params.lastMonthTotal.toFixed(2)}. Top categories this month: ${params.topCategories.map((c) => `${c.name} $${c.total.toFixed(2)}`).join(', ') || 'none yet'}.`,
+      `Write a single short, friendly sentence (max 25 words) summarizing this person's spending this month compared to last month. Do not use a dash or hyphen anywhere in the sentence; use separate sentences or "and"/"but" instead. This month: $${params.thisMonthTotal.toFixed(2)}. Last month: $${params.lastMonthTotal.toFixed(2)}. Top categories this month: ${params.topCategories.map((c) => `${c.name} $${c.total.toFixed(2)}`).join(', ') || 'none yet'}.`,
       {
         type: 'object',
         properties: { summary: { type: 'string' } },

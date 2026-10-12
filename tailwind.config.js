@@ -14,15 +14,23 @@ module.exports = {
         // -- each weight is its own named font, not synthesized, so pick the
         // exact class for the weight you want rather than pairing with
         // font-bold/font-semibold.
+        //
+        // The 7 tokens actually used anywhere in the app (grep for
+        // `font-fredoka-` / `font-nunito` under src/) point at CSS vars
+        // instead of a literal font name -- src/lib/font-preference.ts
+        // swaps those vars' values to switch the whole app's font pack from
+        // Settings. fredoka/fredoka-medium stay static since nothing
+        // renders them; no point wiring up a switchable var for a weight
+        // that's dead weight either way.
         fredoka: ['Fredoka_400Regular'],
         'fredoka-medium': ['Fredoka_500Medium'],
-        'fredoka-semibold': ['Fredoka_600SemiBold'],
-        'fredoka-bold': ['Fredoka_700Bold'],
-        nunito: ['Nunito_400Regular'],
-        'nunito-medium': ['Nunito_500Medium'],
-        'nunito-semibold': ['Nunito_600SemiBold'],
-        'nunito-bold': ['Nunito_700Bold'],
-        'nunito-extrabold': ['Nunito_800ExtraBold'],
+        'fredoka-semibold': ['var(--font-fredoka-semibold)'],
+        'fredoka-bold': ['var(--font-fredoka-bold)'],
+        nunito: ['var(--font-nunito)'],
+        'nunito-medium': ['var(--font-nunito-medium)'],
+        'nunito-semibold': ['var(--font-nunito-semibold)'],
+        'nunito-bold': ['var(--font-nunito-bold)'],
+        'nunito-extrabold': ['var(--font-nunito-extrabold)'],
       },
       colors: {
         // Tabby's brand palette -- lifted straight from the bear icon

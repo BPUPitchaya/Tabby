@@ -91,7 +91,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
           value={flatName}
           onChangeText={setFlatName}
           placeholder="Flat name"
-          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 dark:text-white"
         />
         <Pressable
           onPress={handleCreate}
@@ -110,7 +110,7 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
           onChangeText={setInviteCode}
           placeholder="Invite code"
           autoCapitalize="none"
-          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3"
+          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 dark:text-white"
         />
         <Pressable
           onPress={handleJoin}
@@ -489,7 +489,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       placeholder="their@email.com"
                       autoCapitalize="none"
                       keyboardType="email-address"
-                      className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900"
+                      className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900 dark:text-white"
                     />
                     <Pressable
                       onPress={handleAddByEmail}
@@ -510,7 +510,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       <TextInput
                         value={newName}
                         onChangeText={setNewName}
-                        className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900"
+                        className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 bg-white dark:bg-tabby-900 dark:text-white"
                       />
                       <Pressable
                         onPress={handleRename}
@@ -604,7 +604,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   value={quickAddText}
                   onChangeText={setQuickAddText}
                   placeholder='Try "rent 500, power 120"'
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 dark:text-white"
                 />
                 <Pressable
                   onPress={handleQuickAdd}
@@ -627,13 +627,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   onChangeText={setAmount}
                   placeholder="Amount"
                   keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 dark:text-white"
                 />
                 <TextInput
                   value={description}
                   onChangeText={setDescription}
                   placeholder="Description"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-[2]"
+                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-[2] dark:text-white"
                 />
               </View>
               <Text className="font-nunito-semibold text-sm dark:text-white">Split with</Text>
