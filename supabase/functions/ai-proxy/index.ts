@@ -24,7 +24,14 @@ const GEMINI_MODEL = "gemini-flash-lite-latest";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function callGeminiOnce(input: string, schema: Record<string, unknown>): Promise<unknown> {
+// A plain string for text-only prompts, or an array of content parts for
+// multimodal input (receipt/statement scanning) -- a text part plus an
+// image or document part with inline base64 data, per Gemini's Interactions
+// API (type: 'text' | 'image' | 'document', each image/document part
+// carrying `data` + `mime_type`).
+type GeminiInput = string | Record<string, unknown>[];
+
+async function callGeminiOnce(input: GeminiInput, schema: Record<string, unknown>): Promise<unknown> {
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY secret.");
   }
@@ -61,7 +68,7 @@ async function callGeminiOnce(input: string, schema: Record<string, unknown>): P
 // One retry on transient 5xx -- observed gemini-3.8-flash doing this under
 // demand spikes during development; cheap insurance against the same
 // happening to whichever model the 'latest' alias currently points at.
-async function callGemini(input: string, schema: Record<string, unknown>): Promise<unknown> {
+async function callGemini(input: GeminiInput, schema: Record<string, unknown>): Promise<unknown> {
   try {
     return await callGeminiOnce(input, schema);
   } catch (err) {
@@ -76,7 +83,8 @@ export default {
   fetch: withSupabase({ auth: "user" }, async (req) => {
     try {
       const { input, schema } = await req.json();
-      if (!input || typeof input !== "string" || !schema) {
+      const validInput = typeof input === "string" ? input.length > 0 : Array.isArray(input) && input.length > 0;
+      if (!validInput || !schema) {
         return Response.json({ error: "Missing or invalid input/schema." }, { status: 400 });
       }
 
