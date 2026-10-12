@@ -110,4 +110,25 @@ describe('computeDashboardFromRows', () => {
     expect(result.periodTotal).toBe(150);
     expect(result.transactionCount).toBe(2);
   });
+
+  it('buckets the 6-week trend by Monday-start week and tracks the earliest date', () => {
+    const result = computeDashboardFromRows(
+      [
+        // NOW is 2026-10-15, a Thursday -- that week's Monday is 2026-10-12
+        row({ amount: 20, occurred_at: '2026-10-13' }),
+        row({ amount: 5, occurred_at: '2026-10-12' }),
+        // previous week (Monday 2026-10-05)
+        row({ amount: 30, occurred_at: '2026-10-06' }),
+      ],
+      null,
+      NOW
+    );
+
+    const thisWeek = result.weeklyTotals.find((w) => w.weekStart === '2026-10-12');
+    const lastWeek = result.weeklyTotals.find((w) => w.weekStart === '2026-10-05');
+    expect(thisWeek?.total).toBe(25);
+    expect(lastWeek?.total).toBe(30);
+    expect(result.weeklyTotals).toHaveLength(6);
+    expect(result.earliestOccurredAt).toBe('2026-10-06');
+  });
 });

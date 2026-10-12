@@ -13,6 +13,12 @@ export type MonthlyTotal = {
   total: number;
 };
 
+export type WeeklyTotal = {
+  weekStart: string; // 'YYYY-MM-DD', Monday
+  label: string; // 'Oct 6'
+  total: number;
+};
+
 export type DashboardData = {
   periodTotal: number; // expenses only -- "spend" has always meant this
   periodIncome: number;
@@ -20,6 +26,14 @@ export type DashboardData = {
   transactionCount: number;
   categoryTotals: CategoryTotal[];
   monthlyTotals: MonthlyTotal[];
+  weeklyTotals: WeeklyTotal[];
+  // Earliest occurred_at seen across all fetched rows (income + expense),
+  // or null with no transactions at all. Used to pick weekly vs. monthly
+  // for the trend chart in 'auto' mode (trend-period-preference.ts) --
+  // not a reliable "first ever transaction" once it hits the edge of the
+  // 6-month fetch window, but at that point the user has 6+ months of
+  // history anyway, so auto mode wants monthly either way.
+  earliestOccurredAt: string | null;
 };
 
 // The hero/flow-row figures' window -- calendar month by default, or the
@@ -43,6 +57,19 @@ export type DashboardRow = {
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
+
+// Monday of the week containing the given local-calendar date string.
+function mondayOf(dateStr: string): Date {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDay(); // 0 = Sunday
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // Pure calculation, split out from fetchDashboardData so it's unit-testable
 // without a live Supabase client (same pattern as flats.ts).
@@ -69,13 +96,21 @@ export function computeDashboardFromRows(
   // monthly totals, for the last 6 months, expenses only -- always
   // calendar-month buckets, independent of `period`
   const monthlyMap = new Map<string, number>();
+  // weekly totals, for the last 6 weeks, expenses only -- Monday-start
+  // buckets, same independence from `period` as monthlyMap
+  const weeklyMap = new Map<string, number>();
 
   let periodTotal = 0;
   let periodIncome = 0;
   let transactionCount = 0;
+  let earliestOccurredAt: string | null = null;
 
   for (const row of rows) {
     const monthKey = row.occurred_at.slice(0, 7); // 'YYYY-MM'
+
+    if (earliestOccurredAt === null || row.occurred_at < earliestOccurredAt) {
+      earliestOccurredAt = row.occurred_at;
+    }
 
     if (row.is_income) {
       if (inPeriod(row.occurred_at)) {
@@ -86,6 +121,8 @@ export function computeDashboardFromRows(
     }
 
     monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + row.amount);
+    const weekKey = toDateKey(mondayOf(row.occurred_at));
+    weeklyMap.set(weekKey, (weeklyMap.get(weekKey) ?? 0) + row.amount);
 
     if (inPeriod(row.occurred_at)) {
       periodTotal += row.amount;
@@ -115,6 +152,20 @@ export function computeDashboardFromRows(
     });
   }
 
+  // build the last-6-weeks list, including weeks with zero spend
+  const currentWeekMonday = mondayOf(toDateKey(now));
+  const weeklyTotals: WeeklyTotal[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(currentWeekMonday);
+    d.setDate(d.getDate() - i * 7);
+    const key = toDateKey(d);
+    weeklyTotals.push({
+      weekStart: key,
+      label: `${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`,
+      total: Math.round((weeklyMap.get(key) ?? 0) * 100) / 100,
+    });
+  }
+
   const categoryTotals = Array.from(categoryMap.values())
     .map((c) => ({ ...c, total: Math.round(c.total * 100) / 100 }))
     .sort((a, b) => b.total - a.total);
@@ -129,6 +180,8 @@ export function computeDashboardFromRows(
     transactionCount,
     categoryTotals,
     monthlyTotals,
+    weeklyTotals,
+    earliestOccurredAt,
   };
 }
 
