@@ -27,12 +27,13 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 84.2, occurred_at: '2026-10-05' }),
         row({ amount: 65, occurred_at: '2026-10-04' }),
       ],
+      null,
       NOW
     );
 
-    expect(result.thisMonthIncome).toBe(2500);
-    expect(result.thisMonthTotal).toBe(149.2);
-    expect(result.thisMonthNet).toBe(2350.8);
+    expect(result.periodIncome).toBe(2500);
+    expect(result.periodTotal).toBe(149.2);
+    expect(result.periodNet).toBe(2350.8);
     expect(result.transactionCount).toBe(3);
   });
 
@@ -42,6 +43,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 2500, is_income: true, categories: { name: 'Salary', icon: 'briefcase' } }),
         row({ amount: 40, categories: { name: 'Groceries', icon: 'shopping-cart' }, category_id: 'cat-1' }),
       ],
+      null,
       NOW
     );
 
@@ -55,6 +57,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 2500, is_income: true, occurred_at: '2026-10-03' }),
         row({ amount: 50, occurred_at: '2026-10-05' }),
       ],
+      null,
       NOW
     );
 
@@ -65,10 +68,11 @@ describe('computeDashboardFromRows', () => {
   it('allows net to go negative when spend exceeds income', () => {
     const result = computeDashboardFromRows(
       [row({ amount: 100, is_income: true }), row({ amount: 400 })],
+      null,
       NOW
     );
 
-    expect(result.thisMonthNet).toBe(-300);
+    expect(result.periodNet).toBe(-300);
   });
 
   it('ignores transactions from months other than the current one for totals', () => {
@@ -77,14 +81,33 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 2500, is_income: true, occurred_at: '2026-09-15' }),
         row({ amount: 40, occurred_at: '2026-09-20' }),
       ],
+      null,
       NOW
     );
 
-    expect(result.thisMonthIncome).toBe(0);
-    expect(result.thisMonthTotal).toBe(0);
+    expect(result.periodIncome).toBe(0);
+    expect(result.periodTotal).toBe(0);
     expect(result.transactionCount).toBe(0);
     // but the expense still shows up in the 6-month chart
     const sepMonth = result.monthlyTotals.find((m) => m.month === '2026-09');
     expect(sepMonth?.total).toBe(40);
+  });
+
+  it('uses a custom period instead of the calendar month when given', () => {
+    const result = computeDashboardFromRows(
+      [
+        // within the pay-cycle window, but spans a month boundary
+        row({ amount: 100, occurred_at: '2026-09-29' }),
+        row({ amount: 50, occurred_at: '2026-10-02' }),
+        // outside the window
+        row({ amount: 999, occurred_at: '2026-09-20' }),
+        row({ amount: 999, occurred_at: '2026-10-06' }),
+      ],
+      { startDate: '2026-09-29', endDate: '2026-10-06' },
+      NOW
+    );
+
+    expect(result.periodTotal).toBe(150);
+    expect(result.transactionCount).toBe(2);
   });
 });
