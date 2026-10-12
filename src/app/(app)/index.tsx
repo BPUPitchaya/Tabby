@@ -1,54 +1,120 @@
 import { Image } from 'expo-image';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { generateMonthlySummary } from '@/lib/ai';
+import { BudgetModal } from '@/components/budget-modal';
 import { CategoryIcon } from '@/components/category-icon';
+import { PayScheduleModal } from '@/components/pay-schedule-modal';
+import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
 import { useAuth } from '@/lib/auth-context';
-import { fetchDashboardData, type DashboardData } from '@/lib/dashboard';
-import { fetchIncomeProgress, type IncomeProgress } from '@/lib/profile';
+import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
+import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
+import {
+  computeIncomeCycle,
+  fetchIncomeProgress,
+  fetchIncomeSettings,
+  type IncomeFrequency,
+  type IncomeProgress,
+} from '@/lib/profile';
 
-const FREQUENCY_LABELS: Record<IncomeProgress['frequency'], string> = {
+const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : undefined);
+
+// Earned, Spent, and Budget used to be three separate cards (two filled
+// twins plus a bordered progress card below them) -- one row with dividers
+// instead of edges reads as one glance instead of three things to scan.
+// Budget stays its own cell rather than folding into Spent: Spent is
+// recorded fact, Budget is a figure the user sets separately from what
+// they earn, and blending them would make "what happened" and "what you
+// intend" indistinguishable. Earned is tappable too, into Pay Schedule
+// (not literally "edit Earned" -- Earned stays a record of actual income
+// transactions either way) -- the modal's own copy says plainly that it
+// won't change this figure, since a first pass without that line read as
+// a bug ("I set my earnings and Earned still shows $0.00").
+const FREQUENCY_LABELS: Record<IncomeFrequency, string> = {
+  weekly: 'Weekly',
+  biweekly: 'Fortnightly',
+  monthly: 'Monthly',
+};
+
+// Lowercase noun form for "This ___" phrasing (hero label, Earned/Spent
+// captions) -- distinct from FREQUENCY_LABELS, which is for Budget's own
+// standalone caption.
+const PERIOD_NOUNS: Record<IncomeFrequency, string> = {
   weekly: 'week',
   biweekly: 'fortnight',
   monthly: 'month',
 };
 
-// Separate from the Earned/Spent twins above -- those are actual recorded
-// money, this is spend-against-a-budget-figure the user set once in Edit
-// Profile. Blending them into one number would make "recorded fact" and
-// "forecast" indistinguishable.
-//
-// Quiet-bordered rather than filled -- the hero above is the only card on
-// this screen that earns a solid fill; everything else stays a hairline so
-// the hero doesn't have to compete for weight.
-function IncomeProgressCard({ progress }: { progress: IncomeProgress }) {
-  const pct = progress.amount > 0 ? Math.round((progress.spent / progress.amount) * 100) : 0;
-  const over = progress.spent > progress.amount;
-  const barColor = over ? 'bg-rust-500 dark:bg-rust-400' : pct >= 80 ? 'bg-tabby-400' : 'bg-tabby-600 dark:bg-white';
+function MoneyFlowRow({
+  earned,
+  spent,
+  progress,
+  periodLabel,
+  onPressEarned,
+  onPressBudget,
+}: {
+  earned: number;
+  spent: number;
+  progress: IncomeProgress | null;
+  periodLabel: string;
+  onPressEarned: () => void;
+  onPressBudget: () => void;
+}) {
+  const pct = progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
+  const over = pct !== null && pct >= 100;
+  const barColor = over ? 'bg-rust-500 dark:bg-rust-400' : pct !== null && pct >= 80 ? 'bg-tabby-400' : 'bg-tabby-600 dark:bg-white';
 
   return (
-    <View className="border border-tabby-100 dark:border-tabby-700 rounded-2xl p-4 gap-2">
-      <View className="flex-row justify-between items-baseline">
-        <Text className="font-nunito-semibold text-sm dark:text-white">
-          Spent ${progress.spent.toFixed(2)} of ${progress.amount.toFixed(2)}
-        </Text>
-        <Text
-          className={`font-nunito-bold text-sm ${over ? 'text-rust-600 dark:text-rust-400' : 'text-tabby-600 dark:text-tabby-300'}`}>
-          {pct}%
-        </Text>
+    <View className="flex-row border border-tabby-100 dark:border-tabby-700 rounded-2xl overflow-hidden">
+      <Pressable
+        onPress={onPressEarned}
+        style={pressFeedback}
+        accessibilityRole="button"
+        accessibilityLabel="Edit pay schedule"
+        className="flex-1 p-3.5 gap-1">
+        <Text className="font-nunito-semibold text-sage-700 dark:text-sage-400 text-xs">Earned</Text>
+        <Text className="font-nunito-bold text-sage-700 dark:text-sage-400 text-base">${earned.toFixed(2)}</Text>
+        <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-[10px]">This {periodLabel}</Text>
+      </Pressable>
+      <View className="flex-1 p-3.5 gap-1 border-l border-tabby-100 dark:border-tabby-700">
+        <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs">Spent</Text>
+        <Text className="font-nunito-bold text-gray-800 dark:text-white text-base">${spent.toFixed(2)}</Text>
+        <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-[10px]">This {periodLabel}</Text>
       </View>
-      <View className="h-1.5 bg-tabby-50 dark:bg-tabby-700 rounded-full overflow-hidden">
-        <View
-          className={`h-full rounded-full ${barColor}`}
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
-      </View>
-      <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-        This {FREQUENCY_LABELS[progress.frequency]}&apos;s income
-      </Text>
+      <Pressable
+        onPress={onPressBudget}
+        style={pressFeedback}
+        accessibilityRole="button"
+        accessibilityLabel="Edit budget"
+        className="flex-1 p-3.5 gap-1 border-l border-tabby-100 dark:border-tabby-700">
+        <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs">Budget</Text>
+        {pct !== null && progress ? (
+          <>
+            <Text
+              className={`font-nunito-bold text-base ${over ? 'text-rust-600 dark:text-rust-400' : 'text-tabby-600 dark:text-tabby-300'}`}>
+              {pct}%
+            </Text>
+            <View className="h-1 bg-tabby-50 dark:bg-tabby-700 rounded-full overflow-hidden mt-0.5">
+              <View className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
+            </View>
+            {/* Budget always resets on the pay cycle from Pay Schedule,
+                regardless of the dashboard period setting -- Earned/Spent
+                only follow it when that setting is "Follow pay schedule."
+                Set to "Always this month" instead, Budget's window can
+                genuinely differ from theirs, so its own label stays even
+                when it'd otherwise be redundant. */}
+            <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-[10px]">
+              ${progress.budgetAmount.toFixed(2)} {FREQUENCY_LABELS[progress.frequency].toLowerCase()}
+            </Text>
+          </>
+        ) : (
+          <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-base">Set it</Text>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -141,18 +207,37 @@ export default function HomeScreen() {
 
   const [data, setData] = useState<DashboardData | null>(null);
   const [incomeProgress, setIncomeProgress] = useState<IncomeProgress | null>(null);
+  // null = dashboard period is the calendar month (no pay schedule set, or
+  // the user picked "Always this month" in Settings). Non-null = Earned/
+  // Spent/category breakdown follow this pay cycle instead.
+  const [periodFrequency, setPeriodFrequency] = useState<IncomeFrequency | null>(null);
   const [insight, setInsight] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPayScheduleModal, setShowPayScheduleModal] = useState(false);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
       setError(null);
       setInsight(null);
+
+      const [periodPreference, incomeSettings] = await Promise.all([
+        loadDashboardPeriodPreference(),
+        fetchIncomeSettings(userId),
+      ]);
+      // computeIncomeCycle only needs frequency/payday, which income
+      // settings always has once set -- unlike IncomeProgress, this isn't
+      // gated on a budget amount existing too, since Earned/Spent
+      // following pay schedule shouldn't require a budget to be set.
+      const cycle = incomeSettings ? computeIncomeCycle(incomeSettings) : null;
+      const period: DashboardPeriod | null = periodPreference === 'pay-cycle' ? cycle : null;
+      setPeriodFrequency(period ? incomeSettings!.frequency : null);
+
       const [result, progress] = await Promise.all([
-        fetchDashboardData(userId),
+        fetchDashboardData(userId, period),
         fetchIncomeProgress(userId),
       ]);
       setData(result);
@@ -160,7 +245,7 @@ export default function HomeScreen() {
 
       const lastMonthTotal = result.monthlyTotals[result.monthlyTotals.length - 2]?.total ?? 0;
       generateMonthlySummary({
-        thisMonthTotal: result.thisMonthTotal,
+        thisMonthTotal: result.periodTotal,
         lastMonthTotal,
         topCategories: result.categoryTotals.slice(0, 3),
       }).then(setInsight);
@@ -172,6 +257,17 @@ export default function HomeScreen() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Tabs stay mounted when you switch away (standard tab behavior), so
+  // without this, adding a transaction on another tab and coming back to
+  // Home would show stale numbers until a manual pull-to-refresh. Silent
+  // -- doesn't touch `loading`, only the mount-time effect above does, so
+  // this doesn't flash the spinner on every tab switch.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -194,6 +290,13 @@ export default function HomeScreen() {
   // time-of-day shift reads as "this app feels like now" rather than noise:
   // a touch deeper/dustier once evening hits, same as the sky outside.
   const heroBg = hour < 18 ? 'bg-tabby-100 dark:bg-tabby-800' : 'bg-tabby-200 dark:bg-tabby-700';
+  // Same formula as MoneyFlowRow's own bar -- lifted here too since the
+  // bear's mood needs it before that row even renders.
+  const pct =
+    incomeProgress && incomeProgress.budgetAmount > 0
+      ? Math.round((incomeProgress.spent / incomeProgress.budgetAmount) * 100)
+      : null;
+  const periodLabel = periodFrequency ? PERIOD_NOUNS[periodFrequency] : 'month';
 
   return (
     <SafeAreaView className="flex-1 bg-tabby-50 dark:bg-tabby-900">
@@ -223,58 +326,34 @@ export default function HomeScreen() {
 
         {/* Hero: the one number that matters most this month, given real
             visual weight instead of sitting in a same-size box as everything
-            else below it. */}
-        <View className={`${heroBg} rounded-3xl p-5 gap-1`}>
-          <Text className="font-nunito-medium text-tabby-700 dark:text-tabby-100 text-sm">This month, net</Text>
+            else below it. Tabby sits inside it now, not as a separate zone
+            above -- mood reflects the same budget % as the progress card
+            below, and tapping reveals the AI insight instead of it sitting
+            always-visible underneath (see git history for that old block). */}
+        <View className={`${heroBg} rounded-3xl p-5 gap-1 items-center`}>
+          <Text className="font-nunito-medium text-tabby-700 dark:text-tabby-100 text-sm">
+            This {periodLabel}, net
+          </Text>
           <Text
             className={`font-nunito-extrabold text-4xl ${
-              (data?.thisMonthNet ?? 0) < 0 ? 'text-rust-600 dark:text-rust-400' : 'text-sage-700 dark:text-sage-400'
+              (data?.periodNet ?? 0) < 0 ? 'text-rust-600 dark:text-rust-400' : 'text-sage-700 dark:text-sage-400'
             }`}>
-            {(data?.thisMonthNet ?? 0) < 0 ? '-' : '+'}$
-            {Math.abs(data?.thisMonthNet ?? 0).toFixed(2)}
+            {(data?.periodNet ?? 0) < 0 ? '-' : '+'}$
+            {Math.abs(data?.periodNet ?? 0).toFixed(2)}
           </Text>
-          <Text className="font-nunito text-tabby-700 dark:text-tabby-100 text-xs">
-            {data?.transactionCount ?? 0} transaction{data?.transactionCount === 1 ? '' : 's'} this
-            month
-          </Text>
-        </View>
-
-        {/* Two smaller twins underneath the hero -- the classic
-            one-big/two-small asymmetric pairing. Earned keeps a green fill
-            (money-in reads universally as green); Spent is a quiet border
-            instead of a gray fill so it doesn't compete with Earned or
-            repeat the hero's own fill treatment. */}
-        <View className="flex-row gap-3">
-          <View className="flex-1 bg-sage-50 dark:bg-sage-900 rounded-2xl p-3.5 gap-1">
-            <Text className="font-nunito-semibold text-sage-700 dark:text-sage-400 text-xs">Earned</Text>
-            <Text className="font-nunito-bold text-sage-800 dark:text-sage-400 text-xl">
-              ${data?.thisMonthIncome.toFixed(2) ?? '0.00'}
-            </Text>
-          </View>
-          <View className="flex-1 border border-tabby-100 dark:border-tabby-700 rounded-2xl p-3.5 gap-1">
-            <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs">Spent</Text>
-            <Text className="font-nunito-bold text-gray-800 dark:text-white text-xl">
-              ${data?.thisMonthTotal.toFixed(2) ?? '0.00'}
-            </Text>
+          <View className="mt-2">
+            <TabbyBear mood={moodFromPct(pct)} insight={insight} />
           </View>
         </View>
 
-        {incomeProgress && <IncomeProgressCard progress={incomeProgress} />}
-
-        {insight && (
-          <View className="flex-row gap-2.5 items-start border-l-4 border-tabby-400 dark:border-tabby-500 pl-3 py-1">
-            {/* Second, quiet appearance of the bear -- a small monochrome
-                mark rather than another full badge, so the mascot feels
-                like it's actually around the app instead of only stamped
-                once in the header. */}
-            <Image
-              source={require('@/assets/images/android-icon-monochrome.png')}
-              tintColor="#C98A52"
-              style={{ width: 14, height: 14, marginTop: 3, opacity: 0.6 }}
-            />
-            <Text className="font-nunito text-gray-600 dark:text-tabby-200 text-sm flex-1">{insight}</Text>
-          </View>
-        )}
+        <MoneyFlowRow
+          earned={data?.periodIncome ?? 0}
+          spent={data?.periodTotal ?? 0}
+          progress={incomeProgress}
+          periodLabel={periodLabel}
+          onPressEarned={() => setShowPayScheduleModal(true)}
+          onPressBudget={() => setShowBudgetModal(true)}
+        />
 
         <View className="gap-3">
           <Text className="font-nunito-bold text-lg dark:text-white">Spending by category</Text>
@@ -291,7 +370,7 @@ export default function HomeScreen() {
             ))
           ) : (
             <Text className="font-nunito text-gray-500 dark:text-tabby-300">
-              No transactions this month yet. Add one in the Transactions tab.
+              No transactions this {periodLabel} yet. Add one in the Transactions tab.
             </Text>
           )}
         </View>
@@ -304,6 +383,21 @@ export default function HomeScreen() {
           {data && <MonthlyChart data={data.monthlyTotals} />}
         </View>
       </ScrollView>
+
+      <PayScheduleModal
+        visible={showPayScheduleModal}
+        onClose={() => setShowPayScheduleModal(false)}
+        onSaved={load}
+      />
+      <BudgetModal
+        visible={showBudgetModal}
+        onClose={() => setShowBudgetModal(false)}
+        onSaved={load}
+        onNeedsPaySchedule={() => {
+          setShowBudgetModal(false);
+          setShowPayScheduleModal(true);
+        }}
+      />
     </SafeAreaView>
   );
 }

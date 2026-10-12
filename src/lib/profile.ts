@@ -50,17 +50,23 @@ export async function updateWantsFlat(userId: string, wantsFlat: boolean) {
 // "viewable by any authenticated user" policy (so flatmates can see each
 // other's display_name) and income is sensitive enough to need a strict,
 // self-only policy instead.
+//
+// budgetAmount is separate from amount (what you earn) -- how much of your
+// income you actually intend to spend, not a restatement of income itself.
+// null until the user sets it explicitly; always null if income itself
+// hasn't been set (there's no pay cycle to attach a budget to otherwise).
 export type IncomeSettings = {
   amount: number;
   frequency: IncomeFrequency;
   payWeekday: number | null; // 0-6, Sunday-Saturday
   payDayOfMonth: number | null; // 1-31
+  budgetAmount: number | null;
 };
 
 export async function fetchIncomeSettings(userId: string): Promise<IncomeSettings | null> {
   const { data, error } = await supabase
     .from('income_settings')
-    .select('income_amount, income_frequency, income_pay_weekday, income_pay_day_of_month')
+    .select('income_amount, income_frequency, income_pay_weekday, income_pay_day_of_month, budget_amount')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -72,12 +78,19 @@ export async function fetchIncomeSettings(userId: string): Promise<IncomeSetting
     frequency: data.income_frequency,
     payWeekday: data.income_pay_weekday,
     payDayOfMonth: data.income_pay_day_of_month,
+    budgetAmount: data.budget_amount,
   };
 }
 
-// No row exists until the user sets this up, so this is an upsert rather
-// than a plain update -- there's nothing to update the first time.
-export async function updateIncomeSettings(userId: string, settings: IncomeSettings) {
+// No row exists until the user sets income up, so this is an upsert rather
+// than a plain update -- there's nothing to update the first time. Only
+// writes the income columns (not budget_amount), so saving income never
+// clobbers a budget that was set separately -- upsert's ON CONFLICT only
+// touches the columns listed here.
+export async function updateIncomeSettings(
+  userId: string,
+  settings: Pick<IncomeSettings, 'amount' | 'frequency' | 'payWeekday' | 'payDayOfMonth'>
+) {
   const { error } = await supabase.from('income_settings').upsert(
     {
       user_id: userId,
@@ -94,6 +107,25 @@ export async function updateIncomeSettings(userId: string, settings: IncomeSetti
 
 export async function clearIncomeSettings(userId: string) {
   const { error } = await supabase.from('income_settings').delete().eq('user_id', userId);
+  if (error) throw error;
+}
+
+// Plain update, not upsert -- a budget can only be set once an
+// income_settings row already exists (the UI gates on this: Budget can't
+// be opened for editing until Earned has been set up at least once).
+export async function updateBudgetAmount(userId: string, budgetAmount: number) {
+  const { error } = await supabase
+    .from('income_settings')
+    .update({ budget_amount: budgetAmount, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function clearBudgetAmount(userId: string) {
+  const { error } = await supabase
+    .from('income_settings')
+    .update({ budget_amount: null, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
   if (error) throw error;
 }
 
@@ -206,15 +238,19 @@ export function computeIncomeCycle(
 }
 
 export type IncomeProgress = {
-  amount: number;
+  budgetAmount: number;
   frequency: IncomeFrequency;
   cycle: IncomeCycle;
   spent: number;
 };
 
+// null whenever there's nothing to show progress against -- no income set
+// up at all, or income set up but no budget chosen yet (the Budget cell
+// falls back to "Set it" in that case, same as before this had a separate
+// budget figure).
 export async function fetchIncomeProgress(userId: string): Promise<IncomeProgress | null> {
   const settings = await fetchIncomeSettings(userId);
-  if (!settings) return null;
+  if (!settings || settings.budgetAmount === null) return null;
 
   const cycle = computeIncomeCycle(settings);
   if (!cycle) return null;
@@ -232,7 +268,7 @@ export async function fetchIncomeProgress(userId: string): Promise<IncomeProgres
   const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
 
   return {
-    amount: settings.amount,
+    budgetAmount: settings.budgetAmount,
     frequency: settings.frequency,
     cycle,
     spent: Math.round(spent * 100) / 100,
