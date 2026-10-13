@@ -28,6 +28,7 @@ import { addTransaction, fetchCategories, type Category } from '@/lib/transactio
 import { CategoryIcon } from '@/components/category-icon';
 import { presentScanSheet } from '@/lib/document-scan';
 import { fetchFlatMembers, fetchMyFlat, type FlatMember } from '@/lib/flats';
+import { fetchFriends, type Friend } from '@/lib/friendships';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -109,6 +110,7 @@ export function SplitBillModal({
   const [categorySearch, setCategorySearch] = useState('');
 
   const [flatMembers, setFlatMembers] = useState<FlatMember[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [guestName, setGuestName] = useState('');
   const [emailInput, setEmailInput] = useState('');
@@ -169,6 +171,10 @@ export function SplitBillModal({
       .then((members) => setFlatMembers(members.filter((m) => m.user_id !== userId)))
       .catch(() => setFlatMembers([]));
 
+    fetchFriends(userId)
+      .then(setFriends)
+      .catch(() => setFriends([]));
+
     fetchCategories('expense')
       .then((cats) => {
         setCategories(cats);
@@ -178,6 +184,16 @@ export function SplitBillModal({
   }, [visible, userId]);
 
   const total = parseFloat(totalAmount) || 0;
+
+  // Flatmates and accepted friends, unioned into one "known people" list
+  // for the picker -- deduped by user_id so someone who's both (a
+  // flatmate you've also friended) shows up once, not twice.
+  const knownPeople = [
+    ...flatMembers.map((m) => ({ userId: m.user_id, label: m.profiles?.display_name ?? 'Flatmate', tag: 'Flatmate' })),
+    ...friends
+      .filter((f) => !flatMembers.some((m) => m.user_id === f.userId))
+      .map((f) => ({ userId: f.userId, label: f.displayName, tag: 'Friend' })),
+  ];
   const selectedCategory = categories.find((c) => c.id === categoryId) ?? null;
   const filteredCategories = categories.filter((c) =>
     c.name.toLowerCase().includes(categorySearch.toLowerCase()),
@@ -719,27 +735,22 @@ export function SplitBillModal({
                   </View>
                 )}
 
-                {flatMembers.length > 0 && (
+                {knownPeople.length > 0 && (
                   <View className="flex-row flex-wrap gap-2">
-                    {flatMembers
-                      .filter((m) => !participants.some((p) => p.key === `user:${m.user_id}`))
-                      .map((m) => (
+                    {knownPeople
+                      .filter((p) => !participants.some((existing) => existing.key === `user:${p.userId}`))
+                      .map((p) => (
                         <Pressable
-                          key={m.user_id}
-                          onPress={() =>
-                            addParticipant({
-                              key: `user:${m.user_id}`,
-                              userId: m.user_id,
-                              label: m.profiles?.display_name ?? 'Flatmate',
-                            })
-                          }
+                          key={p.userId}
+                          onPress={() => addParticipant({ key: `user:${p.userId}`, userId: p.userId, label: p.label })}
                           style={pressFeedback}
                           className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-300 dark:border-tabby-600"
                         >
                           <Feather name="plus" size={12} color={isDark ? '#E8C39E' : '#4b5563'} />
                           <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
-                            {m.profiles?.display_name ?? 'Flatmate'}
+                            {p.label}
                           </Text>
+                          <Text className="font-nunito text-xs text-gray-400 dark:text-tabby-400">{p.tag}</Text>
                         </Pressable>
                       ))}
                   </View>
