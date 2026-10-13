@@ -1,23 +1,47 @@
+import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Share,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { generateMonthlySummary } from '@/lib/ai';
+import {
+  fetchMyProposedShares,
+  fetchMyReminders,
+  markReminded,
+  fetchOwedToMe,
+  isOverdue,
+  markSharePaid,
+  respondToShare,
+  type MyBillSplitShare,
+  type OwedToMeShare,
+} from '@/lib/bill-splits';
 import { BudgetModal } from '@/components/budget-modal';
 import { CategoryIcon } from '@/components/category-icon';
+import { NotificationsModal } from '@/components/notifications-modal';
 import { PayScheduleModal } from '@/components/pay-schedule-modal';
 import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
 import { useAuth } from '@/lib/auth-context';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
 import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
+import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
 import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
 import {
   computeIncomeCycle,
   fetchIncomeProgress,
   fetchIncomeSettings,
+  fetchMyPaymentDetails,
   type IncomeFrequency,
   type IncomeProgress,
 } from '@/lib/profile';
@@ -65,9 +89,14 @@ function MoneyFlowRow({
   onPressEarned: () => void;
   onPressBudget: () => void;
 }) {
-  const pct = progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
+  const pct =
+    progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
   const over = pct !== null && pct >= 100;
-  const barColor = over ? 'bg-rust-500 dark:bg-rust-400' : pct !== null && pct >= 80 ? 'bg-tabby-400' : 'bg-tabby-600 dark:bg-white';
+  const barColor = over
+    ? 'bg-rust-500 dark:bg-rust-400'
+    : pct !== null && pct >= 80
+      ? 'bg-tabby-400'
+      : 'bg-tabby-600 dark:bg-white';
 
   return (
     <View className="flex-row border border-tabby-100 dark:border-tabby-700 rounded-2xl overflow-hidden">
@@ -76,9 +105,12 @@ function MoneyFlowRow({
         style={pressFeedback}
         accessibilityRole="button"
         accessibilityLabel="Edit pay schedule"
-        className="flex-1 p-3.5 gap-1">
+        className="flex-1 p-3.5 gap-1"
+      >
         <Text className="font-nunito-semibold text-sage-700 dark:text-sage-400 text-xs">Earned</Text>
-        <Text className="font-nunito-bold text-sage-700 dark:text-sage-400 text-base">${earned.toFixed(2)}</Text>
+        <Text className="font-nunito-bold text-sage-700 dark:text-sage-400 text-base">
+          ${earned.toFixed(2)}
+        </Text>
         <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-[10px]">This {periodLabel}</Text>
       </Pressable>
       <View className="flex-1 p-3.5 gap-1 border-l border-tabby-100 dark:border-tabby-700">
@@ -91,16 +123,21 @@ function MoneyFlowRow({
         style={pressFeedback}
         accessibilityRole="button"
         accessibilityLabel="Edit budget"
-        className="flex-1 p-3.5 gap-1 border-l border-tabby-100 dark:border-tabby-700">
+        className="flex-1 p-3.5 gap-1 border-l border-tabby-100 dark:border-tabby-700"
+      >
         <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs">Budget</Text>
         {pct !== null && progress ? (
           <>
             <Text
-              className={`font-nunito-bold text-base ${over ? 'text-rust-600 dark:text-rust-400' : 'text-tabby-600 dark:text-tabby-300'}`}>
+              className={`font-nunito-bold text-base ${over ? 'text-rust-600 dark:text-rust-400' : 'text-tabby-600 dark:text-tabby-300'}`}
+            >
               {pct}%
             </Text>
             <View className="h-1 bg-tabby-50 dark:bg-tabby-700 rounded-full overflow-hidden mt-0.5">
-              <View className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
+              <View
+                className={`h-full rounded-full ${barColor}`}
+                style={{ width: `${Math.min(100, pct)}%` }}
+              />
             </View>
             {/* Budget always resets on the pay cycle from Pay Schedule,
                 regardless of the dashboard period setting -- Earned/Spent
@@ -145,7 +182,8 @@ function CategoryBar({
             <View
               className={`items-center justify-center rounded-full ${
                 highlight ? 'w-8 h-8 bg-tabby-100 dark:bg-tabby-700' : 'w-5 h-5'
-              }`}>
+              }`}
+            >
               <CategoryIcon name={icon} size={highlight ? 16 : 13} />
             </View>
             <Text
@@ -153,7 +191,8 @@ function CategoryBar({
                 highlight
                   ? 'font-nunito-bold text-base dark:text-white'
                   : 'font-nunito-medium text-sm dark:text-tabby-200'
-              }>
+              }
+            >
               {name}
             </Text>
           </View>
@@ -162,12 +201,18 @@ function CategoryBar({
               highlight
                 ? 'font-nunito-bold text-base dark:text-white'
                 : 'font-nunito text-sm text-gray-500 dark:text-tabby-300'
-            }>
+            }
+          >
             ${total.toFixed(2)}
           </Text>
         </View>
-        <View className={`bg-tabby-50 dark:bg-tabby-700 rounded-full overflow-hidden ${highlight ? 'h-2.5' : 'h-1.5'}`}>
-          <View className="h-full bg-tabby-600 dark:bg-white rounded-full" style={{ width: `${widthPct}%` }} />
+        <View
+          className={`bg-tabby-50 dark:bg-tabby-700 rounded-full overflow-hidden ${highlight ? 'h-2.5' : 'h-1.5'}`}
+        >
+          <View
+            className="h-full bg-tabby-600 dark:bg-white rounded-full"
+            style={{ width: `${widthPct}%` }}
+          />
         </View>
       </View>
     </Animated.View>
@@ -193,8 +238,11 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
             </View>
             <Text
               className={
-                isCurrent ? 'font-nunito-bold text-xs text-tabby-700 dark:text-tabby-100' : 'font-nunito text-xs text-gray-500 dark:text-tabby-300'
-              }>
+                isCurrent
+                  ? 'font-nunito-bold text-xs text-tabby-700 dark:text-tabby-100'
+                  : 'font-nunito text-xs text-gray-500 dark:text-tabby-300'
+              }
+            >
               {d.label}
             </Text>
           </View>
@@ -210,16 +258,18 @@ function TrendChart({ data }: { data: TrendPoint[] }) {
 function resolveTrendView(
   preference: TrendPeriodPreference,
   earliestOccurredAt: string | null,
-  now: Date
+  now: Date,
 ): 'weekly' | 'monthly' {
   if (preference !== 'auto') return preference;
   if (!earliestOccurredAt) return 'weekly';
-  const daysSinceEarliest = (now.getTime() - new Date(`${earliestOccurredAt}T00:00:00`).getTime()) / 86_400_000;
+  const daysSinceEarliest =
+    (now.getTime() - new Date(`${earliestOccurredAt}T00:00:00`).getTime()) / 86_400_000;
   return daysSinceEarliest < 56 ? 'weekly' : 'monthly';
 }
 
 export default function HomeScreen() {
   const { session } = useAuth();
+  const isDark = useColorScheme() === 'dark';
   const userId = session?.user.id;
 
   const [data, setData] = useState<DashboardData | null>(null);
@@ -235,6 +285,13 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showPayScheduleModal, setShowPayScheduleModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
+  const [proposedShares, setProposedShares] = useState<MyBillSplitShare[]>([]);
+  const [overdueShares, setOverdueShares] = useState<OwedToMeShare[]>([]);
+  const [reminders, setReminders] = useState<MyBillSplitShare[]>([]);
+  const [myPaymentDetails, setMyPaymentDetails] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -274,9 +331,36 @@ export default function HomeScreen() {
     }
   }, [userId]);
 
+  // Thin aggregator, same lib functions notifications-modal.tsx and
+  // friends-modal.tsx both read -- no separate fetch/cache path, so the
+  // bell badge can't drift out of sync with what those screens show.
+  const loadNotifications = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const [incoming, shares, owedToMe, myReminders, paymentDetails] = await Promise.all([
+        fetchIncomingRequests(userId),
+        fetchMyProposedShares(userId),
+        fetchOwedToMe(userId),
+        fetchMyReminders(userId),
+        fetchMyPaymentDetails(userId),
+      ]);
+      setIncomingRequests(incoming);
+      setProposedShares(shares);
+      setOverdueShares(owedToMe.filter(isOverdue));
+      setReminders(myReminders);
+      setMyPaymentDetails(paymentDetails);
+    } catch {
+      // the badge just stays at its last known count -- not worth surfacing
+      // a dashboard-wide error banner for a secondary, non-blocking feature
+    }
+  }, [userId]);
+
   useEffect(() => {
-    load().finally(() => setLoading(false));
-  }, [load]);
+    Promise.all([load(), loadNotifications()]).finally(() => {
+      setLoading(false);
+      setNotificationsLoading(false);
+    });
+  }, [load, loadNotifications]);
 
   // Tabs stay mounted when you switch away (standard tab behavior), so
   // without this, adding a transaction on another tab and coming back to
@@ -286,13 +370,41 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load])
+      loadNotifications();
+    }, [load, loadNotifications]),
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await Promise.all([load(), loadNotifications()]);
     setRefreshing(false);
+  };
+
+  const handleRespondRequest = async (id: string, accept: boolean) => {
+    await respondToFriendRequest(id, accept);
+    await loadNotifications();
+  };
+
+  const handleRespondShare = async (id: string, accept: boolean) => {
+    await respondToShare(id, accept);
+    await loadNotifications();
+  };
+
+  const handleRemindInApp = async (share: OwedToMeShare) => {
+    await markReminded(share.id);
+    await loadNotifications();
+  };
+
+  const handleRemindViaMessage = (share: OwedToMeShare) => {
+    const paymentLine = myPaymentDetails ? ` You can pay me at ${myPaymentDetails}.` : '';
+    Share.share({
+      message: `Hey! Just a reminder you owe me $${share.amountOwed.toFixed(2)} for ${share.billTitle}.${paymentLine}`,
+    }).catch(() => {});
+  };
+
+  const handleMarkPaid = async (shareId: string) => {
+    await markSharePaid(shareId);
+    await loadNotifications();
   };
 
   if (loading) {
@@ -323,24 +435,48 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-tabby-50 dark:bg-tabby-900">
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 24 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* The full illustrated bear (eyes, nose, eyebrows) only reads clean
             at splash/auth size -- at 46px it turns to noise, so the header
             badge uses the flat monochrome silhouette instead, tinted brown. */}
-        <View className="flex-row items-center gap-3">
-          <View
-            className="w-12 h-12 rounded-full items-center justify-center"
-            style={{ backgroundColor: '#BEE3F8' }}>
-            <Image
-              source={require('@/assets/images/android-icon-monochrome.png')}
-              tintColor="#8B5A2B"
-              style={{ width: 26, height: 26 }}
-            />
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-3">
+            <View
+              className="w-12 h-12 rounded-full items-center justify-center"
+              style={{ backgroundColor: '#BEE3F8' }}
+            >
+              <Image
+                source={require('@/assets/images/android-icon-monochrome.png')}
+                tintColor="#8B5A2B"
+                style={{ width: 26, height: 26 }}
+              />
+            </View>
+            <View>
+              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">{greeting}</Text>
+              <Text className="font-fredoka-semibold text-2xl dark:text-white">
+                {session?.user.email?.split('@')[0]}
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">{greeting}</Text>
-            <Text className="font-fredoka-semibold text-2xl dark:text-white">{session?.user.email?.split('@')[0]}</Text>
-          </View>
+
+          <Pressable
+            onPress={() => setShowNotifications(true)}
+            style={pressFeedback}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+            className="w-10 h-10 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center"
+          >
+            <Feather name="bell" size={18} color={isDark ? '#E8C39E' : '#374151'} />
+            {incomingRequests.length + proposedShares.length + overdueShares.length + reminders.length >
+              0 && (
+              <View className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 items-center justify-center">
+                <Text className="font-nunito-bold text-white text-[10px]">
+                  {incomingRequests.length + proposedShares.length + overdueShares.length + reminders.length}
+                </Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
@@ -357,10 +493,12 @@ export default function HomeScreen() {
           </Text>
           <Text
             className={`font-nunito-extrabold text-4xl ${
-              (data?.periodNet ?? 0) < 0 ? 'text-rust-600 dark:text-rust-400' : 'text-sage-700 dark:text-sage-400'
-            }`}>
-            {(data?.periodNet ?? 0) < 0 ? '-' : '+'}$
-            {Math.abs(data?.periodNet ?? 0).toFixed(2)}
+              (data?.periodNet ?? 0) < 0
+                ? 'text-rust-600 dark:text-rust-400'
+                : 'text-sage-700 dark:text-sage-400'
+            }`}
+          >
+            {(data?.periodNet ?? 0) < 0 ? '-' : '+'}${Math.abs(data?.periodNet ?? 0).toFixed(2)}
           </Text>
           <View className="mt-2">
             <TabbyBear mood={moodFromPct(pct)} insight={insight} />
@@ -428,6 +566,20 @@ export default function HomeScreen() {
           setShowBudgetModal(false);
           setShowPayScheduleModal(true);
         }}
+      />
+      <NotificationsModal
+        visible={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        loading={notificationsLoading}
+        incoming={incomingRequests}
+        proposedShares={proposedShares}
+        overdueShares={overdueShares}
+        reminders={reminders}
+        onRespondRequest={handleRespondRequest}
+        onRespondShare={handleRespondShare}
+        onRemindInApp={handleRemindInApp}
+        onRemindViaMessage={handleRemindViaMessage}
+        onMarkPaid={handleMarkPaid}
       />
     </SafeAreaView>
   );
