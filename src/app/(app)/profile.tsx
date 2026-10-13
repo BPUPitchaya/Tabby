@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EditProfileModal } from '@/components/edit-profile-modal';
 import { FlatSettingsModal } from '@/components/flat-settings-modal';
+import { FriendsModal } from '@/components/friends-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
@@ -50,6 +51,7 @@ export default function ProfileScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showFlatSettings, setShowFlatSettings] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
   const handleSignOut = () => {
@@ -93,6 +95,7 @@ export default function ProfileScreen() {
               isDark={isDark}
             />
             <ListRow icon="users" label="Flat" onPress={() => setShowFlatSettings(true)} isDark={isDark} />
+            <ListRow icon="user-plus" label="Friends" onPress={() => setShowFriends(true)} isDark={isDark} />
             <ListRow icon="settings" label="Settings" onPress={() => setShowSettings(true)} isLast isDark={isDark} />
           </View>
         </View>
@@ -132,6 +135,7 @@ export default function ProfileScreen() {
       <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
       <EditProfileModal visible={showEditProfile} onClose={() => setShowEditProfile(false)} />
       <FlatSettingsModal visible={showFlatSettings} onClose={() => setShowFlatSettings(false)} />
+      <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} />
     </SafeAreaView>
   );
 }

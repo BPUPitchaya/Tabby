@@ -78,6 +78,11 @@ export async function createBillSplit(
       owed_by_user_id: share.userId,
       guest_name: share.userId ? null : share.label,
       amount_owed: share.amount,
+      // A share aimed at a real account is a proposal, not an instant
+      // claim -- it only becomes a real pending debt once that person
+      // accepts it (respondToShare). A guest has no account to ask, so
+      // their share is pending straight away, same as before.
+      status: share.userId ? 'proposed' : 'pending',
     }))
   );
   if (sharesError) throw sharesError;
@@ -88,7 +93,7 @@ export async function createBillSplit(
 export type MyBillSplitShare = {
   id: string;
   amount_owed: number;
-  status: 'pending' | 'paid';
+  status: 'proposed' | 'pending' | 'paid' | 'declined';
   bill_splits: { title: string; merchant: string | null; occurred_at: string; created_by: string } | null;
 };
 
@@ -105,6 +110,27 @@ export async function fetchMyPendingShares(userId: string): Promise<MyBillSplitS
 
   if (error) throw error;
   return data as unknown as MyBillSplitShare[];
+}
+
+// Shares proposed to me, awaiting my accept/decline -- see createBillSplit
+// for why a real-account share starts here instead of straight at pending.
+export async function fetchMyProposedShares(userId: string): Promise<MyBillSplitShare[]> {
+  const { data, error } = await supabase
+    .from('bill_split_shares')
+    .select('id, amount_owed, status, bill_splits(title, merchant, occurred_at, created_by)')
+    .eq('owed_by_user_id', userId)
+    .eq('status', 'proposed');
+
+  if (error) throw error;
+  return data as unknown as MyBillSplitShare[];
+}
+
+export async function respondToShare(shareId: string, accept: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('bill_split_shares')
+    .update({ status: accept ? 'pending' : 'declined' })
+    .eq('id', shareId);
+  if (error) throw error;
 }
 
 export async function markSharePaid(shareId: string) {
