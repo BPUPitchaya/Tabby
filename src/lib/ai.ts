@@ -165,6 +165,82 @@ export async function parseFinancialDocument(
   }
 }
 
+export type ParsedBillSplit = {
+  title: string;
+  merchant: string | null;
+  totalAmount: number;
+  occurredAt: string; // 'YYYY-MM-DD'
+  categoryName: string | null;
+  // amount null = this person's share isn't specified, split what's left
+  // of the total evenly among everyone with a null amount (handled by the
+  // split screen itself, not here -- this just reports what was said).
+  participants: { name: string; amount: number | null }[];
+};
+
+// Only called when a cheap local keyword check (transactions.tsx) thinks a
+// quick-add message might describe a group split rather than a personal
+// expense -- avoids a second AI round trip on every ordinary "coffee
+// $8.50". Returns null (not an error) when the text turns out not to
+// actually name a total and people to split it with, so the caller can
+// fall back to the regular parseNaturalLanguageExpenses path.
+export async function parseBillSplit(
+  text: string,
+  categories: { id: string; name: string }[]
+): Promise<ParsedBillSplit | null> {
+  if (!text.trim()) return null;
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = (await callGemini(
+      `Today's date is ${today}. Decide whether this text describes splitting a bill or expense among a group of people: "${text}". It does if it names a total amount AND one or more other people to split it with (e.g. "split dinner $200 with Sarah and Tom", "drinks $80, me and Alex and Jo each pay a third", "Sarah owes me $50 and Tom owes $70 for the cabin"). It does NOT if it's just a personal purchase, even one mentioning a company/person as a merchant (e.g. "coffee with Sarah $8.50" is one person's own expense, not a split -- only extract participants if money is actually being divided or owed back). If it's not a split, return isSplit: false and leave the other fields empty. If it is a split: title is a short label for what it was (e.g. "Dinner", "Cabin"); merchant is a shop/venue name if mentioned, else null; totalAmount is the whole bill, not any one person's share; for each OTHER person mentioned (never include the message's author/"me"), give their name and, if a specific amount or fraction for them was stated, their amount in dollars -- otherwise null (meaning split evenly). Pick the best-fitting category from this exact list: ${categories.map((c) => c.name).join(', ')} -- pick "Other" if nothing fits well, never leave it blank. Resolve any date mentioned to YYYY-MM-DD relative to today, else use today.`,
+      {
+        type: 'object',
+        properties: {
+          isSplit: { type: 'boolean' },
+          title: { type: 'string' },
+          merchant: { type: 'string' },
+          totalAmount: { type: 'number' },
+          occurredAt: { type: 'string', description: 'YYYY-MM-DD' },
+          categoryName: { type: 'string', enum: categories.map((c) => c.name) },
+          participants: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                amount: { type: 'number' },
+              },
+              required: ['name', 'amount'],
+            },
+          },
+        },
+        required: ['isSplit', 'title', 'merchant', 'totalAmount', 'occurredAt', 'categoryName', 'participants'],
+      }
+    )) as {
+      isSplit: boolean;
+      title: string;
+      merchant: string;
+      totalAmount: number;
+      occurredAt: string;
+      categoryName: string;
+      participants: { name: string; amount: number }[];
+    };
+
+    if (!result.isSplit || !result.participants?.length || result.totalAmount <= 0) return null;
+
+    return {
+      title: result.title || 'Bill',
+      merchant: result.merchant === 'None' || !result.merchant?.trim() ? null : result.merchant,
+      totalAmount: result.totalAmount,
+      occurredAt: result.occurredAt,
+      categoryName: result.categoryName || null,
+      participants: result.participants.map((p) => ({ name: p.name, amount: p.amount > 0 ? p.amount : null })),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMonthlySummary(params: {
   thisMonthTotal: number;
   lastMonthTotal: number;

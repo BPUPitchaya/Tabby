@@ -2,13 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import * as FileSystemLegacy from 'expo-file-system/legacy';
-import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -23,10 +19,19 @@ import {
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { categorizeTransaction, parseFinancialDocument, parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
+import {
+  categorizeTransaction,
+  parseBillSplit,
+  parseFinancialDocument,
+  parseNaturalLanguageExpenses,
+  type ParsedBillSplit,
+  type ParsedExpense,
+} from '@/lib/ai';
 import { CategoryIcon } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
+import { presentScanSheet } from '@/lib/document-scan';
+import { SplitBillModal } from '@/components/split-bill-modal';
 import {
   addTransaction,
   bulkAddTransactions,
@@ -57,6 +62,11 @@ const SEGMENT_SHADOW = {
   shadowRadius: 2,
   elevation: 1,
 };
+
+// Cheap local pre-filter for whether a quick-add message might describe
+// splitting a bill -- see handleQuickAdd for why this gates a second AI
+// call instead of asking Gemini to classify every message up front.
+const SPLIT_HINT = /\bsplit\b|\beach\b|\bowes?\b|\bbetween\b|\bdivide/i;
 
 // Local calendar date, not UTC -- Date#toISOString() converts to UTC first,
 // which can shift the date by a day in timezones behind/ahead of it (same
@@ -140,6 +150,8 @@ export default function TransactionsScreen() {
   const [csvImporting, setCsvImporting] = useState(false);
 
   const [aiPreview, setAiPreview] = useState<ParsedExpense[] | null>(null);
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [splitDraft, setSplitDraft] = useState<ParsedBillSplit | null>(null);
   const [aiImporting, setAiImporting] = useState(false);
 
   const load = useCallback(async () => {
@@ -222,6 +234,23 @@ export default function TransactionsScreen() {
     setAiBusy(true);
     setError(null);
     try {
+      // Cheap local pre-filter before spending a second AI call -- only
+      // texts that plausibly describe a group split (keyword hit + any
+      // number, not necessarily a "$") go through parseBillSplit at all,
+      // so an ordinary "coffee $8.50" never pays for the extra round trip.
+      if (SPLIT_HINT.test(quickAddText) && /\d/.test(quickAddText)) {
+        const split = await parseBillSplit(
+          quickAddText,
+          categories.filter((c) => c.type === 'expense')
+        );
+        if (split) {
+          setSplitDraft(split);
+          setShowSplitModal(true);
+          setQuickAddText('');
+          return;
+        }
+      }
+
       const parsed = await parseNaturalLanguageExpenses(quickAddText, categories);
       if (!parsed) {
         setError('AI is briefly unavailable -- try again in a moment, or use the + button below.');
@@ -302,77 +331,23 @@ export default function TransactionsScreen() {
     }
   };
 
-  // Shared by all three scan entry points (camera, photo library, file) --
-  // reuses the same aiPreview modal as the chat quick-add, just sourced
-  // from a document instead of typed text.
-  const scanDocument = async (base64Data: string, mimeType: string) => {
+  const handleScanReceipt = async () => {
     setError(null);
-    setAiBusy(true);
     try {
-      const parsed = await parseFinancialDocument(base64Data, mimeType, categories);
+      const scanned = await presentScanSheet();
+      if (!scanned) return;
+
+      setAiBusy(true);
+      const parsed = await parseFinancialDocument(scanned.base64Data, scanned.mimeType, categories);
       if (!parsed) {
         setError("Couldn't find any transactions in that -- try a clearer photo, or add it manually.");
         return;
       }
       setAiPreview(parsed);
-    } finally {
-      setAiBusy(false);
-    }
-  };
-
-  const handleTakePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setError('Camera access is off for Tabby -- enable it in Settings to scan a receipt.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset?.base64) return;
-    await scanDocument(asset.base64, asset.mimeType ?? 'image/jpeg');
-  };
-
-  const handleChoosePhoto = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setError('Photo access is off for Tabby -- enable it in Settings to scan a receipt.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6 });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset?.base64) return;
-    await scanDocument(asset.base64, asset.mimeType ?? 'image/jpeg');
-  };
-
-  const handleChooseStatementFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'image/*'],
-      copyToCacheDirectory: true,
-    });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset) return;
-
-    try {
-      const base64Data = await FileSystemLegacy.readAsStringAsync(asset.uri, { encoding: 'base64' });
-      await scanDocument(base64Data, asset.mimeType ?? 'application/pdf');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read that file.');
-    }
-  };
-
-  const handleScanReceipt = () => {
-    const options = ['Take Photo', 'Choose Photo', 'Choose File (PDF)', 'Cancel'];
-    const actions = [handleTakePhoto, handleChoosePhoto, handleChooseStatementFile];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex: options.length - 1 },
-        (index) => actions[index]?.()
-      );
-    } else {
-      Alert.alert('Scan a receipt or statement', undefined, [
-        ...options.slice(0, -1).map((label, i) => ({ text: label, onPress: actions[i] })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]);
+    } finally {
+      setAiBusy(false);
     }
   };
 
@@ -472,6 +447,14 @@ export default function TransactionsScreen() {
         <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100 dark:border-tabby-700">
           <Text className="font-fredoka-semibold text-2xl dark:text-white">Transactions</Text>
           <View className="flex-row gap-2">
+            <HeaderIconButton
+              icon="users"
+              onPress={() => {
+                setSplitDraft(null);
+                setShowSplitModal(true);
+              }}
+              label="Split a bill"
+            />
             <HeaderIconButton icon="upload" onPress={handlePickCSV} label="Import CSV" />
             <HeaderIconButton icon="plus" onPress={openManualAdd} label="Add transaction" tone="primary" />
           </View>
@@ -1039,6 +1022,16 @@ export default function TransactionsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <SplitBillModal
+        visible={showSplitModal}
+        onClose={() => {
+          setShowSplitModal(false);
+          setSplitDraft(null);
+        }}
+        onCreated={load}
+        draft={splitDraft}
+      />
     </SafeAreaView>
   );
 }
