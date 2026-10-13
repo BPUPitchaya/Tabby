@@ -14,7 +14,14 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
-import { fetchProfile, updateDisplayName, updateEmail, updatePassword } from '@/lib/profile';
+import {
+  fetchMyPaymentDetails,
+  fetchProfile,
+  updateDisplayName,
+  updateEmail,
+  updatePassword,
+  updatePaymentDetails,
+} from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -54,7 +61,8 @@ function FieldButton({
       disabled={disabled || busy}
       style={pressFeedback}
       className={`rounded-lg py-2.5 items-center ${disabled ? 'bg-gray-300 dark:bg-tabby-700' : 'bg-tabby-600 dark:bg-white'}`}
-      accessibilityRole="button">
+      accessibilityRole="button"
+    >
       {busy ? (
         <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
       ) : (
@@ -85,11 +93,18 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
+  const [paymentDetails, setPaymentDetails] = useState('');
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (!visible || !userId) return;
     setLoading(true);
-    fetchProfile(userId)
-      .then((profile) => setName(profile.display_name))
+    Promise.all([fetchProfile(userId), fetchMyPaymentDetails(userId)])
+      .then(([profile, paymentDetails]) => {
+        setName(profile.display_name);
+        setPaymentDetails(paymentDetails ?? '');
+      })
       .finally(() => setLoading(false));
   }, [visible, userId]);
 
@@ -99,6 +114,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     setNameMessage(null);
     setEmailMessage(null);
     setPasswordMessage(null);
+    setPaymentMessage(null);
     onClose();
   };
 
@@ -125,7 +141,9 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     setEmailMessage(null);
     try {
       await updateEmail(newEmail.trim());
-      setEmailMessage(`Check ${newEmail.trim()} for a confirmation link -- your email won't change until you click it.`);
+      setEmailMessage(
+        `Check ${newEmail.trim()} for a confirmation link -- your email won't change until you click it.`,
+      );
       setNewEmail('');
     } catch (err) {
       setEmailMessage(err instanceof Error ? err.message : 'Failed to update email.');
@@ -152,6 +170,20 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     }
   };
 
+  const handleSavePaymentDetails = async () => {
+    if (!userId) return;
+    setPaymentBusy(true);
+    setPaymentMessage(null);
+    try {
+      await updatePaymentDetails(userId, paymentDetails);
+      setPaymentMessage('Saved.');
+    } catch (err) {
+      setPaymentMessage(err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
+
   return (
     <Modal visible={visible} animationType="slide">
       <SafeAreaProvider>
@@ -162,7 +194,8 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
               onPress={handleClose}
               style={pressFeedback}
               accessibilityRole="button"
-              accessibilityLabel="Close">
+              accessibilityLabel="Close"
+            >
               <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
             </Pressable>
           </View>
@@ -172,55 +205,85 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
               <ActivityIndicator />
             </View>
           ) : (
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-              <Section title="NAME">
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Display name"
-                  autoCapitalize="words"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                />
-                {nameMessage && (
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{nameMessage}</Text>
-                )}
-                <FieldButton label="Save name" busy={nameBusy} onPress={handleSaveName} />
-              </Section>
+            <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+                <Section title="NAME">
+                  <TextInput
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Display name"
+                    autoCapitalize="words"
+                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
+                  />
+                  {nameMessage && (
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                      {nameMessage}
+                    </Text>
+                  )}
+                  <FieldButton label="Save name" busy={nameBusy} onPress={handleSaveName} />
+                </Section>
 
-              <Section title="EMAIL">
-                <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  Current: {session?.user.email}
-                </Text>
-                <TextInput
-                  value={newEmail}
-                  onChangeText={setNewEmail}
-                  placeholder="New email address"
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                />
-                {emailMessage && (
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{emailMessage}</Text>
-                )}
-                <FieldButton label="Update email" busy={emailBusy} onPress={handleUpdateEmail} />
-              </Section>
+                <Section title="EMAIL">
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                    Current: {session?.user.email}
+                  </Text>
+                  <TextInput
+                    value={newEmail}
+                    onChangeText={setNewEmail}
+                    placeholder="New email address"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
+                  />
+                  {emailMessage && (
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                      {emailMessage}
+                    </Text>
+                  )}
+                  <FieldButton label="Update email" busy={emailBusy} onPress={handleUpdateEmail} />
+                </Section>
 
-              <Section title="PASSWORD">
-                <TextInput
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  placeholder="New password"
-                  secureTextEntry
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                />
-                {passwordMessage && (
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{passwordMessage}</Text>
-                )}
-                <FieldButton label="Update password" busy={passwordBusy} onPress={handleUpdatePassword} />
-              </Section>
-            </ScrollView>
-          </KeyboardAvoidingView>
+                <Section title="PASSWORD">
+                  <TextInput
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    placeholder="New password"
+                    secureTextEntry
+                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
+                  />
+                  {passwordMessage && (
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                      {passwordMessage}
+                    </Text>
+                  )}
+                  <FieldButton label="Update password" busy={passwordBusy} onPress={handleUpdatePassword} />
+                </Section>
+
+                <Section title="PAYMENT DETAILS">
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                    Included in a reminder so people know how to pay you back -- bank account number,
+                    reference, whatever you&apos;d normally give someone.
+                  </Text>
+                  <TextInput
+                    value={paymentDetails}
+                    onChangeText={setPaymentDetails}
+                    placeholder="e.g. 12-3456-7890123-00, ref: your name"
+                    multiline
+                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white min-h-[60px]"
+                  />
+                  {paymentMessage && (
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                      {paymentMessage}
+                    </Text>
+                  )}
+                  <FieldButton
+                    label="Save payment details"
+                    busy={paymentBusy}
+                    onPress={handleSavePaymentDetails}
+                  />
+                </Section>
+              </ScrollView>
+            </KeyboardAvoidingView>
           )}
         </SafeAreaView>
       </SafeAreaProvider>

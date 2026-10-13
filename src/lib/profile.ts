@@ -19,9 +19,57 @@ export async function fetchProfile(userId: string): Promise<Profile> {
 }
 
 export async function updateDisplayName(userId: string, displayName: string) {
+  const { error } = await supabase.from('profiles').update({ display_name: displayName }).eq('id', userId);
+  if (error) throw error;
+}
+
+// Free-text bank account + reference, included in a reminder message so
+// the ower doesn't have to follow up asking how to pay -- see
+// 0019_add_payment_details.sql / 0021_move_payment_details_to_own_table.sql
+// for why this is plain text (no NZ Venmo/Cash App equivalent) in its own
+// table with an owner-only RLS policy, not a column on profiles (which
+// anyone signed in can read).
+export async function fetchMyPaymentDetails(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('payment_details')
+    .select('details')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.details ?? null;
+}
+
+export async function updatePaymentDetails(userId: string, paymentDetails: string) {
+  const trimmed = paymentDetails.trim();
+  if (!trimmed) {
+    const { error } = await supabase.from('payment_details').delete().eq('user_id', userId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase
+    .from('payment_details')
+    .upsert({ user_id: userId, details: trimmed, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+// Whether the one-time "add your payment details?" onboarding question has
+// been shown -- see 0020_add_payment_details_prompted.sql for why this is
+// a separate flag from payment_details itself (skipping still leaves that
+// null, and without this they'd be asked again every open).
+export async function fetchPaymentDetailsPrompted(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('payment_details_prompted')
+    .eq('id', userId)
+    .single();
+  if (error) throw error;
+  return data.payment_details_prompted as boolean;
+}
+
+export async function markPaymentDetailsPrompted(userId: string) {
   const { error } = await supabase
     .from('profiles')
-    .update({ display_name: displayName })
+    .update({ payment_details_prompted: true })
     .eq('id', userId);
   if (error) throw error;
 }
@@ -31,11 +79,7 @@ export async function updateDisplayName(userId: string, displayName: string) {
 // the Flat tab, but only `null` (combined with no flat) triggers the
 // onboarding question itself; `false` means they've already seen it.
 export async function fetchWantsFlat(userId: string): Promise<boolean | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('wants_flat')
-    .eq('id', userId)
-    .single();
+  const { data, error } = await supabase.from('profiles').select('wants_flat').eq('id', userId).single();
   if (error) throw error;
   return data.wants_flat;
 }
@@ -89,7 +133,7 @@ export async function fetchIncomeSettings(userId: string): Promise<IncomeSetting
 // touches the columns listed here.
 export async function updateIncomeSettings(
   userId: string,
-  settings: Pick<IncomeSettings, 'amount' | 'frequency' | 'payWeekday' | 'payDayOfMonth'>
+  settings: Pick<IncomeSettings, 'amount' | 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
 ) {
   const { error } = await supabase.from('income_settings').upsert(
     {
@@ -100,7 +144,7 @@ export async function updateIncomeSettings(
       income_pay_day_of_month: settings.payDayOfMonth,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'user_id' }
+    { onConflict: 'user_id' },
   );
   if (error) throw error;
 }
@@ -190,7 +234,7 @@ function mostRecentWeekday(now: Date, weekday: number): Date {
 // last day of shorter months.
 export function computeIncomeCycle(
   settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): IncomeCycle | null {
   const { frequency, payWeekday, payDayOfMonth } = settings;
 
