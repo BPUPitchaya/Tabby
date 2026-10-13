@@ -121,6 +121,7 @@ export default function TabLayout() {
                 split. */}
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="join/[code]" />
+              <Stack.Screen name="add-friend/[code]" />
               <Stack.Screen name="(app)" />
             </Stack>
           </AuthProvider>
