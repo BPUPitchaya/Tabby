@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  SectionList,
   Text,
   TextInput,
   useColorScheme,
@@ -75,6 +76,69 @@ function toLocalISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Deterministic per-category icon tint, hashed from the category id so the
+// same category always lands on the same color across sessions without a
+// color column in the DB -- categories include user-created ones, not just
+// the fixed defaults, so this can't be a hardcoded name lookup.
+const CATEGORY_PALETTE_LIGHT = [
+  { bg: '#D7E4CE', fg: '#3F5A35' },
+  { bg: '#F3D9C2', fg: '#8A4A1E' },
+  { bg: '#D6DFF2', fg: '#33467A' },
+  { bg: '#E9D9EC', fg: '#5B3D63' },
+  { bg: '#CFEAE9', fg: '#1F5B5A' },
+  { bg: '#F0E3C2', fg: '#6B4F1C' },
+];
+const CATEGORY_PALETTE_DARK = [
+  { bg: '#5B6B4F', fg: '#DCE8D4' },
+  { bg: '#B8794A', fg: '#FCEBDB' },
+  { bg: '#5E6E8C', fg: '#DCE3F2' },
+  { bg: '#8A6E93', fg: '#EFE4F2' },
+  { bg: '#4F8A8B', fg: '#D9F0EF' },
+  { bg: '#A68A4F', fg: '#F2E7CF' },
+];
+function categoryTint(categoryId: string | null, isDark: boolean): { bg: string; fg: string } {
+  if (!categoryId) return isDark ? { bg: '#4A3A2C', fg: '#C9BBAA' } : { bg: '#E5E0D8', fg: '#6B6256' };
+  const palette = isDark ? CATEGORY_PALETTE_DARK : CATEGORY_PALETTE_LIGHT;
+  let hash = 0;
+  for (let i = 0; i < categoryId.length; i++) hash = (hash * 31 + categoryId.charCodeAt(i)) >>> 0;
+  return palette[hash % palette.length];
+}
+
+// "Today" / "Yesterday" / "Mon, Oct 5" -- same day-label convention as the
+// dashboard's trend chart labels, just at day instead of week/month grain.
+function dayLabel(dateStr: string, todayISO: string, yesterdayISO: string): string {
+  if (dateStr === todayISO) return 'Today';
+  if (dateStr === yesterdayISO) return 'Yesterday';
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+type DaySection = { title: string; net: number; data: Transaction[] };
+
+// Groups already-sorted (occurred_at desc) transactions into day sections,
+// each carrying its own net (income minus expense) for the section header.
+function groupByDay(transactions: Transaction[], todayISO: string): DaySection[] {
+  const yesterdayISO = toLocalISODate(new Date(Date.now() - 86_400_000));
+  const sections: DaySection[] = [];
+  const indexByDate = new Map<string, number>();
+
+  for (const tx of transactions) {
+    let index = indexByDate.get(tx.occurred_at);
+    if (index === undefined) {
+      index = sections.length;
+      indexByDate.set(tx.occurred_at, index);
+      sections.push({ title: dayLabel(tx.occurred_at, todayISO, yesterdayISO), net: 0, data: [] });
+    }
+    sections[index].data.push(tx);
+    sections[index].net += tx.is_income ? tx.amount : -tx.amount;
+  }
+
+  return sections;
+}
+
 // Small round icon button used in the header -- Feather icon only, no label,
 // consistent 40x40 tap target.
 function HeaderIconButton({
@@ -107,6 +171,74 @@ function HeaderIconButton({
       }`}>
       <Feather name={icon} size={18} color={iconColor} />
     </Pressable>
+  );
+}
+
+// Shared row, used by the Activity list, search results, and category
+// drill-ins -- one place to keep the colored icon + layout consistent.
+// `showDate` is on for anything not already grouped under a day header
+// (search results span multiple days with no header to carry that context).
+function TransactionRow({
+  item,
+  showDate,
+  onPress,
+  onDelete,
+}: {
+  item: Transaction;
+  showDate: boolean;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
+  const isDark = useColorScheme() === 'dark';
+  const tint = categoryTint(item.category_id, isDark);
+
+  return (
+    <Animated.View entering={FadeIn.duration(200)}>
+      <Pressable
+        onPress={onPress}
+        style={pressFeedback}
+        accessibilityRole="button"
+        accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
+        className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 mb-2">
+        <View className="flex-row items-center flex-1 gap-3">
+          <View
+            className="w-9 h-9 rounded-full items-center justify-center"
+            style={{ backgroundColor: item.is_income ? (isDark ? '#1F3B2A' : '#DCFCE7') : tint.bg }}>
+            <CategoryIcon
+              name={item.categories?.icon}
+              size={16}
+              color={item.is_income ? '#15803d' : tint.fg}
+            />
+          </View>
+          <View className="flex-1">
+            <Text className="font-nunito-semibold dark:text-white">
+              {item.description || item.categories?.name || 'Transaction'}
+            </Text>
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+              {item.categories?.name ?? 'Uncategorized'}
+              {item.merchant ? ` · ${item.merchant}` : ''}
+              {showDate ? ` · ${item.occurred_at}` : ''}
+            </Text>
+          </View>
+        </View>
+        <Text
+          className={`font-nunito-bold mr-3 ${
+            item.is_income ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
+          }`}>
+          {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
+        </Text>
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          style={pressFeedback}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
+          <Feather name="trash-2" size={16} color="#ef4444" />
+        </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -153,6 +285,15 @@ export default function TransactionsScreen() {
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [splitDraft, setSplitDraft] = useState<ParsedBillSplit | null>(null);
   const [aiImporting, setAiImporting] = useState(false);
+
+  // Activity (date-grouped) vs By Category (totals grid) -- search overlays
+  // either tab rather than being a third tab, since it's a transient
+  // "narrow what I'm looking at" mode, not a destination of its own.
+  const [activeTab, setActiveTab] = useState<'activity' | 'category'>('activity');
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchCategoryId, setSearchCategoryId] = useState<string | null>(null);
+  const [searchRange, setSearchRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -430,6 +571,55 @@ export default function TransactionsScreen() {
     }
   };
 
+  const daySections = useMemo(() => groupByDay(transactions, todayISO), [transactions, todayISO]);
+
+  // Expense-only, same convention as the dashboard's "Spending by category"
+  // -- every expense category shows up even with zero activity (dashed,
+  // dimmed), rather than only the ones with transactions, so the grid
+  // doesn't reshuffle as spending starts/stops in a category.
+  const categoryTiles = useMemo(() => {
+    const totals = new Map<string, { total: number; count: number }>();
+    for (const tx of transactions) {
+      if (tx.is_income || !tx.category_id) continue;
+      const entry = totals.get(tx.category_id) ?? { total: 0, count: 0 };
+      entry.total += tx.amount;
+      entry.count += 1;
+      totals.set(tx.category_id, entry);
+    }
+    return categories
+      .filter((c) => c.type === 'expense')
+      .map((c) => ({ category: c, total: totals.get(c.id)?.total ?? 0, count: totals.get(c.id)?.count ?? 0 }))
+      .sort((a, b) => b.total - a.total);
+  }, [transactions, categories]);
+
+  const searchResults = useMemo(() => {
+    if (!searchActive) return [];
+    const needle = searchText.trim().toLowerCase();
+    const rangeStart =
+      searchRange === 'today'
+        ? todayISO
+        : searchRange === 'week'
+          ? toLocalISODate(new Date(Date.now() - 6 * 86_400_000))
+          : searchRange === 'month'
+            ? toLocalISODate(new Date(Date.now() - 29 * 86_400_000))
+            : null;
+
+    return transactions.filter((tx) => {
+      if (searchCategoryId && tx.category_id !== searchCategoryId) return false;
+      if (rangeStart && tx.occurred_at < rangeStart) return false;
+      if (!needle) return true;
+      const haystack = `${tx.description ?? ''} ${tx.merchant ?? ''} ${tx.categories?.name ?? ''}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [transactions, searchActive, searchText, searchCategoryId, searchRange]);
+
+  const openSearch = (categoryId: string | null) => {
+    setSearchCategoryId(categoryId);
+    setSearchText('');
+    setSearchRange('all');
+    setSearchActive(true);
+  };
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-white dark:bg-tabby-900">
@@ -466,109 +656,285 @@ export default function TransactionsScreen() {
           </View>
         )}
 
-        <FlatList
-          data={transactions}
-          keyExtractor={(item) => item.id}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ padding: 16, gap: 8, flexGrow: 1 }}
-          ListEmptyComponent={
-            <View className="flex-1 items-center justify-center gap-3 py-16">
-              <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center">
-                <Feather name="file-text" size={22} color="#9ca3af" />
+        {searchActive ? (
+          <>
+            {/* Search header -- replaces the tabs/search-bar row while active. */}
+            <View className="flex-row items-center gap-2 px-4 pt-3 pb-3">
+              <View className="flex-1 h-11 rounded-xl bg-gray-100 dark:bg-tabby-800 border border-tabby-600 dark:border-tabby-200 flex-row items-center px-3 gap-2">
+                <Feather name="search" size={15} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                <TextInput
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  placeholder="Search transactions"
+                  autoFocus
+                  className="font-nunito flex-1 text-sm dark:text-white"
+                />
               </View>
-              <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300">
-                No transactions yet.{'\n'}Type one below, or tap + to add one manually.
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <Animated.View entering={FadeIn.duration(200)}>
               <Pressable
-                onPress={() => handleStartEdit(item)}
+                onPress={() => setSearchActive(false)}
                 style={pressFeedback}
                 accessibilityRole="button"
-                accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-                className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700">
-                <View className="flex-row items-center flex-1 gap-3">
-                  <View
-                    className={`w-9 h-9 rounded-full border items-center justify-center ${
-                      item.is_income ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' : 'bg-white dark:bg-tabby-900 border-gray-200 dark:border-tabby-700'
-                    }`}>
-                    <CategoryIcon
-                      name={item.categories?.icon}
-                      size={16}
-                      color={item.is_income ? '#15803d' : undefined}
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-nunito-semibold dark:text-white">
-                      {item.description || item.categories?.name || 'Transaction'}
-                    </Text>
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                      {item.categories?.name ?? 'Uncategorized'}
-                      {item.merchant ? ` · ${item.merchant}` : ''} · {item.occurred_at}
-                    </Text>
-                  </View>
-                </View>
-                <Text
-                  className={`font-nunito-bold mr-3 ${
-                    item.is_income ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
-                  }`}>
-                  {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
-                </Text>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleDelete(item.id);
-                  }}
-                  style={pressFeedback}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
-                  <Feather name="trash-2" size={16} color="#ef4444" />
-                </Pressable>
+                accessibilityLabel="Cancel search">
+                <Text className="font-nunito-semibold text-tabby-600 dark:text-tabby-200">Cancel</Text>
               </Pressable>
-            </Animated.View>
-          )}
-        />
+            </View>
 
-        {/* Chat-style composer, pinned to the bottom of the screen. */}
-        <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
-          <Pressable
-            onPress={handleScanReceipt}
-            disabled={aiBusy}
-            style={pressFeedback}
-            accessibilityRole="button"
-            accessibilityLabel="Scan a receipt or statement"
-            className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700">
-            <Feather name="camera" size={18} color={isDark ? '#E8C39E' : '#4b5563'} />
-          </Pressable>
-          <TextInput
-            value={quickAddText}
-            onChangeText={setQuickAddText}
-            placeholder='Try "coffee $8.50, lunch $12.50"'
-            multiline
-            className="font-nunito flex-1 bg-gray-100 dark:bg-tabby-700 rounded-2xl px-4 py-2.5 max-h-28 text-base dark:text-white"
-          />
-          <Pressable
-            onPress={handleQuickAdd}
-            disabled={aiBusy || !quickAddText.trim()}
-            style={pressFeedback}
-            accessibilityRole="button"
-            accessibilityLabel="Send"
-            className={`w-10 h-10 rounded-full items-center justify-center ${
-              quickAddText.trim() ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-200 dark:bg-tabby-700'
-            }`}>
-            {aiBusy ? (
-              <ActivityIndicator color={isDark ? '#2B1810' : 'white'} size="small" />
+            <View className="px-4 pb-2 gap-2">
+              <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide">
+                Category
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                <Pressable
+                  onPress={() => setSearchCategoryId(null)}
+                  style={pressFeedback}
+                  className={`px-3 py-1.5 rounded-full border ${
+                    searchCategoryId === null
+                      ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                      : 'border-gray-300 dark:border-tabby-600'
+                  }`}>
+                  <Text
+                    className={`font-nunito-medium text-sm ${
+                      searchCategoryId === null ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
+                    }`}>
+                    All
+                  </Text>
+                </Pressable>
+                {categories.map((cat) => (
+                  <Pressable
+                    key={cat.id}
+                    onPress={() => setSearchCategoryId(cat.id === searchCategoryId ? null : cat.id)}
+                    style={pressFeedback}
+                    className={`px-3 py-1.5 rounded-full border ${
+                      searchCategoryId === cat.id
+                        ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                        : 'border-gray-300 dark:border-tabby-600'
+                    }`}>
+                    <Text
+                      className={`font-nunito-medium text-sm ${
+                        searchCategoryId === cat.id ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
+                      }`}>
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide pt-1">
+                Date
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {(
+                  [
+                    ['today', 'Today'],
+                    ['week', 'This week'],
+                    ['month', 'This month'],
+                    ['all', 'All time'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Pressable
+                    key={value}
+                    onPress={() => setSearchRange(value)}
+                    style={pressFeedback}
+                    className={`px-3 py-1.5 rounded-full border ${
+                      searchRange === value
+                        ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                        : 'border-gray-300 dark:border-tabby-600'
+                    }`}>
+                    <Text
+                      className={`font-nunito-medium text-sm ${
+                        searchRange === value ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
+                      }`}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-4 pb-2">
+              {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+            </Text>
+
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <View className="flex-1 items-center justify-center py-16">
+                  <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300">
+                    No matching transactions.
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TransactionRow
+                  item={item}
+                  showDate
+                  onPress={() => handleStartEdit(item)}
+                  onDelete={() => handleDelete(item.id)}
+                />
+              )}
+            />
+          </>
+        ) : (
+          <>
+            {/* Tabs */}
+            <View className="flex-row gap-1.5 mx-4 mt-3 mb-2 p-1 bg-gray-100 dark:bg-tabby-800 rounded-xl">
+              <Pressable
+                onPress={() => setActiveTab('activity')}
+                style={(state) => [pressFeedback(state), activeTab === 'activity' && SEGMENT_SHADOW]}
+                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'activity' ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                <Text
+                  className={`font-nunito-semibold text-sm ${
+                    activeTab === 'activity' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
+                  }`}>
+                  Activity
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setActiveTab('category')}
+                style={(state) => [pressFeedback(state), activeTab === 'category' && SEGMENT_SHADOW]}
+                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'category' ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                <Text
+                  className={`font-nunito-semibold text-sm ${
+                    activeTab === 'category' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
+                  }`}>
+                  By Category
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Search bar -- tap to open filters */}
+            <Pressable
+              onPress={() => openSearch(null)}
+              style={pressFeedback}
+              accessibilityRole="button"
+              accessibilityLabel="Search transactions"
+              className="flex-row items-center gap-2 mx-4 mb-2 h-11 rounded-xl bg-gray-100 dark:bg-tabby-800 border border-gray-200 dark:border-tabby-700 px-3">
+              <Feather name="search" size={15} color={isDark ? '#C98A52' : '#9ca3af'} />
+              <Text className="font-nunito text-sm text-gray-400 dark:text-tabby-400">Search transactions</Text>
+            </Pressable>
+
+            {activeTab === 'activity' ? (
+              <SectionList
+                sections={daySections}
+                keyExtractor={(item) => item.id}
+                stickySectionHeadersEnabled
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                contentContainerStyle={{ padding: 16, paddingTop: 0, flexGrow: 1 }}
+                ListEmptyComponent={
+                  <View className="flex-1 items-center justify-center gap-3 py-16">
+                    <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center">
+                      <Feather name="file-text" size={22} color="#9ca3af" />
+                    </View>
+                    <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300">
+                      No transactions yet.{'\n'}Type one below, or tap + to add one manually.
+                    </Text>
+                  </View>
+                }
+                renderSectionHeader={({ section }) => (
+                  <View className="flex-row items-baseline justify-between bg-white dark:bg-tabby-900 pt-3 pb-2">
+                    <Text className="font-fredoka-semibold text-sm dark:text-white">{section.title}</Text>
+                    <Text
+                      className={`font-nunito-semibold text-xs ${
+                        section.net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-tabby-300'
+                      }`}>
+                      {section.net >= 0 ? '+' : '-'}${Math.abs(section.net).toFixed(2)}
+                    </Text>
+                  </View>
+                )}
+                renderItem={({ item }) => (
+                  <TransactionRow
+                    item={item}
+                    showDate={false}
+                    onPress={() => handleStartEdit(item)}
+                    onDelete={() => handleDelete(item.id)}
+                  />
+                )}
+              />
             ) : (
-              <Feather
-                name="arrow-up"
-                size={18}
-                color={quickAddText.trim() ? (isDark ? '#2B1810' : '#fff') : '#9ca3af'}
+              <FlatList
+                data={categoryTiles}
+                keyExtractor={({ category }) => category.id}
+                numColumns={2}
+                columnWrapperStyle={{ gap: 12 }}
+                contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 12, flexGrow: 1 }}
+                ListEmptyComponent={
+                  <View className="flex-1 items-center justify-center py-16">
+                    <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300">
+                      No expense categories yet.
+                    </Text>
+                  </View>
+                }
+                renderItem={({ item }) => {
+                  const tint = categoryTint(item.category.id, isDark);
+                  const hasActivity = item.count > 0;
+                  return (
+                    <Pressable
+                      onPress={() => openSearch(item.category.id)}
+                      style={pressFeedback}
+                      className={`flex-1 rounded-2xl p-4 bg-gray-50 dark:bg-tabby-800 border ${
+                        hasActivity ? 'border-gray-100 dark:border-tabby-700' : 'border-dashed border-gray-200 dark:border-tabby-700 opacity-60'
+                      }`}>
+                      <View
+                        className="w-8 h-8 rounded-full items-center justify-center mb-2.5"
+                        style={{ backgroundColor: tint.bg }}>
+                        <CategoryIcon name={item.category.icon} size={14} color={tint.fg} />
+                      </View>
+                      <Text className="font-nunito-semibold text-sm dark:text-tabby-200">{item.category.name}</Text>
+                      <Text className="font-fredoka-semibold text-lg dark:text-white pt-0.5">
+                        ${item.total.toFixed(2)}
+                      </Text>
+                      <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                        {hasActivity ? `${item.count} transaction${item.count === 1 ? '' : 's'}` : 'No activity'}
+                      </Text>
+                    </Pressable>
+                  );
+                }}
               />
             )}
-          </Pressable>
-        </View>
+
+            {/* Chat-style composer, pinned to the bottom of the screen. */}
+            <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
+              <Pressable
+                onPress={handleScanReceipt}
+                disabled={aiBusy}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Scan a receipt or statement"
+                className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700">
+                <Feather name="camera" size={18} color={isDark ? '#E8C39E' : '#4b5563'} />
+              </Pressable>
+              <TextInput
+                value={quickAddText}
+                onChangeText={setQuickAddText}
+                placeholder='Try "coffee $8.50, lunch $12.50"'
+                multiline
+                className="font-nunito flex-1 bg-gray-100 dark:bg-tabby-700 rounded-2xl px-4 py-2.5 max-h-28 text-base dark:text-white"
+              />
+              <Pressable
+                onPress={handleQuickAdd}
+                disabled={aiBusy || !quickAddText.trim()}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Send"
+                className={`w-10 h-10 rounded-full items-center justify-center ${
+                  quickAddText.trim() ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-200 dark:bg-tabby-700'
+                }`}>
+                {aiBusy ? (
+                  <ActivityIndicator color={isDark ? '#2B1810' : 'white'} size="small" />
+                ) : (
+                  <Feather
+                    name="arrow-up"
+                    size={18}
+                    color={quickAddText.trim() ? (isDark ? '#2B1810' : '#fff') : '#9ca3af'}
+                  />
+                )}
+              </Pressable>
+            </View>
+          </>
+        )}
       </KeyboardAvoidingView>
 
       {/* Manual add/edit -- opened via the + button or by tapping a transaction. */}
