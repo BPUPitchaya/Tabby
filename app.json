@@ -43,7 +43,8 @@
           "photosPermission": "Tabby needs access to your photos to scan a receipt or bank statement.",
           "cameraPermission": "Tabby needs your camera to take a photo of a receipt."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -105,12 +105,19 @@ export type IncomeSettings = {
   payWeekday: number | null; // 0-6, Sunday-Saturday
   payDayOfMonth: number | null; // 1-31
   budgetAmount: number | null;
+  // Most recent payday the user actually confirmed income for -- distinct
+  // from the schedule math in computeIncomeCycle(), which only knows when
+  // paydays fall, not whether this one was acknowledged. See
+  // getPendingPayday().
+  lastConfirmedPayday: string | null;
 };
 
 export async function fetchIncomeSettings(userId: string): Promise<IncomeSettings | null> {
   const { data, error } = await supabase
     .from('income_settings')
-    .select('income_amount, income_frequency, income_pay_weekday, income_pay_day_of_month, budget_amount')
+    .select(
+      'income_amount, income_frequency, income_pay_weekday, income_pay_day_of_month, budget_amount, last_confirmed_payday',
+    )
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -123,6 +130,7 @@ export async function fetchIncomeSettings(userId: string): Promise<IncomeSetting
     payWeekday: data.income_pay_weekday,
     payDayOfMonth: data.income_pay_day_of_month,
     budgetAmount: data.budget_amount,
+    lastConfirmedPayday: data.last_confirmed_payday,
   };
 }
 
@@ -279,6 +287,37 @@ export function computeIncomeCycle(
   }
 
   return null;
+}
+
+// The most recent payday (cycle.startDate) if it hasn't been confirmed
+// yet -- shown as a "did you get paid?" prompt. null means either no
+// schedule is set, or the latest payday is already confirmed.
+export function getPendingPayday(
+  settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth' | 'lastConfirmedPayday'>,
+  now: Date = new Date(),
+): string | null {
+  const cycle = computeIncomeCycle(settings, now);
+  if (!cycle) return null;
+  if (settings.lastConfirmedPayday && settings.lastConfirmedPayday >= cycle.startDate) return null;
+  return cycle.startDate;
+}
+
+// The next payday after `now` -- cycle.endDate is defined as "the first
+// day of the next cycle," which is exactly the next payday. Used to
+// schedule the next local reminder ahead of time.
+export function getNextPaydayDate(
+  settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
+  now: Date = new Date(),
+): string | null {
+  return computeIncomeCycle(settings, now)?.endDate ?? null;
+}
+
+export async function confirmPayday(userId: string, paydayDate: string) {
+  const { error } = await supabase
+    .from('income_settings')
+    .update({ last_confirmed_payday: paydayDate })
+    .eq('user_id', userId);
+  if (error) throw error;
 }
 
 export type IncomeProgress = {
