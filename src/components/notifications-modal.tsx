@@ -33,11 +33,16 @@ export function NotificationsModal({
   proposedShares,
   overdueShares,
   reminders,
+  pendingPayday,
+  paydayAmount,
+  paydayBusy,
   onRespondRequest,
   onRespondShare,
   onRemindInApp,
   onRemindViaMessage,
   onMarkPaid,
+  onConfirmPayday,
+  onDeclinePayday,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -46,18 +51,24 @@ export function NotificationsModal({
   proposedShares: MyBillSplitShare[];
   overdueShares: OwedToMeShare[];
   reminders: MyBillSplitShare[];
+  pendingPayday: string | null;
+  paydayAmount: number;
+  paydayBusy: boolean;
   onRespondRequest: (id: string, accept: boolean) => void;
   onRespondShare: (id: string, accept: boolean) => void;
   onRemindInApp: (share: OwedToMeShare) => void;
   onRemindViaMessage: (share: OwedToMeShare) => void;
   onMarkPaid: (shareId: string) => void;
+  onConfirmPayday: () => void;
+  onDeclinePayday: () => void;
 }) {
   const isDark = useColorScheme() === 'dark';
   const isEmpty =
     incoming.length === 0 &&
     proposedShares.length === 0 &&
     overdueShares.length === 0 &&
-    reminders.length === 0;
+    reminders.length === 0 &&
+    !pendingPayday;
 
   const presentOverdueActions = (share: OwedToMeShare) => {
     const options = ['Remind in App', 'Remind via Text/Other Apps', 'Mark as Paid', 'Cancel'];
@@ -125,6 +136,45 @@ export function NotificationsModal({
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
+              {pendingPayday && (
+                <View className="gap-2">
+                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide">
+                    PAYDAY
+                  </Text>
+                  <View className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-tabby-400 dark:border-tabby-200 gap-2">
+                    <Text className="font-nunito-medium dark:text-white">
+                      Did you get paid on {pendingPayday}? ${paydayAmount.toFixed(2)} expected.
+                    </Text>
+                    <View className="flex-row gap-2">
+                      <Pressable
+                        onPress={onConfirmPayday}
+                        disabled={paydayBusy}
+                        style={pressFeedback}
+                        className="flex-1 items-center py-1.5 rounded-lg bg-tabby-600 dark:bg-white"
+                      >
+                        {paydayBusy ? (
+                          <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                        ) : (
+                          <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
+                            Yes, log it
+                          </Text>
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={onDeclinePayday}
+                        disabled={paydayBusy}
+                        style={pressFeedback}
+                        className="flex-1 items-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
+                      >
+                        <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">
+                          Not yet
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              )}
+
               {reminders.length > 0 && (
                 <View className="gap-2">
                   <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide">
