@@ -36,14 +36,24 @@ import { useAuth } from '@/lib/auth-context';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
 import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
 import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
+import {
+  cancelPaydayFollowUp,
+  schedulePaydayFollowUp,
+  schedulePaydayReminder,
+} from '@/lib/payday-notifications';
 import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
+import { addTransaction } from '@/lib/transactions';
 import {
   computeIncomeCycle,
+  confirmPayday,
   fetchIncomeProgress,
   fetchIncomeSettings,
   fetchMyPaymentDetails,
+  getNextPaydayDate,
+  getPendingPayday,
   type IncomeFrequency,
   type IncomeProgress,
+  type IncomeSettings,
 } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : undefined);
@@ -292,6 +302,9 @@ export default function HomeScreen() {
   const [overdueShares, setOverdueShares] = useState<OwedToMeShare[]>([]);
   const [reminders, setReminders] = useState<MyBillSplitShare[]>([]);
   const [myPaymentDetails, setMyPaymentDetails] = useState<string | null>(null);
+  const [incomeSettings, setIncomeSettings] = useState<IncomeSettings | null>(null);
+  const [pendingPayday, setPendingPayday] = useState<string | null>(null);
+  const [paydayBusy, setPaydayBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -305,6 +318,8 @@ export default function HomeScreen() {
         fetchIncomeSettings(userId),
       ]);
       setTrendPreference(trendPref);
+      setIncomeSettings(incomeSettings);
+      setPendingPayday(incomeSettings ? getPendingPayday(incomeSettings) : null);
       // computeIncomeCycle only needs frequency/payday, which income
       // settings always has once set -- unlike IncomeProgress, this isn't
       // gated on a budget amount existing too, since Earned/Spent
@@ -407,6 +422,35 @@ export default function HomeScreen() {
     await loadNotifications();
   };
 
+  const handleConfirmPayday = async () => {
+    if (!userId || !incomeSettings || !pendingPayday) return;
+    setPaydayBusy(true);
+    try {
+      await addTransaction({
+        userId,
+        amount: incomeSettings.amount,
+        description: 'Pay',
+        categoryId: null,
+        occurredAt: pendingPayday,
+        isIncome: true,
+      });
+      await confirmPayday(userId, pendingPayday);
+      await cancelPaydayFollowUp().catch(() => {});
+      const nextPayday = getNextPaydayDate(incomeSettings);
+      if (nextPayday) await schedulePaydayReminder(nextPayday).catch(() => {});
+      setPendingPayday(null);
+      await load();
+    } finally {
+      setPaydayBusy(false);
+    }
+  };
+
+  // Declining doesn't clear pendingPayday -- it's still unconfirmed, just
+  // re-asked later. Only the 12h follow-up reminder changes.
+  const handleDeclinePayday = async () => {
+    await schedulePaydayFollowUp().catch(() => {});
+  };
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-tabby-50 dark:bg-tabby-900">
@@ -468,11 +512,19 @@ export default function HomeScreen() {
             className="w-10 h-10 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center"
           >
             <Feather name="bell" size={18} color={isDark ? '#E8C39E' : '#374151'} />
-            {incomingRequests.length + proposedShares.length + overdueShares.length + reminders.length >
+            {incomingRequests.length +
+              proposedShares.length +
+              overdueShares.length +
+              reminders.length +
+              (pendingPayday ? 1 : 0) >
               0 && (
               <View className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 items-center justify-center">
                 <Text className="font-nunito-bold text-white text-[10px]">
-                  {incomingRequests.length + proposedShares.length + overdueShares.length + reminders.length}
+                  {incomingRequests.length +
+                    proposedShares.length +
+                    overdueShares.length +
+                    reminders.length +
+                    (pendingPayday ? 1 : 0)}
                 </Text>
               </View>
             )}
@@ -575,11 +627,16 @@ export default function HomeScreen() {
         proposedShares={proposedShares}
         overdueShares={overdueShares}
         reminders={reminders}
+        pendingPayday={pendingPayday}
+        paydayAmount={incomeSettings?.amount ?? 0}
+        paydayBusy={paydayBusy}
         onRespondRequest={handleRespondRequest}
         onRespondShare={handleRespondShare}
         onRemindInApp={handleRemindInApp}
         onRemindViaMessage={handleRemindViaMessage}
         onMarkPaid={handleMarkPaid}
+        onConfirmPayday={handleConfirmPayday}
+        onDeclinePayday={handleDeclinePayday}
       />
     </SafeAreaView>
   );

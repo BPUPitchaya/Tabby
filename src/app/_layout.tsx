@@ -7,10 +7,7 @@
 // again as a side effect of an unrelated change.
 import '@/global.css';
 
-import {
-  Fraunces_600SemiBold,
-  Fraunces_700Bold,
-} from '@expo-google-fonts/fraunces';
+import { Fraunces_600SemiBold, Fraunces_700Bold } from '@expo-google-fonts/fraunces';
 import {
   Fredoka_400Regular,
   Fredoka_500Medium,
@@ -38,12 +35,10 @@ import {
   Nunito_700Bold,
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
-import {
-  Quicksand_600SemiBold,
-  Quicksand_700Bold,
-} from '@expo-google-fonts/quicksand';
+import { Quicksand_600SemiBold, Quicksand_700Bold } from '@expo-google-fonts/quicksand';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { vars } from 'nativewind';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -61,6 +56,18 @@ import {
 import { restoreThemePreference } from '@/lib/theme-preference';
 
 SplashScreen.preventAutoHideAsync();
+
+// Governs how a payday reminder (or any future local notification)
+// presents while the app is already open in the foreground -- without
+// this, a foreground-delivered notification shows nothing at all on iOS.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -137,5 +144,9 @@ export default function TabLayout() {
 // it sits here rather than deeper in the tree.
 function FontVarsView({ children }: { children: ReactNode }) {
   const { pack } = useFontPreference();
-  return <View style={vars(FONT_VARS[pack])} className="flex-1">{children}</View>;
+  return (
+    <View style={vars(FONT_VARS[pack])} className="flex-1">
+      {children}
+    </View>
+  );
 }

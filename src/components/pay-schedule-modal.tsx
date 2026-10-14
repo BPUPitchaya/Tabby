@@ -16,8 +16,14 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
 import {
+  cancelAllPaydayReminders,
+  requestPaydayNotificationPermission,
+  schedulePaydayReminder,
+} from '@/lib/payday-notifications';
+import {
   clearIncomeSettings,
   fetchIncomeSettings,
+  getNextPaydayDate,
   updateIncomeSettings,
   type IncomeFrequency,
 } from '@/lib/profile';
@@ -50,7 +56,8 @@ function FieldButton({
       disabled={disabled || busy}
       style={pressFeedback}
       className={`rounded-lg py-2.5 items-center ${disabled ? 'bg-gray-300 dark:bg-tabby-700' : 'bg-tabby-600 dark:bg-white'}`}
-      accessibilityRole="button">
+      accessibilityRole="button"
+    >
       {busy ? (
         <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
       ) : (
@@ -69,7 +76,15 @@ function FieldButton({
 // redirect now. Clearing this also clears any budget (see
 // clearIncomeSettings), since a budget can't exist without a pay cycle --
 // BudgetModal's own gating on `settings !== null` relies on that.
-export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boolean; onClose: () => void; onSaved?: () => void }) {
+export function PayScheduleModal({
+  visible,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+}) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const isDark = useColorScheme() === 'dark';
@@ -121,12 +136,24 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
     setBusy(true);
     setMessage(null);
     try {
-      await updateIncomeSettings(userId, {
+      const savedSettings = {
         amount: parsedAmount,
         frequency,
         payWeekday: frequency === 'monthly' ? null : payWeekday,
         payDayOfMonth: frequency === 'monthly' ? payDayOfMonth : null,
-      });
+      };
+      await updateIncomeSettings(userId, savedSettings);
+
+      // Best-effort -- a denied permission or a scheduling hiccup
+      // shouldn't block saving the pay schedule itself.
+      try {
+        const granted = await requestPaydayNotificationPermission();
+        const nextPayday = getNextPaydayDate(savedSettings);
+        if (granted && nextPayday) await schedulePaydayReminder(nextPayday);
+      } catch {
+        // payday reminder just won't fire -- the in-app bell check still works
+      }
+
       onSaved?.();
       onClose();
     } catch (err) {
@@ -141,6 +168,7 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
     setBusy(true);
     try {
       await clearIncomeSettings(userId);
+      await cancelAllPaydayReminders().catch(() => {});
       setAmount('');
       setFrequency(null);
       setPayWeekday(null);
@@ -169,7 +197,12 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
         <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-tabby-700">
             <Text className="font-fredoka-semibold text-xl dark:text-white">Pay Schedule</Text>
-            <Pressable onPress={onClose} style={pressFeedback} accessibilityRole="button" accessibilityLabel="Close">
+            <Pressable
+              onPress={onClose}
+              style={pressFeedback}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
               <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
             </Pressable>
           </View>
@@ -182,9 +215,9 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
             <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
               <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  How much you expect to be paid, and how often. This sets the pay cycle Budget
-                  measures against -- it won&apos;t change the Earned total, which only counts income
-                  transactions you log yourself.
+                  How much you expect to be paid, and how often. This sets the pay cycle Budget measures
+                  against -- it won&apos;t change the Earned total, which only counts income transactions you
+                  log yourself.
                 </Text>
 
                 <TextInput
@@ -209,11 +242,15 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
                         frequency === opt.value
                           ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                           : 'border-gray-300 dark:border-tabby-600'
-                      }`}>
+                      }`}
+                    >
                       <Text
                         className={`font-nunito-medium text-sm ${
-                          frequency === opt.value ? 'text-white dark:text-tabby-900' : 'text-gray-700 dark:text-tabby-200'
-                        }`}>
+                          frequency === opt.value
+                            ? 'text-white dark:text-tabby-900'
+                            : 'text-gray-700 dark:text-tabby-200'
+                        }`}
+                      >
                         {opt.label}
                       </Text>
                     </Pressable>
@@ -222,10 +259,15 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
 
                 {frequency && (
                   <Pressable
-                    onPress={() => (frequency === 'monthly' ? setShowDayOfMonthPicker(true) : setShowWeekdayPicker(true))}
+                    onPress={() =>
+                      frequency === 'monthly' ? setShowDayOfMonthPicker(true) : setShowWeekdayPicker(true)
+                    }
                     style={pressFeedback}
-                    className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5">
-                    <Text className="font-nunito text-gray-800 dark:text-white text-sm">{payScheduleLabel}</Text>
+                    className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5"
+                  >
+                    <Text className="font-nunito text-gray-800 dark:text-white text-sm">
+                      {payScheduleLabel}
+                    </Text>
                     <Feather
                       name={frequency === 'monthly' ? 'calendar' : 'chevron-right'}
                       size={16}
@@ -234,7 +276,9 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
                   </Pressable>
                 )}
 
-                {message && <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{message}</Text>}
+                {message && (
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{message}</Text>
+                )}
 
                 <View className="flex-row gap-2 mt-1">
                   <View className="flex-1">
@@ -247,7 +291,8 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
                       style={pressFeedback}
                       className="px-4 py-2.5 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
                       accessibilityRole="button"
-                      accessibilityLabel="Remove pay schedule">
+                      accessibilityLabel="Remove pay schedule"
+                    >
                       <Feather name="trash-2" size={16} color="#ef4444" />
                     </Pressable>
                   )}
@@ -261,7 +306,9 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
       <Modal visible={showWeekdayPicker} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
           <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-1">
-            <Text className="font-fredoka-semibold text-lg dark:text-white mb-2">Which day do you get paid?</Text>
+            <Text className="font-fredoka-semibold text-lg dark:text-white mb-2">
+              Which day do you get paid?
+            </Text>
             {WEEKDAYS.map((day, i) => (
               <Pressable
                 key={day}
@@ -270,12 +317,19 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
                   setShowWeekdayPicker(false);
                 }}
                 style={pressFeedback}
-                className="flex-row items-center justify-between py-3 px-2 border-b border-gray-100 dark:border-tabby-700">
+                className="flex-row items-center justify-between py-3 px-2 border-b border-gray-100 dark:border-tabby-700"
+              >
                 <Text className="font-nunito text-gray-800 dark:text-white">{day}</Text>
-                {payWeekday === i && <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />}
+                {payWeekday === i && (
+                  <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                )}
               </Pressable>
             ))}
-            <Pressable onPress={() => setShowWeekdayPicker(false)} style={pressFeedback} className="py-3 items-center">
+            <Pressable
+              onPress={() => setShowWeekdayPicker(false)}
+              style={pressFeedback}
+              className="py-3 items-center"
+            >
               <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
             </Pressable>
           </View>
@@ -285,7 +339,9 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
       <Modal visible={showDayOfMonthPicker} animationType="slide" transparent>
         <View className="flex-1 bg-black/40 justify-end">
           <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3">
-            <Text className="font-fredoka-semibold text-lg dark:text-white">Which day of the month do you get paid?</Text>
+            <Text className="font-fredoka-semibold text-lg dark:text-white">
+              Which day of the month do you get paid?
+            </Text>
             <View className="flex-row flex-wrap gap-2">
               {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                 <Pressable
@@ -297,11 +353,15 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
                   style={pressFeedback}
                   className={`w-[12.5%] aspect-square items-center justify-center rounded-full ${
                     payDayOfMonth === day ? 'bg-tabby-600 dark:bg-white' : ''
-                  }`}>
+                  }`}
+                >
                   <Text
                     className={`font-nunito-medium text-sm ${
-                      payDayOfMonth === day ? 'text-white dark:text-tabby-900' : 'text-gray-800 dark:text-white'
-                    }`}>
+                      payDayOfMonth === day
+                        ? 'text-white dark:text-tabby-900'
+                        : 'text-gray-800 dark:text-white'
+                    }`}
+                  >
                     {day}
                   </Text>
                 </Pressable>
@@ -310,7 +370,11 @@ export function PayScheduleModal({ visible, onClose, onSaved }: { visible: boole
             <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
               Paid on the 31st in a shorter month? We&apos;ll use the last day of that month instead.
             </Text>
-            <Pressable onPress={() => setShowDayOfMonthPicker(false)} style={pressFeedback} className="py-3 items-center">
+            <Pressable
+              onPress={() => setShowDayOfMonthPicker(false)}
+              style={pressFeedback}
+              className="py-3 items-center"
+            >
               <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
             </Pressable>
           </View>
