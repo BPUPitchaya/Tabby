@@ -42,11 +42,14 @@ import {
 import {
   confirmBillPayment,
   fetchBills,
+  formatDueLabel,
   getNextBillDueDate,
   getPendingBillDue,
+  getRelevantBillDate,
   skipBillPayment,
   type Bill,
 } from '@/lib/bills';
+import { BillsModal } from '@/components/bills-modal';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
 import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
 import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
@@ -320,6 +323,8 @@ export default function HomeScreen() {
   const [paydayBusy, setPaydayBusy] = useState(false);
   const [pendingBills, setPendingBills] = useState<(Bill & { dueDate: string })[]>([]);
   const [billBusyId, setBillBusyId] = useState<string | null>(null);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [showBills, setShowBills] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -380,6 +385,7 @@ export default function HomeScreen() {
       setOverdueShares(owedToMe.filter(isOverdue));
       setReminders(myReminders);
       setMyPaymentDetails(paymentDetails);
+      setBills(bills);
       setPendingBills(
         bills.flatMap((bill) => {
           const dueDate = getPendingBillDue(bill);
@@ -511,6 +517,16 @@ export default function HomeScreen() {
     );
   }
 
+  // Single soonest bill, by the more urgent of "still unresolved" vs "next
+  // scheduled" -- just a glance, not a list (that's the Bills screen
+  // itself, reached via "View all"); showing more than one here crowds
+  // Home for a feature that's meant to stay out of the way most days.
+  const billsPreview = bills
+    .map((bill) => ({ bill, dueDate: getRelevantBillDate(bill) }))
+    .filter((b): b is { bill: Bill; dueDate: string } => b.dueDate !== null)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 1);
+
   const maxCategory = Math.max(1, ...(data?.categoryTotals.map((c) => c.total) ?? [0]));
   const trendView = resolveTrendView(trendPreference, data?.earliestOccurredAt ?? null, new Date());
   const hour = new Date().getHours();
@@ -611,6 +627,73 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Bills used to be reachable only one tap deep in Profile -- a
+            quick preview here (soonest 1-2) surfaces them without taking
+            as much room as a full section, since most days there's nothing
+            urgent to show. Hidden entirely once there are no bills at all,
+            same reasoning as the bell's empty state. */}
+        {billsPreview.length > 0 && (
+          <View className="border border-tabby-100 dark:border-tabby-700 rounded-2xl p-3.5 gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="font-nunito-bold dark:text-white">Bills</Text>
+              <Pressable
+                onPress={() => setShowBills(true)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="View all bills"
+              >
+                <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300">
+                  View all{bills.length > 1 ? ` (${bills.length})` : ''}
+                </Text>
+              </Pressable>
+            </View>
+            {billsPreview.map(({ bill, dueDate }) => {
+              const label = formatDueLabel(dueDate);
+              const overdue = label === 'Overdue';
+              const awaitingAmount = bill.isVariable && getPendingBillDue(bill) !== null;
+              return (
+                <Pressable
+                  key={bill.id}
+                  onPress={() => setShowBills(true)}
+                  style={pressFeedback}
+                  className={`flex-row items-center justify-between rounded-lg px-2.5 py-2 ${
+                    overdue
+                      ? 'bg-amber-50 dark:bg-amber-950 border border-amber-400 dark:border-amber-500'
+                      : ''
+                  }`}
+                >
+                  <View className="flex-row items-center gap-2">
+                    {overdue && <View className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                    <View>
+                      <Text className="font-nunito-medium text-sm dark:text-white">{bill.name}</Text>
+                      <Text
+                        className={`text-xs ${
+                          overdue
+                            ? 'font-nunito-bold text-amber-700 dark:text-amber-400'
+                            : 'font-nunito text-gray-500 dark:text-tabby-300'
+                        }`}
+                      >
+                        {label}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text
+                    className={`font-nunito-semibold text-sm ${
+                      awaitingAmount ? 'text-amber-600 dark:text-amber-400' : 'dark:text-white'
+                    }`}
+                  >
+                    {awaitingAmount
+                      ? 'Enter amount'
+                      : bill.isVariable
+                        ? 'Variable'
+                        : `$${(bill.amount ?? 0).toFixed(2)}`}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         <MoneyFlowRow
           earned={data?.periodIncome ?? 0}
           spent={data?.periodTotal ?? 0}
@@ -696,6 +779,13 @@ export default function HomeScreen() {
         onConfirmBill={handleConfirmBill}
         onDeclineBill={handleDeclineBill}
         onSkipBill={handleSkipBill}
+      />
+      <BillsModal
+        visible={showBills}
+        onClose={() => {
+          setShowBills(false);
+          loadNotifications();
+        }}
       />
     </SafeAreaView>
   );
