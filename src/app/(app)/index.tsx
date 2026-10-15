@@ -172,7 +172,9 @@ function MoneyFlowRow({
                 genuinely differ from theirs, so its own label stays even
                 when it'd otherwise be redundant. */}
             <Text className="font-nunito text-gray-400 dark:text-tabby-500 text-[10px]">
-              ${progress.budgetAmount.toFixed(2)} {FREQUENCY_LABELS[progress.frequency].toLowerCase()}
+              {progress.isDerivedFromCategories
+                ? `$${progress.budgetAmount.toFixed(2)} across categories`
+                : `$${progress.budgetAmount.toFixed(2)} ${FREQUENCY_LABELS[progress.frequency].toLowerCase()}`}
             </Text>
           </>
         ) : (
