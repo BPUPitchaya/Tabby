@@ -51,7 +51,12 @@ import {
 } from '@/lib/bills';
 import { BillsModal } from '@/components/bills-modal';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
-import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
+import {
+  fetchDashboardData,
+  findNotableCategorySwing,
+  type DashboardData,
+  type DashboardPeriod,
+} from '@/lib/dashboard';
 import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
 import {
   cancelPaydayFollowUp,
@@ -362,6 +367,7 @@ export default function HomeScreen() {
         thisMonthTotal: result.periodTotal,
         lastMonthTotal,
         topCategories: result.categoryTotals.slice(0, 3),
+        notableSwing: findNotableCategorySwing(result.categoryTotals, result.previousMonthCategoryTotals),
       }).then(setInsight);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard.');

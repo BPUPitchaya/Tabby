@@ -25,6 +25,13 @@ export type DashboardData = {
   periodNet: number; // income - total, can go negative
   transactionCount: number;
   categoryTotals: CategoryTotal[];
+  // Same category breakdown, but for the previous CALENDAR month --
+  // always calendar-bucketed regardless of `period`, same independence
+  // monthlyTotals already has, so "this month vs last month" in the AI
+  // insight compares like with like even when Earned/Spent is following a
+  // pay cycle instead. Used to spot a specific category swing worth
+  // calling out (see generateMonthlySummary), not shown directly anywhere.
+  previousMonthCategoryTotals: CategoryTotal[];
   monthlyTotals: MonthlyTotal[];
   weeklyTotals: WeeklyTotal[];
   // Earliest occurred_at seen across all fetched rows (income + expense),
@@ -86,6 +93,8 @@ export function computeDashboardFromRows(
   now: Date = new Date(),
 ): DashboardData {
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthKey = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
   const inPeriod = (occurredAt: string) =>
     period
       ? occurredAt >= period.startDate && occurredAt < period.endDate
@@ -93,6 +102,8 @@ export function computeDashboardFromRows(
 
   // category totals, for the current period only, expenses only
   const categoryMap = new Map<string, CategoryTotal>();
+  // same, but always the previous CALENDAR month regardless of `period`
+  const previousMonthCategoryMap = new Map<string, CategoryTotal>();
   // monthly totals, for the last 6 months, expenses only -- always
   // calendar-month buckets, independent of `period`
   const monthlyMap = new Map<string, number>();
@@ -138,6 +149,18 @@ export function computeDashboardFromRows(
         total: (existing?.total ?? 0) + row.amount,
       });
     }
+
+    if (monthKey === previousMonthKey) {
+      const key = row.category_id ?? 'uncategorized';
+      const name = row.categories?.name ?? 'Uncategorized';
+      const existing = previousMonthCategoryMap.get(key);
+      previousMonthCategoryMap.set(key, {
+        categoryId: row.category_id,
+        name,
+        icon: row.categories?.icon ?? null,
+        total: (existing?.total ?? 0) + row.amount,
+      });
+    }
   }
 
   // build the full last-6-months list, including months with zero spend
@@ -170,6 +193,10 @@ export function computeDashboardFromRows(
     .map((c) => ({ ...c, total: Math.round(c.total * 100) / 100 }))
     .sort((a, b) => b.total - a.total);
 
+  const previousMonthCategoryTotals = Array.from(previousMonthCategoryMap.values())
+    .map((c) => ({ ...c, total: Math.round(c.total * 100) / 100 }))
+    .sort((a, b) => b.total - a.total);
+
   periodTotal = Math.round(periodTotal * 100) / 100;
   periodIncome = Math.round(periodIncome * 100) / 100;
 
@@ -179,10 +206,46 @@ export function computeDashboardFromRows(
     periodNet: Math.round((periodIncome - periodTotal) * 100) / 100,
     transactionCount,
     categoryTotals,
+    previousMonthCategoryTotals,
     monthlyTotals,
     weeklyTotals,
     earliestOccurredAt,
   };
+}
+
+export type CategorySwing = {
+  name: string;
+  thisMonthTotal: number;
+  lastMonthTotal: number;
+};
+
+// Picks the single biggest category swing worth mentioning in the monthly
+// AI insight (see generateMonthlySummary in lib/ai.ts) -- not just the
+// biggest dollar category, the biggest CHANGE from last month. Thresholds
+// exist so a $3 coffee habit fluctuation never gets called out as if it
+// were news: at least $20 moved, and (when there was spend last month to
+// compare against) at least a 15% change.
+export function findNotableCategorySwing(
+  categoryTotals: CategoryTotal[],
+  previousMonthCategoryTotals: CategoryTotal[],
+): CategorySwing | null {
+  const previousByCategory = new Map(previousMonthCategoryTotals.map((c) => [c.categoryId, c.total]));
+
+  let best: CategorySwing | null = null;
+  let bestDelta = 0;
+
+  for (const cat of categoryTotals) {
+    const lastMonthTotal = previousByCategory.get(cat.categoryId) ?? 0;
+    const delta = Math.abs(cat.total - lastMonthTotal);
+    const meaningfulPct = lastMonthTotal === 0 || delta / lastMonthTotal >= 0.15;
+
+    if (delta >= 20 && meaningfulPct && delta > bestDelta) {
+      bestDelta = delta;
+      best = { name: cat.name, thisMonthTotal: cat.total, lastMonthTotal };
+    }
+  }
+
+  return best;
 }
 
 export async function fetchDashboardData(

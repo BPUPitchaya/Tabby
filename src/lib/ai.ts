@@ -325,10 +325,17 @@ export async function generateMonthlySummary(params: {
   thisMonthTotal: number;
   lastMonthTotal: number;
   topCategories: { name: string; total: number }[];
+  // The single biggest category swing from last month, if one clears the
+  // noise threshold (see findNotableCategorySwing in dashboard.ts) -- null
+  // when nothing moved enough to be worth calling out specifically.
+  notableSwing?: { name: string; thisMonthTotal: number; lastMonthTotal: number } | null;
 }): Promise<string | null> {
   try {
+    const swingLine = params.notableSwing
+      ? ` Notably, ${params.notableSwing.name} went from $${params.notableSwing.lastMonthTotal.toFixed(2)} to $${params.notableSwing.thisMonthTotal.toFixed(2)} -- mention this specific swing if it fits naturally, otherwise just compare the overall totals.`
+      : '';
     const result = (await callGemini(
-      `Write a single short, friendly sentence (max 25 words) summarizing this person's spending this month compared to last month. Do not use a dash or hyphen anywhere in the sentence; use separate sentences or "and"/"but" instead. This month: $${params.thisMonthTotal.toFixed(2)}. Last month: $${params.lastMonthTotal.toFixed(2)}. Top categories this month: ${params.topCategories.map((c) => `${c.name} $${c.total.toFixed(2)}`).join(', ') || 'none yet'}.`,
+      `Write a single short, friendly sentence (max 25 words) summarizing this person's spending this month compared to last month. Do not use a dash or hyphen anywhere in the sentence; use separate sentences or "and"/"but" instead. This month: $${params.thisMonthTotal.toFixed(2)}. Last month: $${params.lastMonthTotal.toFixed(2)}. Top categories this month: ${params.topCategories.map((c) => `${c.name} $${c.total.toFixed(2)}`).join(', ') || 'none yet'}.${swingLine}`,
       {
         type: 'object',
         properties: { summary: { type: 'string' } },
