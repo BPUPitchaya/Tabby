@@ -6,6 +6,7 @@
 // "bill reminders" was deliberately cut from v1 since it has no data model
 // yet -- only ship sources that already have one).
 import { Feather } from '@expo/vector-icons';
+import { useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -15,11 +16,13 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { type Bill } from '@/lib/bills';
 import { type MyBillSplitShare, type OwedToMeShare } from '@/lib/bill-splits';
 import { type FriendRequest } from '@/lib/friendships';
 
@@ -36,6 +39,8 @@ export function NotificationsModal({
   pendingPayday,
   paydayAmount,
   paydayBusy,
+  pendingBills,
+  billBusyId,
   onRespondRequest,
   onRespondShare,
   onRemindInApp,
@@ -43,6 +48,9 @@ export function NotificationsModal({
   onMarkPaid,
   onConfirmPayday,
   onDeclinePayday,
+  onConfirmBill,
+  onDeclineBill,
+  onSkipBill,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -54,6 +62,8 @@ export function NotificationsModal({
   pendingPayday: string | null;
   paydayAmount: number;
   paydayBusy: boolean;
+  pendingBills: (Bill & { dueDate: string })[];
+  billBusyId: string | null;
   onRespondRequest: (id: string, accept: boolean) => void;
   onRespondShare: (id: string, accept: boolean) => void;
   onRemindInApp: (share: OwedToMeShare) => void;
@@ -61,13 +71,18 @@ export function NotificationsModal({
   onMarkPaid: (shareId: string) => void;
   onConfirmPayday: () => void;
   onDeclinePayday: () => void;
+  onConfirmBill: (bill: Bill & { dueDate: string }, amount: number) => void;
+  onDeclineBill: (bill: Bill & { dueDate: string }) => void;
+  onSkipBill: (bill: Bill & { dueDate: string }) => void;
 }) {
   const isDark = useColorScheme() === 'dark';
+  const [billAmountDrafts, setBillAmountDrafts] = useState<Record<string, string>>({});
   const isEmpty =
     incoming.length === 0 &&
     proposedShares.length === 0 &&
     overdueShares.length === 0 &&
     reminders.length === 0 &&
+    pendingBills.length === 0 &&
     !pendingPayday;
 
   const presentOverdueActions = (share: OwedToMeShare) => {
@@ -171,6 +186,78 @@ export function NotificationsModal({
                         </Text>
                       </Pressable>
                     </View>
+                  </View>
+                </View>
+              )}
+
+              {pendingBills.length > 0 && (
+                <View className="gap-2">
+                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide">
+                    BILLS
+                  </Text>
+                  <View className="gap-1.5">
+                    {pendingBills.map((bill) => {
+                      const busy = billBusyId === bill.id;
+                      const draft = billAmountDrafts[bill.id] ?? '';
+                      const confirmAmount = bill.isVariable ? parseFloat(draft) : (bill.amount ?? 0);
+                      const canConfirm = !isNaN(confirmAmount) && confirmAmount > 0;
+                      return (
+                        <View
+                          key={bill.id}
+                          className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-tabby-400 dark:border-tabby-200 gap-2"
+                        >
+                          <Text className="font-nunito-medium dark:text-white">
+                            {bill.name} is due {bill.dueDate}
+                            {!bill.isVariable && ` · $${(bill.amount ?? 0).toFixed(2)}`}
+                          </Text>
+                          {bill.isVariable && (
+                            <TextInput
+                              value={draft}
+                              onChangeText={(text) => setBillAmountDrafts((d) => ({ ...d, [bill.id]: text }))}
+                              placeholder="How much was it?"
+                              keyboardType="decimal-pad"
+                              className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
+                            />
+                          )}
+                          <View className="flex-row gap-2">
+                            <Pressable
+                              onPress={() => onConfirmBill(bill, confirmAmount)}
+                              disabled={busy || !canConfirm}
+                              style={pressFeedback}
+                              className={`flex-1 items-center py-1.5 rounded-lg ${canConfirm ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-300 dark:bg-tabby-700'}`}
+                            >
+                              {busy ? (
+                                <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                              ) : (
+                                <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
+                                  Yes, log it
+                                </Text>
+                              )}
+                            </Pressable>
+                            <Pressable
+                              onPress={() => onDeclineBill(bill)}
+                              disabled={busy}
+                              style={pressFeedback}
+                              className="flex-1 items-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
+                            >
+                              <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">
+                                Not yet
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => onSkipBill(bill)}
+                              disabled={busy}
+                              style={pressFeedback}
+                              className="px-3 items-center justify-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
+                            >
+                              <Text className="font-nunito-semibold text-sm text-gray-500 dark:text-tabby-300">
+                                Skip
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               )}

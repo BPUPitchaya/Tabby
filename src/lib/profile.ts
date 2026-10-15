@@ -312,11 +312,15 @@ export function getNextPaydayDate(
   return computeIncomeCycle(settings, now)?.endDate ?? null;
 }
 
-export async function confirmPayday(userId: string, paydayDate: string) {
-  const { error } = await supabase
-    .from('income_settings')
-    .update({ last_confirmed_payday: paydayDate })
-    .eq('user_id', userId);
+// Atomic -- logs the income transaction AND advances last_confirmed_payday
+// in one Postgres function call, so a crash/kill mid-confirm can't leave
+// the two out of sync. See confirm_bill_payment/skip_bill_payment for the
+// same pattern (and why it matters) in bills.ts.
+export async function confirmPaydayPayment(amount: number, paydayDate: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_payday_payment', {
+    p_amount: amount,
+    p_payday_date: paydayDate,
+  });
   if (error) throw error;
 }
 
@@ -343,6 +347,7 @@ export async function fetchIncomeProgress(userId: string): Promise<IncomeProgres
     .select('amount')
     .eq('user_id', userId)
     .eq('is_income', false)
+    .eq('skipped', false) // a skipped bill is logged for history, not counted against budget
     .gte('occurred_at', cycle.startDate)
     .lt('occurred_at', cycle.endDate);
 
