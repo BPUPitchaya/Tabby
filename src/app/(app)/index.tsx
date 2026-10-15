@@ -33,6 +33,20 @@ import { NotificationsModal } from '@/components/notifications-modal';
 import { PayScheduleModal } from '@/components/pay-schedule-modal';
 import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
 import { useAuth } from '@/lib/auth-context';
+import {
+  cancelBillFollowUp,
+  requestBillNotificationPermission,
+  scheduleBillFollowUp,
+  scheduleBillReminder,
+} from '@/lib/bill-notifications';
+import {
+  confirmBillPayment,
+  fetchBills,
+  getNextBillDueDate,
+  getPendingBillDue,
+  skipBillPayment,
+  type Bill,
+} from '@/lib/bills';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
 import { fetchDashboardData, type DashboardData, type DashboardPeriod } from '@/lib/dashboard';
 import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
@@ -42,10 +56,9 @@ import {
   schedulePaydayReminder,
 } from '@/lib/payday-notifications';
 import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
-import { addTransaction } from '@/lib/transactions';
 import {
   computeIncomeCycle,
-  confirmPayday,
+  confirmPaydayPayment,
   fetchIncomeProgress,
   fetchIncomeSettings,
   fetchMyPaymentDetails,
@@ -305,6 +318,8 @@ export default function HomeScreen() {
   const [incomeSettings, setIncomeSettings] = useState<IncomeSettings | null>(null);
   const [pendingPayday, setPendingPayday] = useState<string | null>(null);
   const [paydayBusy, setPaydayBusy] = useState(false);
+  const [pendingBills, setPendingBills] = useState<(Bill & { dueDate: string })[]>([]);
+  const [billBusyId, setBillBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -352,18 +367,25 @@ export default function HomeScreen() {
   const loadNotifications = useCallback(async () => {
     if (!userId) return;
     try {
-      const [incoming, shares, owedToMe, myReminders, paymentDetails] = await Promise.all([
+      const [incoming, shares, owedToMe, myReminders, paymentDetails, bills] = await Promise.all([
         fetchIncomingRequests(userId),
         fetchMyProposedShares(userId),
         fetchOwedToMe(userId),
         fetchMyReminders(userId),
         fetchMyPaymentDetails(userId),
+        fetchBills(userId),
       ]);
       setIncomingRequests(incoming);
       setProposedShares(shares);
       setOverdueShares(owedToMe.filter(isOverdue));
       setReminders(myReminders);
       setMyPaymentDetails(paymentDetails);
+      setPendingBills(
+        bills.flatMap((bill) => {
+          const dueDate = getPendingBillDue(bill);
+          return dueDate ? [{ ...bill, dueDate }] : [];
+        }),
+      );
     } catch {
       // the badge just stays at its last known count -- not worth surfacing
       // a dashboard-wide error banner for a secondary, non-blocking feature
@@ -426,15 +448,7 @@ export default function HomeScreen() {
     if (!userId || !incomeSettings || !pendingPayday) return;
     setPaydayBusy(true);
     try {
-      await addTransaction({
-        userId,
-        amount: incomeSettings.amount,
-        description: 'Pay',
-        categoryId: null,
-        occurredAt: pendingPayday,
-        isIncome: true,
-      });
-      await confirmPayday(userId, pendingPayday);
+      await confirmPaydayPayment(incomeSettings.amount, pendingPayday);
       await cancelPaydayFollowUp().catch(() => {});
       const nextPayday = getNextPaydayDate(incomeSettings);
       if (nextPayday) await schedulePaydayReminder(nextPayday).catch(() => {});
@@ -449,6 +463,44 @@ export default function HomeScreen() {
   // re-asked later. Only the 12h follow-up reminder changes.
   const handleDeclinePayday = async () => {
     await schedulePaydayFollowUp().catch(() => {});
+  };
+
+  const rescheduleBillReminder = async (bill: Bill) => {
+    const nextDue = getNextBillDueDate(bill);
+    if (!nextDue) return;
+    const granted = await requestBillNotificationPermission();
+    if (granted) await scheduleBillReminder(bill.id, bill.name, nextDue);
+  };
+
+  // amount is required for a variable bill (entered inline in the bell),
+  // ignored for a fixed one (the bill's own stored amount is used instead).
+  const handleConfirmBill = async (bill: Bill & { dueDate: string }, amount: number) => {
+    setBillBusyId(bill.id);
+    try {
+      await confirmBillPayment(bill.id, amount, bill.dueDate);
+      await cancelBillFollowUp(bill.id).catch(() => {});
+      await rescheduleBillReminder(bill).catch(() => {});
+      await Promise.all([load(), loadNotifications()]);
+    } finally {
+      setBillBusyId(null);
+    }
+  };
+
+  // Same as payday's decline -- stays pending, re-asked after the follow-up.
+  const handleDeclineBill = async (bill: Bill & { dueDate: string }) => {
+    await scheduleBillFollowUp(bill.id, bill.name).catch(() => {});
+  };
+
+  const handleSkipBill = async (bill: Bill & { dueDate: string }) => {
+    setBillBusyId(bill.id);
+    try {
+      await skipBillPayment(bill.id, bill.dueDate);
+      await cancelBillFollowUp(bill.id).catch(() => {});
+      await rescheduleBillReminder(bill).catch(() => {});
+      await Promise.all([load(), loadNotifications()]);
+    } finally {
+      setBillBusyId(null);
+    }
   };
 
   if (loading) {
@@ -516,6 +568,7 @@ export default function HomeScreen() {
               proposedShares.length +
               overdueShares.length +
               reminders.length +
+              pendingBills.length +
               (pendingPayday ? 1 : 0) >
               0 && (
               <View className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 items-center justify-center">
@@ -524,6 +577,7 @@ export default function HomeScreen() {
                     proposedShares.length +
                     overdueShares.length +
                     reminders.length +
+                    pendingBills.length +
                     (pendingPayday ? 1 : 0)}
                 </Text>
               </View>
@@ -630,6 +684,8 @@ export default function HomeScreen() {
         pendingPayday={pendingPayday}
         paydayAmount={incomeSettings?.amount ?? 0}
         paydayBusy={paydayBusy}
+        pendingBills={pendingBills}
+        billBusyId={billBusyId}
         onRespondRequest={handleRespondRequest}
         onRespondShare={handleRespondShare}
         onRemindInApp={handleRemindInApp}
@@ -637,6 +693,9 @@ export default function HomeScreen() {
         onMarkPaid={handleMarkPaid}
         onConfirmPayday={handleConfirmPayday}
         onDeclinePayday={handleDeclinePayday}
+        onConfirmBill={handleConfirmBill}
+        onDeclineBill={handleDeclineBill}
+        onSkipBill={handleSkipBill}
       />
     </SafeAreaView>
   );

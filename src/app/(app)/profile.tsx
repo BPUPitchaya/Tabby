@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BillsModal } from '@/components/bills-modal';
 import { EditProfileModal } from '@/components/edit-profile-modal';
 import { FlatSettingsModal } from '@/components/flat-settings-modal';
 import { FriendsModal } from '@/components/friends-modal';
@@ -38,7 +39,8 @@ function ListRow({
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
       accessibilityRole="button"
       accessibilityLabel={label}
-      className={`flex-row items-center gap-3 py-3.5 px-4 ${!isLast ? 'border-b border-gray-100 dark:border-tabby-700' : ''}`}>
+      className={`flex-row items-center gap-3 py-3.5 px-4 ${!isLast ? 'border-b border-gray-100 dark:border-tabby-700' : ''}`}
+    >
       <Feather name={icon} size={18} color={isDark ? '#E8C39E' : '#374151'} />
       <Text className="flex-1 font-nunito-medium text-gray-800 dark:text-white">{label}</Text>
       <Feather name="chevron-right" size={18} color={isDark ? '#6B4420' : '#d1d5db'} />
@@ -54,6 +56,7 @@ export default function ProfileScreen() {
   const [showFlatSettings, setShowFlatSettings] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [showMoneyOwing, setShowMoneyOwing] = useState(false);
+  const [showBills, setShowBills] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
   const handleSignOut = () => {
@@ -73,15 +76,17 @@ export default function ProfileScreen() {
         <View className="flex-row items-center gap-4">
           <View
             className="w-16 h-16 rounded-full items-center justify-center"
-            style={{ backgroundColor: '#BEE3F8' }}>
-            <Image
-              source={require('@/assets/images/splash-icon.png')}
-              style={{ width: 44, height: 44 }}
-            />
+            style={{ backgroundColor: '#BEE3F8' }}
+          >
+            <Image source={require('@/assets/images/splash-icon.png')} style={{ width: 44, height: 44 }} />
           </View>
           <View className="flex-1">
-            <Text className="font-nunito-bold text-xl dark:text-white">{session?.user.email?.split('@')[0]}</Text>
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">{session?.user.email}</Text>
+            <Text className="font-nunito-bold text-xl dark:text-white">
+              {session?.user.email?.split('@')[0]}
+            </Text>
+            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+              {session?.user.email}
+            </Text>
           </View>
         </View>
 
@@ -104,7 +109,14 @@ export default function ProfileScreen() {
               onPress={() => setShowMoneyOwing(true)}
               isDark={isDark}
             />
-            <ListRow icon="settings" label="Settings" onPress={() => setShowSettings(true)} isLast isDark={isDark} />
+            <ListRow icon="calendar" label="Bills" onPress={() => setShowBills(true)} isDark={isDark} />
+            <ListRow
+              icon="settings"
+              label="Settings"
+              onPress={() => setShowSettings(true)}
+              isLast
+              isDark={isDark}
+            />
           </View>
         </View>
 
@@ -113,7 +125,12 @@ export default function ProfileScreen() {
             LEGAL
           </Text>
           <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700">
-            <ListRow icon="shield" label="Privacy Policy" onPress={() => setLegalDoc(PRIVACY_POLICY)} isDark={isDark} />
+            <ListRow
+              icon="shield"
+              label="Privacy Policy"
+              onPress={() => setLegalDoc(PRIVACY_POLICY)}
+              isDark={isDark}
+            />
             <ListRow
               icon="file-text"
               label="Terms of Service"
@@ -131,12 +148,15 @@ export default function ProfileScreen() {
           style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
           accessibilityRole="button"
           accessibilityLabel="Sign Out"
-          className="flex-row items-center gap-3 px-4">
+          className="flex-row items-center gap-3 px-4"
+        >
           <Feather name="log-out" size={18} color="#ef4444" />
           <Text className="font-nunito-medium text-red-500 dark:text-red-400">Sign Out</Text>
         </Pressable>
 
-        <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300 text-xs mt-auto">Tabby v1.0.0</Text>
+        <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300 text-xs mt-auto">
+          Tabby v1.0.0
+        </Text>
       </View>
 
       <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
@@ -145,6 +165,7 @@ export default function ProfileScreen() {
       <FlatSettingsModal visible={showFlatSettings} onClose={() => setShowFlatSettings(false)} />
       <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} />
       <MoneyOwingModal visible={showMoneyOwing} onClose={() => setShowMoneyOwing(false)} />
+      <BillsModal visible={showBills} onClose={() => setShowBills(false)} />
     </SafeAreaView>
   );
 }
