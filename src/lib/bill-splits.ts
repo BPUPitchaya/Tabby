@@ -22,6 +22,29 @@ export type DraftShare = {
   amount: number;
 };
 
+// Resolves an AI-detected participant name (from quick-add text or a
+// scanned receipt) against the user's actual friends/flatmates, so "split
+// dinner $200 with Sarah" links the real Sarah instead of always creating
+// an untracked guest with the same name. Matches on full display name or
+// first name, case-insensitive; an ambiguous match (two people named
+// Sarah) falls back to null (treated as a guest) rather than guessing
+// which account is meant.
+export function matchKnownParticipant(
+  name: string,
+  knownPeople: { userId: string; label: string }[],
+): { userId: string; label: string } | null {
+  const needle = name.trim().toLowerCase();
+  if (!needle) return null;
+
+  const matches = knownPeople.filter((p) => {
+    const label = p.label.trim().toLowerCase();
+    const firstName = label.split(/\s+/)[0];
+    return label === needle || firstName === needle;
+  });
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export async function findUserIdByEmail(email: string): Promise<string | null> {
   const { data, error } = await supabase.rpc('find_user_id_by_email', { target_email: email.trim() });
   if (error) throw error;
