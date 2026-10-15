@@ -5,11 +5,13 @@ import { Alert, Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillsModal } from '@/components/bills-modal';
+import { BudgetModal } from '@/components/budget-modal';
 import { EditProfileModal } from '@/components/edit-profile-modal';
 import { FlatSettingsModal } from '@/components/flat-settings-modal';
 import { FriendsModal } from '@/components/friends-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { MoneyOwingModal } from '@/components/money-owing-modal';
+import { PayScheduleModal } from '@/components/pay-schedule-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
@@ -57,6 +59,8 @@ export default function ProfileScreen() {
   const [showFriends, setShowFriends] = useState(false);
   const [showMoneyOwing, setShowMoneyOwing] = useState(false);
   const [showBills, setShowBills] = useState(false);
+  const [showBudget, setShowBudget] = useState(false);
+  const [showPaySchedule, setShowPaySchedule] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
   const handleSignOut = () => {
@@ -110,6 +114,7 @@ export default function ProfileScreen() {
               isDark={isDark}
             />
             <ListRow icon="calendar" label="Bills" onPress={() => setShowBills(true)} isDark={isDark} />
+            <ListRow icon="pie-chart" label="Budget" onPress={() => setShowBudget(true)} isDark={isDark} />
             <ListRow
               icon="settings"
               label="Settings"
@@ -166,6 +171,15 @@ export default function ProfileScreen() {
       <FriendsModal visible={showFriends} onClose={() => setShowFriends(false)} />
       <MoneyOwingModal visible={showMoneyOwing} onClose={() => setShowMoneyOwing(false)} />
       <BillsModal visible={showBills} onClose={() => setShowBills(false)} />
+      <BudgetModal
+        visible={showBudget}
+        onClose={() => setShowBudget(false)}
+        onNeedsPaySchedule={() => {
+          setShowBudget(false);
+          setShowPaySchedule(true);
+        }}
+      />
+      <PayScheduleModal visible={showPaySchedule} onClose={() => setShowPaySchedule(false)} />
     </SafeAreaView>
   );
 }
