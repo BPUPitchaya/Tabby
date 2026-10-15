@@ -472,11 +472,14 @@ export default function HomeScreen() {
     await loadNotifications();
   };
 
-  const handleConfirmPayday = async () => {
+  // `amount` comes from the bell's own editable field, prefilled from
+  // incomeSettings.amount but not locked to it -- an hourly/variable
+  // payday is rarely exactly the configured expected figure.
+  const handleConfirmPayday = async (amount: number) => {
     if (!userId || !incomeSettings || !pendingPayday) return;
     setPaydayBusy(true);
     try {
-      await confirmPaydayPayment(incomeSettings.amount, pendingPayday);
+      await confirmPaydayPayment(amount, pendingPayday);
       await cancelPaydayFollowUp().catch(() => {});
       const nextPayday = getNextPaydayDate(incomeSettings);
       if (nextPayday) await schedulePaydayReminder(nextPayday).catch(() => {});
