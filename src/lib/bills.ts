@@ -19,10 +19,11 @@ export type Bill = {
 };
 
 // Past this many active bills, scheduling local notifications risks
-// bumping into iOS's system-wide 64-pending-notification cap (2 per bill --
-// reminder + possible follow-up). A soft warning, not a hard block --
-// see bills-modal.tsx.
-export const BILL_COUNT_SOFT_CAP = 20;
+// bumping into iOS's system-wide 64-pending-notification cap -- up to 4
+// per bill now (due reminder + up to 3 daily overdue nudges, see
+// bill-notifications.ts), plus a possible manual follow-up. A soft
+// warning, not a hard block -- see bills-modal.tsx.
+export const BILL_COUNT_SOFT_CAP = 10;
 
 function fromRow(row: {
   id: string;
@@ -156,6 +157,34 @@ export function getNextBillDueDate(
       now,
     )?.endDate ?? null
   );
+}
+
+// The date a bill-preview row should show and sort by -- whichever is more
+// urgent: an already-due/overdue cycle takes priority over the next
+// scheduled one, since it needs resolving first. Used by the Home screen's
+// Bills strip (soonest bills first).
+export function getRelevantBillDate(
+  bill: Pick<Bill, 'frequency' | 'payWeekday' | 'dayOfMonth' | 'lastConfirmedDate'>,
+  now: Date = new Date(),
+): string | null {
+  return getPendingBillDue(bill, now) ?? getNextBillDueDate(bill, now);
+}
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Human-readable relative label for a due date -- "Overdue" (already past
+// due and unconfirmed), "Due today"/"Due tomorrow", the weekday name within
+// the next week, else a short date.
+export function formatDueLabel(dueDate: string, now: Date = new Date()): string {
+  const due = new Date(`${dueDate}T00:00:00`);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+
+  if (diffDays < 0) return 'Overdue';
+  if (diffDays === 0) return 'Due today';
+  if (diffDays === 1) return 'Due tomorrow';
+  if (diffDays <= 6) return `Due ${WEEKDAY_NAMES[due.getDay()]}`;
+  return `Due ${due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
 // Both writes (transaction insert + last_confirmed_date advance) happen
