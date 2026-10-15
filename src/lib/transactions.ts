@@ -77,6 +77,31 @@ export async function fetchTransactions(userId: string) {
   return data as unknown as Transaction[];
 }
 
+// Exactly one category, within exactly one date range -- used by Budget's
+// "what did I spend this on" drill-down (budget-modal.tsx), which needs
+// the real pay-cycle window, not an approximation like a calendar month.
+export async function fetchTransactionsForCategoryInRange(
+  userId: string,
+  categoryId: string,
+  startDate: string,
+  endDate: string,
+): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select(
+      'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type)',
+    )
+    .eq('user_id', userId)
+    .eq('category_id', categoryId)
+    .gte('occurred_at', startDate)
+    .lt('occurred_at', endDate)
+    .order('occurred_at', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as unknown as Transaction[];
+}
+
 // Powers merchant autocomplete: your own past merchant names, most
 // recently used first, deduped. No external lookup -- just your own data.
 export async function fetchRecentMerchants(userId: string, limit = 8): Promise<string[]> {

@@ -338,6 +338,48 @@ export type IncomeProgress = {
   isDerivedFromCategories: boolean;
 };
 
+export type OverspendPrediction = {
+  projectedTotal: number;
+  overBy: number;
+};
+
+// Projects end-of-cycle spend from the current pace (spent so far / days
+// elapsed * total days in the cycle) and flags it only when that
+// projection would meaningfully clear the budget -- not the actual
+// percentage so far, which the existing progress bar already shows.
+// Deliberately conservative: nothing on day 1 (too noisy to project from
+// a single day), nothing once already over budget (the bar already says
+// so), and a 10%-over-budget floor so a projection that's merely a few
+// dollars over isn't presented as if it were a warning.
+export function getOverspendPrediction(
+  progress: Pick<IncomeProgress, 'cycle' | 'budgetAmount' | 'spent'>,
+  now: Date = new Date(),
+): OverspendPrediction | null {
+  if (progress.budgetAmount <= 0) return null;
+
+  const start = new Date(`${progress.cycle.startDate}T00:00:00`);
+  const end = new Date(`${progress.cycle.endDate}T00:00:00`);
+  const totalDays = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+  if (totalDays <= 0) return null;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const elapsedDaysRaw = Math.round((today.getTime() - start.getTime()) / 86_400_000) + 1; // inclusive of today
+  const elapsedDays = Math.min(Math.max(elapsedDaysRaw, 1), totalDays);
+  if (elapsedDays < 2) return null;
+
+  const pctSoFar = progress.spent / progress.budgetAmount;
+  if (pctSoFar >= 1) return null; // already over -- the actual bar already shows this
+
+  const projectedTotal = (progress.spent / elapsedDays) * totalDays;
+  const overBy = projectedTotal - progress.budgetAmount;
+  if (overBy < progress.budgetAmount * 0.1) return null;
+
+  return {
+    projectedTotal: Math.round(projectedTotal * 100) / 100,
+    overBy: Math.round(overBy * 100) / 100,
+  };
+}
+
 // null whenever there's nothing to show progress against -- no income set
 // up at all, and neither an overall budget nor any category budgets
 // chosen yet (the Budget cell falls back to "Set it" in that case).

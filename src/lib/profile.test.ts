@@ -3,7 +3,7 @@
 // as flats.test.ts and dashboard.test.ts. Stubbed out since these tests
 // only touch the pure computeIncomeCycle function, which never calls
 // supabase.
-import { computeIncomeCycle, getNextPaydayDate, getPendingPayday } from './profile';
+import { computeIncomeCycle, getNextPaydayDate, getOverspendPrediction, getPendingPayday } from './profile';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -117,5 +117,40 @@ describe('getNextPaydayDate', () => {
     const now = new Date(2026, 9, 15); // Thu Oct 15, 2026
     const result = getNextPaydayDate({ frequency: 'weekly', payWeekday: 1, payDayOfMonth: null }, now);
     expect(result).toBe('2026-10-19');
+  });
+});
+
+describe('getOverspendPrediction', () => {
+  // A 10-day cycle, Oct 1 (inclusive) to Oct 11 (exclusive) -- 5 days
+  // elapsed by "now" makes the math easy to check by hand.
+  const cycle = { startDate: '2026-10-01', endDate: '2026-10-11' };
+  const now = new Date(2026, 9, 5); // Oct 5 -- day 5 of 10
+
+  it('projects spend forward from the current daily pace', () => {
+    // $50 spent over 5 days -> $10/day -> $100 projected over 10 days
+    const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 50 }, now);
+    expect(result).toEqual({ projectedTotal: 100, overBy: 20 });
+  });
+
+  it('returns null when the projection is under the 10%-over floor', () => {
+    // $42/5 days -> $84 projected on an $80 budget -- only 5% over
+    const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 42 }, now);
+    expect(result).toBeNull();
+  });
+
+  it('returns null once already over budget -- the actual bar already shows that', () => {
+    const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 90 }, now);
+    expect(result).toBeNull();
+  });
+
+  it('returns null on day 1 of the cycle -- too little data to project from', () => {
+    const dayOne = new Date(2026, 9, 1);
+    const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 30 }, dayOne);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when no budget is set', () => {
+    const result = getOverspendPrediction({ cycle, budgetAmount: 0, spent: 50 }, now);
+    expect(result).toBeNull();
   });
 });
