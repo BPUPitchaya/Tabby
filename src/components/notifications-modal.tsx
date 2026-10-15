@@ -6,7 +6,7 @@
 // "bill reminders" was deliberately cut from v1 since it has no data model
 // yet -- only ship sources that already have one).
 import { Feather } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -69,7 +69,7 @@ export function NotificationsModal({
   onRemindInApp: (share: OwedToMeShare) => void;
   onRemindViaMessage: (share: OwedToMeShare) => void;
   onMarkPaid: (shareId: string) => void;
-  onConfirmPayday: () => void;
+  onConfirmPayday: (amount: number) => void;
   onDeclinePayday: () => void;
   onConfirmBill: (bill: Bill & { dueDate: string }, amount: number) => void;
   onDeclineBill: (bill: Bill & { dueDate: string }) => void;
@@ -77,6 +77,17 @@ export function NotificationsModal({
 }) {
   const isDark = useColorScheme() === 'dark';
   const [billAmountDrafts, setBillAmountDrafts] = useState<Record<string, string>>({});
+  // Prefilled from the expected amount, but editable -- an hourly/variable
+  // payday is rarely exactly what was configured, and the old flow had no
+  // way to log anything else (see Phase 0 of the income-sources plan).
+  const [paydayAmountDraft, setPaydayAmountDraft] = useState<string | null>(null);
+
+  // Re-seed the draft from the newly expected amount whenever the pending
+  // payday itself changes (a new cycle, or the prompt clearing) -- without
+  // this, editing one payday's amount would leak into the next one.
+  useEffect(() => {
+    setPaydayAmountDraft(null);
+  }, [pendingPayday]);
   const isEmpty =
     incoming.length === 0 &&
     proposedShares.length === 0 &&
@@ -158,11 +169,21 @@ export function NotificationsModal({
                   </Text>
                   <View className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-tabby-400 dark:border-tabby-200 gap-2">
                     <Text className="font-nunito-medium dark:text-white">
-                      Did you get paid on {pendingPayday}? ${paydayAmount.toFixed(2)} expected.
+                      Did you get paid on {pendingPayday}?
                     </Text>
+                    <TextInput
+                      value={paydayAmountDraft ?? paydayAmount.toFixed(2)}
+                      onChangeText={setPaydayAmountDraft}
+                      placeholder="Amount"
+                      keyboardType="decimal-pad"
+                      className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
+                    />
                     <View className="flex-row gap-2">
                       <Pressable
-                        onPress={onConfirmPayday}
+                        onPress={() => {
+                          const parsed = parseFloat(paydayAmountDraft ?? String(paydayAmount));
+                          onConfirmPayday(isNaN(parsed) || parsed <= 0 ? paydayAmount : parsed);
+                        }}
                         disabled={paydayBusy}
                         style={pressFeedback}
                         className="flex-1 items-center py-1.5 rounded-lg bg-tabby-600 dark:bg-white"
