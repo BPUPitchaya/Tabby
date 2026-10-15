@@ -98,7 +98,8 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
           disabled={submitting}
           style={pressFeedback}
           className="bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
-          accessibilityRole="button">
+          accessibilityRole="button"
+        >
           <Text className="font-nunito-semibold text-white dark:text-tabby-900">Create Flat</Text>
         </Pressable>
       </View>
@@ -117,13 +118,16 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
           disabled={submitting}
           style={pressFeedback}
           className="bg-gray-800 dark:bg-tabby-700 rounded-lg py-3 items-center"
-          accessibilityRole="button">
+          accessibilityRole="button"
+        >
           <Text className="font-nunito-semibold text-white">Join Flat</Text>
         </Pressable>
       </View>
 
       {submitting && <ActivityIndicator />}
-      {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>}
+      {error && (
+        <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>
+      )}
     </SafeAreaView>
   );
 }
@@ -192,9 +196,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
   const toggleMember = (userIdToToggle: string) => {
     setSelectedMemberIds((prev) =>
-      prev.includes(userIdToToggle)
-        ? prev.filter((id) => id !== userIdToToggle)
-        : [...prev, userIdToToggle]
+      prev.includes(userIdToToggle) ? prev.filter((id) => id !== userIdToToggle) : [...prev, userIdToToggle],
     );
   };
 
@@ -205,7 +207,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     try {
       const parsed = await parseNaturalLanguageExpenses(quickAddText, []);
       if (!parsed) {
-        setError('AI is briefly unavailable -- try again in a moment, or fill in the fields below.');
+        setError('AI is briefly unavailable. Try again in a moment, or fill in the fields below.');
         return;
       }
       setAiPreview(parsed);
@@ -302,22 +304,26 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   };
 
   const handleDeleteExpense = (e: SharedExpense) => {
-    Alert.alert('Delete this expense?', `"${e.description || 'Shared expense'}" will be removed and balances recalculated.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteSharedExpense(e.id);
-            if (editingExpenseId === e.id) resetExpenseForm();
-            await load();
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to delete shared expense.');
-          }
+    Alert.alert(
+      'Delete this expense?',
+      `"${e.description || 'Shared expense'}" will be removed and balances recalculated.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteSharedExpense(e.id);
+              if (editingExpenseId === e.id) resetExpenseForm();
+              await load();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to delete shared expense.');
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const handleSettle = async (balance: Balance) => {
@@ -427,7 +433,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -451,15 +457,17 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               <View>
                 <Text className="font-nunito-bold text-2xl dark:text-white">{flat.name}</Text>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  Invite code: <Text className="font-mono font-semibold dark:text-white">{flat.invite_code}</Text>{' '}
-                  · {members.length} member{members.length === 1 ? '' : 's'}
+                  Invite code:{' '}
+                  <Text className="font-mono font-semibold dark:text-white">{flat.invite_code}</Text> ·{' '}
+                  {members.length} member{members.length === 1 ? '' : 's'}
                 </Text>
               </View>
               <Pressable
                 onPress={() => setShowSettings((v) => !v)}
                 style={pressFeedback}
                 accessibilityRole="button"
-                accessibilityLabel="Flat settings">
+                accessibilityLabel="Flat settings"
+              >
                 <Text className="font-nunito-semibold text-tabby-600 dark:text-white text-sm">
                   {showSettings ? 'Close' : 'Settings'}
                 </Text>
@@ -471,7 +479,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               style={pressFeedback}
               className="bg-gray-800 dark:bg-tabby-700 rounded-lg py-2.5 items-center"
               accessibilityRole="button"
-              accessibilityLabel="Share invite">
+              accessibilityLabel="Share invite"
+            >
               <Text className="font-nunito-semibold text-white">Share Invite</Text>
             </Pressable>
 
@@ -497,7 +506,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       style={pressFeedback}
                       className="bg-tabby-600 dark:bg-white rounded-lg px-4 items-center justify-center"
                       accessibilityRole="button"
-                      accessibilityLabel="Add member by email">
+                      accessibilityLabel="Add member by email"
+                    >
                       <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">Add</Text>
                     </Pressable>
                   </View>
@@ -518,8 +528,11 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                         style={pressFeedback}
                         className="bg-tabby-600 dark:bg-white rounded-lg px-4 items-center justify-center"
                         accessibilityRole="button"
-                        accessibilityLabel="Save flat name">
-                        <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">Save</Text>
+                        accessibilityLabel="Save flat name"
+                      >
+                        <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">
+                          Save
+                        </Text>
                       </Pressable>
                     </View>
                   </View>
@@ -531,8 +544,11 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   style={pressFeedback}
                   className="py-2"
                   accessibilityRole="button"
-                  accessibilityLabel="Leave flat">
-                  <Text className="font-nunito-semibold text-red-500 dark:text-red-400 text-sm">Leave Flat</Text>
+                  accessibilityLabel="Leave flat"
+                >
+                  <Text className="font-nunito-semibold text-red-500 dark:text-red-400 text-sm">
+                    Leave Flat
+                  </Text>
                 </Pressable>
 
                 {isAdmin && (
@@ -542,8 +558,11 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                     style={pressFeedback}
                     className="py-2"
                     accessibilityRole="button"
-                    accessibilityLabel="Delete flat">
-                    <Text className="font-nunito-semibold text-red-700 dark:text-red-400 text-sm">Delete Flat</Text>
+                    accessibilityLabel="Delete flat"
+                  >
+                    <Text className="font-nunito-semibold text-red-700 dark:text-red-400 text-sm">
+                      Delete Flat
+                    </Text>
                   </Pressable>
                 )}
 
@@ -565,7 +584,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       : health.score >= 50
                         ? 'bg-yellow-50 dark:bg-yellow-950'
                         : 'bg-red-50 dark:bg-red-950'
-                }`}>
+                }`}
+              >
                 <View
                   className={`w-20 h-20 rounded-full items-center justify-center ${
                     health.score >= 90
@@ -575,11 +595,15 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                         : health.score >= 50
                           ? 'bg-yellow-500'
                           : 'bg-red-500'
-                  }`}>
+                  }`}
+                >
                   <Text
                     className={`font-nunito-extrabold text-2xl ${
-                      health.score >= 70 && health.score < 90 ? 'text-white dark:text-tabby-900' : 'text-white'
-                    }`}>
+                      health.score >= 70 && health.score < 90
+                        ? 'text-white dark:text-tabby-900'
+                        : 'text-white'
+                    }`}
+                  >
                     {health.score}
                   </Text>
                 </View>
@@ -587,8 +611,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">Flat Health</Text>
                   <Text className="font-nunito-bold text-xl dark:text-white">{health.label}</Text>
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs mt-1">
-                    ${health.totalOutstanding.toFixed(2)} unsettled of $
-                    {health.totalSpend.toFixed(2)} total shared spend
+                    ${health.totalOutstanding.toFixed(2)} unsettled of ${health.totalSpend.toFixed(2)} total
+                    shared spend
                   </Text>
                 </View>
               </View>
@@ -612,7 +636,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   style={pressFeedback}
                   className="bg-gray-800 dark:bg-tabby-700 rounded-lg px-4 items-center justify-center"
                   accessibilityRole="button"
-                  accessibilityLabel="Add with AI">
+                  accessibilityLabel="Add with AI"
+                >
                   {aiBusy ? (
                     <ActivityIndicator color="white" size="small" />
                   ) : (
@@ -646,14 +671,18 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       onPress={() => toggleMember(m.user_id)}
                       style={pressFeedback}
                       className={`px-3 py-1.5 rounded-full border ${
-                        selected ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white' : 'border-gray-300 dark:border-tabby-600'
-                      }`}>
+                        selected
+                          ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                          : 'border-gray-300 dark:border-tabby-600'
+                      }`}
+                    >
                       <Text
                         className={`font-nunito-medium ${
                           selected
                             ? 'text-white dark:text-tabby-900 text-sm'
                             : 'text-gray-700 dark:text-tabby-200 text-sm'
-                        }`}>
+                        }`}
+                      >
                         {m.profiles?.display_name ?? 'Unknown'}
                         {m.user_id === userId ? ' (you)' : ''}
                       </Text>
@@ -671,7 +700,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   disabled={submitting}
                   style={pressFeedback}
                   className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-2.5 items-center"
-                  accessibilityRole="button">
+                  accessibilityRole="button"
+                >
                   {submitting ? (
                     <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
@@ -686,7 +716,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                     style={pressFeedback}
                     className="px-4 py-2.5 items-center justify-center"
                     accessibilityRole="button"
-                    accessibilityLabel="Cancel edit">
+                    accessibilityLabel="Cancel edit"
+                  >
                     <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
                   </Pressable>
                 )}
@@ -713,7 +744,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                             : b.netAmount > 0
                               ? 'text-green-600 dark:text-green-400'
                               : 'text-red-500 dark:text-red-400'
-                        }`}>
+                        }`}
+                      >
                         {b.netAmount === 0
                           ? 'Settled up'
                           : b.netAmount > 0
@@ -726,7 +758,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                         onPress={() => handleSettle(b)}
                         style={pressFeedback}
                         accessibilityRole="button"
-                        className="px-3 py-1.5 bg-gray-800 dark:bg-tabby-700 rounded-full">
+                        className="px-3 py-1.5 bg-gray-800 dark:bg-tabby-700 rounded-full"
+                      >
                         <Text className="font-nunito-semibold text-white text-xs">Mark Settled</Text>
                       </Pressable>
                     )}
@@ -749,14 +782,13 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       disabled={!canEdit}
                       style={pressFeedback}
                       accessibilityRole="button"
-                      accessibilityLabel={
-                        canEdit ? `Edit shared expense ${e.description ?? ''}` : undefined
-                      }
+                      accessibilityLabel={canEdit ? `Edit shared expense ${e.description ?? ''}` : undefined}
                       className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
                         editingExpenseId === e.id
                           ? 'bg-tabby-50 dark:bg-tabby-800 border border-tabby-300 dark:border-tabby-600'
                           : 'bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700'
-                      }`}>
+                      }`}
+                    >
                       <View className="flex-1">
                         <Text className="font-nunito-semibold dark:text-white">
                           {e.description || 'Shared expense'}
@@ -774,7 +806,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                           }}
                           style={pressFeedback}
                           accessibilityRole="button"
-                          accessibilityLabel={`Delete shared expense ${e.description ?? ''}`}>
+                          accessibilityLabel={`Delete shared expense ${e.description ?? ''}`}
+                        >
                           <Text className="font-nunito text-red-500 dark:text-red-400">Delete</Text>
                         </Pressable>
                       )}
@@ -794,8 +827,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               Add {aiPreview?.length ?? 0} shared expense{aiPreview?.length === 1 ? '' : 's'}?
             </Text>
             <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-              Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}. Each
-              one splits equally across all {members.length} member
+              Total: ${aiPreview?.reduce((sum, t) => sum + t.amount, 0).toFixed(2) ?? '0.00'}. Each one splits
+              equally across all {members.length} member
               {members.length === 1 ? '' : 's'}.
             </Text>
 
@@ -806,7 +839,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               renderItem={({ item }) => (
                 <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
                   <Text className="font-nunito text-sm flex-1 dark:text-tabby-200">{item.description}</Text>
-                  <Text className="font-nunito-semibold text-sm dark:text-white">${item.amount.toFixed(2)}</Text>
+                  <Text className="font-nunito-semibold text-sm dark:text-white">
+                    ${item.amount.toFixed(2)}
+                  </Text>
                 </View>
               )}
             />
@@ -818,7 +853,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 style={pressFeedback}
                 className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                 accessibilityRole="button"
-                accessibilityLabel="Confirm add">
+                accessibilityLabel="Confirm add"
+              >
                 {aiImporting ? (
                   <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                 ) : (
@@ -831,7 +867,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 style={pressFeedback}
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
-                accessibilityLabel="Cancel">
+                accessibilityLabel="Cancel"
+              >
                 <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
               </Pressable>
             </View>
@@ -866,7 +903,7 @@ export default function FlatScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!loading && userId) logFlatTabView(userId, flat !== null);
-    }, [loading, userId, flat])
+    }, [loading, userId, flat]),
   );
 
   if (loading) {
@@ -877,9 +914,5 @@ export default function FlatScreen() {
     );
   }
 
-  return flat ? (
-    <FlatView flat={flat} onLeftFlat={load} />
-  ) : (
-    <NoFlatView onFlatReady={load} />
-  );
+  return flat ? <FlatView flat={flat} onLeftFlat={load} /> : <NoFlatView onFlatReady={load} />;
 }

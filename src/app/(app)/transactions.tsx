@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   categorizeTransaction,
+  categorizeTransactionsBatch,
   parseBillSplit,
   parseFinancialDocument,
   parseNaturalLanguageExpenses,
@@ -429,7 +430,7 @@ export default function TransactionsScreen() {
 
       const parsed = await parseNaturalLanguageExpenses(quickAddText, categories);
       if (!parsed) {
-        setError('AI is briefly unavailable -- try again in a moment, or use the + button below.');
+        setError('AI is briefly unavailable. Try again in a moment, or use the + button below.');
         return;
       }
       setAiPreview(parsed);
@@ -500,11 +501,46 @@ export default function TransactionsScreen() {
       const parsed = parseTransactionsFromCSV(text);
       if (parsed.length === 0) {
         setError(
-          "Couldn't find any transactions in that file -- make sure it has a header row with a Date and Amount column.",
+          "Couldn't find any transactions in that file. Make sure it has a header row with a Date and Amount column.",
         );
         return;
       }
+
       setCsvPreview(parsed);
+
+      // One batched call per type (expense/income), not one per row -- an
+      // import can be a few hundred transactions. Best-effort: the preview
+      // is already showing with no categories, and fills in as soon as this
+      // resolves rather than blocking on it.
+      setAiBusy(true);
+      try {
+        const expenseCategories = categories.filter((c) => c.type === 'expense');
+        const incomeCategories = categories.filter((c) => c.type === 'income');
+        const expenseRows = parsed.flatMap((t, i) => (t.isIncome ? [] : [i]));
+        const incomeRows = parsed.flatMap((t, i) => (t.isIncome ? [i] : []));
+
+        const [expenseIds, incomeIds] = await Promise.all([
+          categorizeTransactionsBatch(
+            expenseRows.map((i) => parsed[i].description),
+            expenseCategories,
+          ),
+          categorizeTransactionsBatch(
+            incomeRows.map((i) => parsed[i].description),
+            incomeCategories,
+          ),
+        ]);
+
+        const withCategories = [...parsed];
+        expenseRows.forEach((origIndex, j) => {
+          withCategories[origIndex] = { ...withCategories[origIndex], categoryId: expenseIds[j] };
+        });
+        incomeRows.forEach((origIndex, j) => {
+          withCategories[origIndex] = { ...withCategories[origIndex], categoryId: incomeIds[j] };
+        });
+        setCsvPreview(withCategories);
+      } finally {
+        setAiBusy(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read that file.');
     }
@@ -515,7 +551,7 @@ export default function TransactionsScreen() {
     try {
       const parsed = await parseFinancialDocument(scanned.base64Data, scanned.mimeType, categories);
       if (!parsed) {
-        setError("Couldn't find any transactions in that -- try a clearer photo, or add it manually.");
+        setError("Couldn't find any transactions in that. Try a clearer photo, or add it manually.");
         return;
       }
       await recordScan(hashBase64(scanned.base64Data));
@@ -1120,7 +1156,7 @@ export default function TransactionsScreen() {
               <TextInput
                 value={merchant}
                 onChangeText={setMerchant}
-                placeholder="Where? (e.g. Pak'nSave) -- optional"
+                placeholder="Where? (optional, e.g. Pak'nSave)"
                 className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 dark:text-white"
               />
 
@@ -1366,32 +1402,39 @@ export default function TransactionsScreen() {
               Net: $
               {csvPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0).toFixed(2) ??
                 '0.00'}
-              . All imported as Uncategorized -- edit them afterwards to assign categories.
+              .{' '}
+              {aiBusy
+                ? 'Suggesting categories...'
+                : 'Categories suggested where possible. Edit any row afterwards to change one.'}
             </Text>
 
             <FlatList
               data={csvPreview ?? []}
               keyExtractor={(_, i) => String(i)}
               style={{ flex: 1 }}
-              renderItem={({ item }) => (
-                <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
-                  <View className="flex-1">
-                    <Text className="font-nunito text-sm dark:text-tabby-200">
-                      {item.description || '(no description)'}
-                    </Text>
-                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                      {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
+              renderItem={({ item }) => {
+                const suggestedCategory = categories.find((c) => c.id === item.categoryId);
+                return (
+                  <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
+                    <View className="flex-1">
+                      <Text className="font-nunito text-sm dark:text-tabby-200">
+                        {item.description || '(no description)'}
+                      </Text>
+                      <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                        {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
+                        {suggestedCategory ? ` · ${suggestedCategory.name}` : ''}
+                      </Text>
+                    </View>
+                    <Text
+                      className={`font-nunito-semibold text-sm ${
+                        item.isIncome ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
+                      }`}
+                    >
+                      {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
                     </Text>
                   </View>
-                  <Text
-                    className={`font-nunito-semibold text-sm ${
-                      item.isIncome ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
-                    }`}
-                  >
-                    {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
-                  </Text>
-                </View>
-              )}
+                );
+              }}
             />
 
             <View className="flex-row gap-2 pt-2">
@@ -1433,7 +1476,7 @@ export default function TransactionsScreen() {
                   Add {aiPreview?.length ?? 0} transaction{aiPreview?.length === 1 ? '' : 's'}?
                 </Text>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  AI&apos;s first guess -- tap anything below to fix it before adding.
+                  AI&apos;s first guess. Tap anything below to fix it before adding.
                 </Text>
               </View>
 

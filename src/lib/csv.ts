@@ -5,7 +5,10 @@
 // accepted limitation for typical bank CSV exports.
 
 export function parseCSVRows(text: string): string[][] {
-  const lines = text.replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim().length > 0);
+  const lines = text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .filter((l) => l.trim().length > 0);
   return lines.map((line) => {
     const fields: string[] = [];
     let current = '';
@@ -68,6 +71,10 @@ export type ParsedCSVTransaction = {
   description: string;
   occurredAt: string;
   isIncome: boolean;
+  // null here (always, from this pure parser) -- a category suggestion is
+  // layered on afterwards by the caller (see transactions.tsx), which has
+  // the user's category list; this function only ever reads the raw CSV.
+  categoryId: string | null;
 };
 
 export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
@@ -94,7 +101,7 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
       const amount = Math.abs(parsedRaw);
       const description = descIdx !== -1 ? row[descIdx] : '';
       const occurredAt = dateIdx !== -1 ? parseDate(row[dateIdx]) : new Date().toISOString().slice(0, 10);
-      return { amount, description, occurredAt, isIncome };
+      return { amount, description, occurredAt, isIncome, categoryId: null };
     })
     .filter((t) => !isNaN(t.amount) && t.amount > 0);
 }
