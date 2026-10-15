@@ -54,9 +54,7 @@ export type DashboardRow = {
   categories: { name: string; icon: string | null } | null;
 };
 
-const MONTH_LABELS = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Monday of the week containing the given local-calendar date string.
 function mondayOf(dateStr: string): Date {
@@ -85,11 +83,13 @@ function toDateKey(d: Date): string {
 export function computeDashboardFromRows(
   rows: DashboardRow[],
   period: DashboardPeriod | null = null,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): DashboardData {
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const inPeriod = (occurredAt: string) =>
-    period ? occurredAt >= period.startDate && occurredAt < period.endDate : occurredAt.slice(0, 7) === currentMonthKey;
+    period
+      ? occurredAt >= period.startDate && occurredAt < period.endDate
+      : occurredAt.slice(0, 7) === currentMonthKey;
 
   // category totals, for the current period only, expenses only
   const categoryMap = new Map<string, CategoryTotal>();
@@ -185,7 +185,10 @@ export function computeDashboardFromRows(
   };
 }
 
-export async function fetchDashboardData(userId: string, period: DashboardPeriod | null = null): Promise<DashboardData> {
+export async function fetchDashboardData(
+  userId: string,
+  period: DashboardPeriod | null = null,
+): Promise<DashboardData> {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
@@ -199,6 +202,7 @@ export async function fetchDashboardData(userId: string, period: DashboardPeriod
     .from('transactions')
     .select('amount, occurred_at, category_id, is_income, categories(name, icon)')
     .eq('user_id', userId)
+    .eq('skipped', false) // a skipped bill is logged for history, not counted as real spend
     .gte('occurred_at', sinceDate);
 
   if (error) throw error;
