@@ -2,7 +2,12 @@
 // which side-effect-imports expo-sqlite -- same Jest/native-module problem
 // as flats.test.ts. Stubbed out since these tests only touch the pure
 // computeDashboardFromRows function, which never calls supabase.
-import { computeDashboardFromRows, type DashboardRow } from './dashboard';
+import {
+  computeDashboardFromRows,
+  findNotableCategorySwing,
+  type CategoryTotal,
+  type DashboardRow,
+} from './dashboard';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -28,7 +33,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 65, occurred_at: '2026-10-04' }),
       ],
       null,
-      NOW
+      NOW,
     );
 
     expect(result.periodIncome).toBe(2500);
@@ -44,7 +49,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 40, categories: { name: 'Groceries', icon: 'shopping-cart' }, category_id: 'cat-1' }),
       ],
       null,
-      NOW
+      NOW,
     );
 
     expect(result.categoryTotals).toHaveLength(1);
@@ -58,7 +63,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 50, occurred_at: '2026-10-05' }),
       ],
       null,
-      NOW
+      NOW,
     );
 
     const octMonth = result.monthlyTotals.find((m) => m.month === '2026-10');
@@ -69,7 +74,7 @@ describe('computeDashboardFromRows', () => {
     const result = computeDashboardFromRows(
       [row({ amount: 100, is_income: true }), row({ amount: 400 })],
       null,
-      NOW
+      NOW,
     );
 
     expect(result.periodNet).toBe(-300);
@@ -82,7 +87,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 40, occurred_at: '2026-09-20' }),
       ],
       null,
-      NOW
+      NOW,
     );
 
     expect(result.periodIncome).toBe(0);
@@ -104,7 +109,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 999, occurred_at: '2026-10-06' }),
       ],
       { startDate: '2026-09-29', endDate: '2026-10-06' },
-      NOW
+      NOW,
     );
 
     expect(result.periodTotal).toBe(150);
@@ -121,7 +126,7 @@ describe('computeDashboardFromRows', () => {
         row({ amount: 30, occurred_at: '2026-10-06' }),
       ],
       null,
-      NOW
+      NOW,
     );
 
     const thisWeek = result.weeklyTotals.find((w) => w.weekStart === '2026-10-12');
@@ -130,5 +135,65 @@ describe('computeDashboardFromRows', () => {
     expect(lastWeek?.total).toBe(30);
     expect(result.weeklyTotals).toHaveLength(6);
     expect(result.earliestOccurredAt).toBe('2026-10-06');
+  });
+});
+
+describe('findNotableCategorySwing', () => {
+  function cat(partial: Partial<CategoryTotal>): CategoryTotal {
+    return { categoryId: 'cat-1', name: 'Dining Out', icon: null, total: 0, ...partial };
+  }
+
+  it('flags a category that swung by at least $20 and 15%', () => {
+    const result = findNotableCategorySwing(
+      [cat({ categoryId: 'cat-1', name: 'Dining Out', total: 140 })],
+      [cat({ categoryId: 'cat-1', name: 'Dining Out', total: 100 })],
+    );
+    expect(result).toEqual({ name: 'Dining Out', thisMonthTotal: 140, lastMonthTotal: 100 });
+  });
+
+  it('ignores a swing under the $20 floor even if the percentage is large', () => {
+    const result = findNotableCategorySwing(
+      [cat({ categoryId: 'cat-1', total: 15 })],
+      [cat({ categoryId: 'cat-1', total: 5 })],
+    );
+    expect(result).toBeNull();
+  });
+
+  it('ignores a swing under 15% even if the dollar amount is large', () => {
+    const result = findNotableCategorySwing(
+      [cat({ categoryId: 'cat-1', total: 1050 })],
+      [cat({ categoryId: 'cat-1', total: 1000 })],
+    );
+    expect(result).toBeNull();
+  });
+
+  it('treats a brand-new category (nothing spent last month) as notable once past the $20 floor', () => {
+    const result = findNotableCategorySwing(
+      [cat({ categoryId: 'cat-2', name: 'Entertainment', total: 45 })],
+      [],
+    );
+    expect(result).toEqual({ name: 'Entertainment', thisMonthTotal: 45, lastMonthTotal: 0 });
+  });
+
+  it('picks the single biggest swing, not just the biggest category', () => {
+    const result = findNotableCategorySwing(
+      [
+        cat({ categoryId: 'cat-1', name: 'Rent', total: 1000 }), // unchanged, not a swing
+        cat({ categoryId: 'cat-2', name: 'Dining Out', total: 140 }), // +$40
+      ],
+      [
+        cat({ categoryId: 'cat-1', name: 'Rent', total: 1000 }),
+        cat({ categoryId: 'cat-2', name: 'Dining Out', total: 100 }),
+      ],
+    );
+    expect(result?.name).toBe('Dining Out');
+  });
+
+  it('returns null when nothing swings enough to be notable', () => {
+    const result = findNotableCategorySwing(
+      [cat({ categoryId: 'cat-1', total: 100 })],
+      [cat({ categoryId: 'cat-1', total: 100 })],
+    );
+    expect(result).toBeNull();
   });
 });
