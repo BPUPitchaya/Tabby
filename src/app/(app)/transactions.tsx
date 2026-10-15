@@ -5,6 +5,7 @@ import { File } from 'expo-file-system';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -28,14 +29,16 @@ import {
   type ParsedBillSplit,
   type ParsedExpense,
 } from '@/lib/ai';
-import { CategoryIcon } from '@/components/category-icon';
+import { CategoryIcon, CUSTOM_CATEGORY_ICONS } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
+import { hashBase64, recordScan, wasRecentlyScanned } from '@/lib/receipt-dedup';
 import { SplitBillModal } from '@/components/split-bill-modal';
 import {
   addTransaction,
   bulkAddTransactions,
+  createCategory,
   deleteTransaction,
   fetchCategories,
   fetchRecentMerchants,
@@ -157,8 +160,7 @@ function HeaderIconButton({
   // The primary button's background flips brown<->white between light and
   // dark mode (see tailwind.config.js's `tabby` scale), so its icon has to
   // flip the opposite way or it disappears against its own background.
-  const iconColor =
-    tone === 'primary' ? (isDark ? '#2B1810' : '#fff') : isDark ? '#E8C39E' : '#374151';
+  const iconColor = tone === 'primary' ? (isDark ? '#2B1810' : '#fff') : isDark ? '#E8C39E' : '#374151';
 
   return (
     <Pressable
@@ -168,7 +170,8 @@ function HeaderIconButton({
       accessibilityLabel={label}
       className={`w-10 h-10 rounded-full items-center justify-center ${
         tone === 'primary' ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-100 dark:bg-tabby-700'
-      }`}>
+      }`}
+    >
       <Feather name={icon} size={18} color={iconColor} />
     </Pressable>
   );
@@ -199,11 +202,13 @@ function TransactionRow({
         style={pressFeedback}
         accessibilityRole="button"
         accessibilityLabel={`Edit transaction ${item.description ?? ''}`}
-        className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 mb-2">
+        className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 mb-2"
+      >
         <View className="flex-row items-center flex-1 gap-3">
           <View
             className="w-9 h-9 rounded-full items-center justify-center"
-            style={{ backgroundColor: item.is_income ? (isDark ? '#1F3B2A' : '#DCFCE7') : tint.bg }}>
+            style={{ backgroundColor: item.is_income ? (isDark ? '#1F3B2A' : '#DCFCE7') : tint.bg }}
+          >
             <CategoryIcon
               name={item.categories?.icon}
               size={16}
@@ -224,7 +229,8 @@ function TransactionRow({
         <Text
           className={`font-nunito-bold mr-3 ${
             item.is_income ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
-          }`}>
+          }`}
+        >
           {item.is_income ? '+' : '-'}${item.amount.toFixed(2)}
         </Text>
         <Pressable
@@ -234,7 +240,8 @@ function TransactionRow({
           }}
           style={pressFeedback}
           accessibilityRole="button"
-          accessibilityLabel={`Delete transaction ${item.description ?? ''}`}>
+          accessibilityLabel={`Delete transaction ${item.description ?? ''}`}
+        >
           <Feather name="trash-2" size={16} color="#ef4444" />
         </Pressable>
       </Pressable>
@@ -272,6 +279,11 @@ export default function TransactionsScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [categorySource, setCategorySource] = useState<'manual' | 'ai' | null>(null);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
+  const [newCategoryBusy, setNewCategoryBusy] = useState(false);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
 
   // The chat-style composer pinned to the bottom of the screen -- type a
   // sentence, AI extracts one or more expenses from it.
@@ -333,6 +345,29 @@ export default function TransactionsScreen() {
     setEditingId(null);
     setTransactionType('expense');
     setOccurredAt(todayISO);
+    setShowNewCategory(false);
+    setNewCategoryName('');
+    setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+    setNewCategoryError(null);
+  };
+
+  const handleCreateCategory = async () => {
+    if (!userId || !newCategoryName.trim()) return;
+    setNewCategoryBusy(true);
+    setNewCategoryError(null);
+    try {
+      const created = await createCategory(userId, newCategoryName, newCategoryIcon, transactionType);
+      setCategories((prev) => [...prev, created]);
+      setCategoryId(created.id);
+      setCategorySource('manual');
+      setShowNewCategory(false);
+      setNewCategoryName('');
+      setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+    } catch (err) {
+      setNewCategoryError(err instanceof Error ? err.message : 'Failed to create category.');
+    } finally {
+      setNewCategoryBusy(false);
+    }
   };
 
   const openManualAdd = () => {
@@ -382,7 +417,7 @@ export default function TransactionsScreen() {
       if (SPLIT_HINT.test(quickAddText) && /\d/.test(quickAddText)) {
         const split = await parseBillSplit(
           quickAddText,
-          categories.filter((c) => c.type === 'expense')
+          categories.filter((c) => c.type === 'expense'),
         );
         if (split) {
           setSplitDraft(split);
@@ -419,9 +454,10 @@ export default function TransactionsScreen() {
           // category could share a name, and only one of them is valid
           // for this row (same rule the manual Expense/Income toggle uses).
           categoryId:
-            categories.find((c) => c.name === p.categoryName && c.type === (p.isIncome ? 'income' : 'expense'))
-              ?.id ?? null,
-        }))
+            categories.find(
+              (c) => c.name === p.categoryName && c.type === (p.isIncome ? 'income' : 'expense'),
+            )?.id ?? null,
+        })),
       );
       setAiPreview(null);
       setQuickAddText('');
@@ -437,7 +473,9 @@ export default function TransactionsScreen() {
   // amount, description, or category right in the preview before anything
   // is actually saved, instead of an all-or-nothing Confirm/Cancel.
   const updateAiPreviewItem = (index: number, patch: Partial<ParsedExpense>) => {
-    setAiPreview((prev) => (prev ? prev.map((item, i) => (i === index ? { ...item, ...patch } : item)) : prev));
+    setAiPreview((prev) =>
+      prev ? prev.map((item, i) => (i === index ? { ...item, ...patch } : item)) : prev,
+    );
   };
 
   const removeAiPreviewItem = (index: number) => {
@@ -462,7 +500,7 @@ export default function TransactionsScreen() {
       const parsed = parseTransactionsFromCSV(text);
       if (parsed.length === 0) {
         setError(
-          "Couldn't find any transactions in that file -- make sure it has a header row with a Date and Amount column."
+          "Couldn't find any transactions in that file -- make sure it has a header row with a Date and Amount column.",
         );
         return;
       }
@@ -472,23 +510,48 @@ export default function TransactionsScreen() {
     }
   };
 
+  const runScan = async (scanned: { base64Data: string; mimeType: string }) => {
+    setAiBusy(true);
+    try {
+      const parsed = await parseFinancialDocument(scanned.base64Data, scanned.mimeType, categories);
+      if (!parsed) {
+        setError("Couldn't find any transactions in that -- try a clearer photo, or add it manually.");
+        return;
+      }
+      await recordScan(hashBase64(scanned.base64Data));
+      setAiPreview(parsed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read that file.');
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   const handleScanReceipt = async () => {
     setError(null);
     try {
       const scanned = await presentScanSheet();
       if (!scanned) return;
 
-      setAiBusy(true);
-      const parsed = await parseFinancialDocument(scanned.base64Data, scanned.mimeType, categories);
-      if (!parsed) {
-        setError("Couldn't find any transactions in that -- try a clearer photo, or add it manually.");
+      // Catches re-scanning the same photo by accident -- not a duplicate
+      // *purchase* check (see lib/receipt-dedup.ts for why that's a
+      // different, harder problem this deliberately doesn't try to solve).
+      const hash = hashBase64(scanned.base64Data);
+      if (await wasRecentlyScanned(hash)) {
+        Alert.alert(
+          'Scanned recently',
+          'This looks like a receipt you already scanned in the last couple of days. Import it again anyway?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Import Anyway', onPress: () => runScan(scanned) },
+          ],
+        );
         return;
       }
-      setAiPreview(parsed);
+
+      await runScan(scanned);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read that file.');
-    } finally {
-      setAiBusy(false);
     }
   };
 
@@ -608,7 +671,8 @@ export default function TransactionsScreen() {
       if (searchCategoryId && tx.category_id !== searchCategoryId) return false;
       if (rangeStart && tx.occurred_at < rangeStart) return false;
       if (!needle) return true;
-      const haystack = `${tx.description ?? ''} ${tx.merchant ?? ''} ${tx.categories?.name ?? ''}`.toLowerCase();
+      const haystack =
+        `${tx.description ?? ''} ${tx.merchant ?? ''} ${tx.categories?.name ?? ''}`.toLowerCase();
       return haystack.includes(needle);
     });
   }, [transactions, searchActive, searchText, searchCategoryId, searchRange]);
@@ -633,7 +697,8 @@ export default function TransactionsScreen() {
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
         <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100 dark:border-tabby-700">
           <Text className="font-fredoka-semibold text-2xl dark:text-white">Transactions</Text>
           <View className="flex-row gap-2">
@@ -674,7 +739,8 @@ export default function TransactionsScreen() {
                 onPress={() => setSearchActive(false)}
                 style={pressFeedback}
                 accessibilityRole="button"
-                accessibilityLabel="Cancel search">
+                accessibilityLabel="Cancel search"
+              >
                 <Text className="font-nunito-semibold text-tabby-600 dark:text-tabby-200">Cancel</Text>
               </Pressable>
             </View>
@@ -691,11 +757,15 @@ export default function TransactionsScreen() {
                     searchCategoryId === null
                       ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                       : 'border-gray-300 dark:border-tabby-600'
-                  }`}>
+                  }`}
+                >
                   <Text
                     className={`font-nunito-medium text-sm ${
-                      searchCategoryId === null ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
-                    }`}>
+                      searchCategoryId === null
+                        ? 'text-white dark:text-tabby-900'
+                        : 'text-gray-600 dark:text-tabby-200'
+                    }`}
+                  >
                     All
                   </Text>
                 </Pressable>
@@ -708,11 +778,15 @@ export default function TransactionsScreen() {
                       searchCategoryId === cat.id
                         ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                         : 'border-gray-300 dark:border-tabby-600'
-                    }`}>
+                    }`}
+                  >
                     <Text
                       className={`font-nunito-medium text-sm ${
-                        searchCategoryId === cat.id ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
-                      }`}>
+                        searchCategoryId === cat.id
+                          ? 'text-white dark:text-tabby-900'
+                          : 'text-gray-600 dark:text-tabby-200'
+                      }`}
+                    >
                       {cat.name}
                     </Text>
                   </Pressable>
@@ -739,11 +813,15 @@ export default function TransactionsScreen() {
                       searchRange === value
                         ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                         : 'border-gray-300 dark:border-tabby-600'
-                    }`}>
+                    }`}
+                  >
                     <Text
                       className={`font-nunito-medium text-sm ${
-                        searchRange === value ? 'text-white dark:text-tabby-900' : 'text-gray-600 dark:text-tabby-200'
-                      }`}>
+                        searchRange === value
+                          ? 'text-white dark:text-tabby-900'
+                          : 'text-gray-600 dark:text-tabby-200'
+                      }`}
+                    >
                       {label}
                     </Text>
                   </Pressable>
@@ -784,22 +862,30 @@ export default function TransactionsScreen() {
               <Pressable
                 onPress={() => setActiveTab('activity')}
                 style={(state) => [pressFeedback(state), activeTab === 'activity' && SEGMENT_SHADOW]}
-                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'activity' ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'activity' ? 'bg-white dark:bg-tabby-900' : ''}`}
+              >
                 <Text
                   className={`font-nunito-semibold text-sm ${
-                    activeTab === 'activity' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
-                  }`}>
+                    activeTab === 'activity'
+                      ? 'text-gray-900 dark:text-white'
+                      : 'text-gray-500 dark:text-tabby-300'
+                  }`}
+                >
                   Activity
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => setActiveTab('category')}
                 style={(state) => [pressFeedback(state), activeTab === 'category' && SEGMENT_SHADOW]}
-                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'category' ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                className={`flex-1 rounded-lg py-2 items-center ${activeTab === 'category' ? 'bg-white dark:bg-tabby-900' : ''}`}
+              >
                 <Text
                   className={`font-nunito-semibold text-sm ${
-                    activeTab === 'category' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
-                  }`}>
+                    activeTab === 'category'
+                      ? 'text-gray-900 dark:text-white'
+                      : 'text-gray-500 dark:text-tabby-300'
+                  }`}
+                >
                   By Category
                 </Text>
               </Pressable>
@@ -811,9 +897,12 @@ export default function TransactionsScreen() {
               style={pressFeedback}
               accessibilityRole="button"
               accessibilityLabel="Search transactions"
-              className="flex-row items-center gap-2 mx-4 mb-2 h-11 rounded-xl bg-gray-100 dark:bg-tabby-800 border border-gray-200 dark:border-tabby-700 px-3">
+              className="flex-row items-center gap-2 mx-4 mb-2 h-11 rounded-xl bg-gray-100 dark:bg-tabby-800 border border-gray-200 dark:border-tabby-700 px-3"
+            >
               <Feather name="search" size={15} color={isDark ? '#C98A52' : '#9ca3af'} />
-              <Text className="font-nunito text-sm text-gray-400 dark:text-tabby-400">Search transactions</Text>
+              <Text className="font-nunito text-sm text-gray-400 dark:text-tabby-400">
+                Search transactions
+              </Text>
             </Pressable>
 
             {activeTab === 'activity' ? (
@@ -838,8 +927,11 @@ export default function TransactionsScreen() {
                     <Text className="font-fredoka-semibold text-sm dark:text-white">{section.title}</Text>
                     <Text
                       className={`font-nunito-semibold text-xs ${
-                        section.net >= 0 ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-tabby-300'
-                      }`}>
+                        section.net >= 0
+                          ? 'text-green-700 dark:text-green-400'
+                          : 'text-gray-500 dark:text-tabby-300'
+                      }`}
+                    >
                       {section.net >= 0 ? '+' : '-'}${Math.abs(section.net).toFixed(2)}
                     </Text>
                   </View>
@@ -875,19 +967,27 @@ export default function TransactionsScreen() {
                       onPress={() => openSearch(item.category.id)}
                       style={pressFeedback}
                       className={`flex-1 rounded-2xl p-4 bg-gray-50 dark:bg-tabby-800 border ${
-                        hasActivity ? 'border-gray-100 dark:border-tabby-700' : 'border-dashed border-gray-200 dark:border-tabby-700 opacity-60'
-                      }`}>
+                        hasActivity
+                          ? 'border-gray-100 dark:border-tabby-700'
+                          : 'border-dashed border-gray-200 dark:border-tabby-700 opacity-60'
+                      }`}
+                    >
                       <View
                         className="w-8 h-8 rounded-full items-center justify-center mb-2.5"
-                        style={{ backgroundColor: tint.bg }}>
+                        style={{ backgroundColor: tint.bg }}
+                      >
                         <CategoryIcon name={item.category.icon} size={14} color={tint.fg} />
                       </View>
-                      <Text className="font-nunito-semibold text-sm dark:text-tabby-200">{item.category.name}</Text>
+                      <Text className="font-nunito-semibold text-sm dark:text-tabby-200">
+                        {item.category.name}
+                      </Text>
                       <Text className="font-fredoka-semibold text-lg dark:text-white pt-0.5">
                         ${item.total.toFixed(2)}
                       </Text>
                       <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                        {hasActivity ? `${item.count} transaction${item.count === 1 ? '' : 's'}` : 'No activity'}
+                        {hasActivity
+                          ? `${item.count} transaction${item.count === 1 ? '' : 's'}`
+                          : 'No activity'}
                       </Text>
                     </Pressable>
                   );
@@ -903,7 +1003,8 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Scan a receipt or statement"
-                className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700">
+                className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700"
+              >
                 <Feather name="camera" size={18} color={isDark ? '#E8C39E' : '#4b5563'} />
               </Pressable>
               <TextInput
@@ -921,7 +1022,8 @@ export default function TransactionsScreen() {
                 accessibilityLabel="Send"
                 className={`w-10 h-10 rounded-full items-center justify-center ${
                   quickAddText.trim() ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-200 dark:bg-tabby-700'
-                }`}>
+                }`}
+              >
                 {aiBusy ? (
                   <ActivityIndicator color={isDark ? '#2B1810' : 'white'} size="small" />
                 ) : (
@@ -939,9 +1041,7 @@ export default function TransactionsScreen() {
 
       {/* Manual add/edit -- opened via the + button or by tapping a transaction. */}
       <Modal visible={manualOpen} animationType="slide" transparent onRequestClose={closeManualForm}>
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View className="flex-1 bg-black/40 justify-end">
             <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3">
               <View className="flex-row items-center justify-between">
@@ -953,7 +1053,8 @@ export default function TransactionsScreen() {
                   style={pressFeedback}
                   accessibilityRole="button"
                   accessibilityLabel="Close"
-                  className="w-8 h-8 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center">
+                  className="w-8 h-8 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center"
+                >
                   <Feather name="x" size={16} color={isDark ? '#E8C39E' : '#374151'} />
                 </Pressable>
               </View>
@@ -966,11 +1067,15 @@ export default function TransactionsScreen() {
                   accessibilityLabel="Expense"
                   className={`flex-1 rounded-md py-1.5 items-center ${
                     transactionType === 'expense' ? 'bg-white dark:bg-tabby-900' : ''
-                  }`}>
+                  }`}
+                >
                   <Text
                     className={`font-nunito-semibold text-sm ${
-                      transactionType === 'expense' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
-                    }`}>
+                      transactionType === 'expense'
+                        ? 'text-gray-900 dark:text-white'
+                        : 'text-gray-500 dark:text-tabby-300'
+                    }`}
+                  >
                     Expense
                   </Text>
                 </Pressable>
@@ -981,11 +1086,15 @@ export default function TransactionsScreen() {
                   accessibilityLabel="Income"
                   className={`flex-1 rounded-md py-1.5 items-center ${
                     transactionType === 'income' ? 'bg-white dark:bg-tabby-900' : ''
-                  }`}>
+                  }`}
+                >
                   <Text
                     className={`font-nunito-semibold text-sm ${
-                      transactionType === 'income' ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-tabby-300'
-                    }`}>
+                      transactionType === 'income'
+                        ? 'text-green-700 dark:text-green-400'
+                        : 'text-gray-500 dark:text-tabby-300'
+                    }`}
+                  >
                     Income
                   </Text>
                 </Pressable>
@@ -1020,7 +1129,8 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Date"
-                className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5">
+                className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5"
+              >
                 <Text className="font-nunito text-gray-800 dark:text-white text-sm">
                   {occurredAt === todayISO
                     ? 'Today'
@@ -1048,7 +1158,8 @@ export default function TransactionsScreen() {
                     style={pressFeedback}
                     accessibilityRole="button"
                     accessibilityLabel="Done"
-                    className="self-end px-3 py-1.5">
+                    className="self-end px-3 py-1.5"
+                  >
                     <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
                   </Pressable>
                 </View>
@@ -1062,10 +1173,14 @@ export default function TransactionsScreen() {
                       onPress={() => setMerchant(m === merchant ? '' : m)}
                       style={pressFeedback}
                       className={`px-3 py-1 rounded-full border ${
-                        merchant === m ? 'bg-gray-800 dark:bg-tabby-700 border-gray-800 dark:border-tabby-700' : 'border-gray-300 dark:border-tabby-600'
-                      }`}>
+                        merchant === m
+                          ? 'bg-gray-800 dark:bg-tabby-700 border-gray-800 dark:border-tabby-700'
+                          : 'border-gray-300 dark:border-tabby-600'
+                      }`}
+                    >
                       <Text
-                        className={`font-nunito ${merchant === m ? 'text-white text-xs' : 'text-gray-600 dark:text-tabby-200 text-xs'}`}>
+                        className={`font-nunito ${merchant === m ? 'text-white text-xs' : 'text-gray-600 dark:text-tabby-200 text-xs'}`}
+                      >
                         {m}
                       </Text>
                     </Pressable>
@@ -1085,13 +1200,22 @@ export default function TransactionsScreen() {
                       }}
                       style={pressFeedback}
                       className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
-                        categoryId === cat.id ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white' : 'border-gray-300 dark:border-tabby-600'
-                      }`}>
+                        categoryId === cat.id
+                          ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                          : 'border-gray-300 dark:border-tabby-600'
+                      }`}
+                    >
                       <CategoryIcon
                         name={cat.icon}
                         size={13}
                         color={
-                          categoryId === cat.id ? (isDark ? '#2B1810' : '#fff') : isDark ? '#E8C39E' : '#4b5563'
+                          categoryId === cat.id
+                            ? isDark
+                              ? '#2B1810'
+                              : '#fff'
+                            : isDark
+                              ? '#E8C39E'
+                              : '#4b5563'
                         }
                       />
                       <Text
@@ -1099,15 +1223,81 @@ export default function TransactionsScreen() {
                           categoryId === cat.id
                             ? 'text-white dark:text-tabby-900 text-sm'
                             : 'text-gray-700 dark:text-tabby-200 text-sm'
-                        }`}>
+                        }`}
+                      >
                         {cat.name}
                       </Text>
                     </Pressable>
                   ))}
+                <Pressable
+                  onPress={() => setShowNewCategory((v) => !v)}
+                  style={pressFeedback}
+                  className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border border-dashed border-gray-300 dark:border-tabby-600"
+                >
+                  <Feather name="plus" size={13} color={isDark ? '#E8C39E' : '#4b5563'} />
+                  <Text className="font-nunito-medium text-gray-700 dark:text-tabby-200 text-sm">New</Text>
+                </Pressable>
                 {categorySource === 'ai' && (
                   <Text className="font-nunito text-xs text-tabby-500 dark:text-tabby-200">AI suggested</Text>
                 )}
               </View>
+
+              {showNewCategory && (
+                <View className="border border-gray-300 dark:border-tabby-600 rounded-lg p-3 gap-2.5">
+                  <TextInput
+                    value={newCategoryName}
+                    onChangeText={setNewCategoryName}
+                    placeholder="Category name"
+                    autoFocus
+                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
+                  />
+                  <View className="flex-row flex-wrap gap-2">
+                    {CUSTOM_CATEGORY_ICONS.map((icon) => (
+                      <Pressable
+                        key={icon}
+                        onPress={() => setNewCategoryIcon(icon)}
+                        style={pressFeedback}
+                        className={`w-9 h-9 rounded-full items-center justify-center border ${
+                          newCategoryIcon === icon
+                            ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                            : 'border-gray-300 dark:border-tabby-600'
+                        }`}
+                      >
+                        <CategoryIcon
+                          name={icon}
+                          size={15}
+                          color={
+                            newCategoryIcon === icon
+                              ? isDark
+                                ? '#2B1810'
+                                : '#fff'
+                              : isDark
+                                ? '#E8C39E'
+                                : '#4b5563'
+                          }
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                  {newCategoryError && (
+                    <Text className="font-nunito text-xs text-red-500">{newCategoryError}</Text>
+                  )}
+                  <Pressable
+                    onPress={handleCreateCategory}
+                    disabled={newCategoryBusy || !newCategoryName.trim()}
+                    style={pressFeedback}
+                    className="self-start bg-tabby-600 dark:bg-white rounded-lg px-4 py-2"
+                  >
+                    {newCategoryBusy ? (
+                      <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                    ) : (
+                      <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
+                        Create category
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
+              )}
 
               <View className="flex-row gap-2 pt-1">
                 <Pressable
@@ -1116,7 +1306,8 @@ export default function TransactionsScreen() {
                   style={pressFeedback}
                   className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                   accessibilityRole="button"
-                  accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}>
+                  accessibilityLabel={editingId ? 'Save changes' : 'Add transaction'}
+                >
                   {submitting ? (
                     <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
@@ -1134,7 +1325,8 @@ export default function TransactionsScreen() {
                     style={pressFeedback}
                     className="px-4 py-3 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
                     accessibilityRole="button"
-                    accessibilityLabel="Delete transaction">
+                    accessibilityLabel="Delete transaction"
+                  >
                     <Feather name="trash-2" size={18} color="#ef4444" />
                   </Pressable>
                 )}
@@ -1172,9 +1364,8 @@ export default function TransactionsScreen() {
             </Text>
             <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
               Net: $
-              {csvPreview
-                ?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0)
-                .toFixed(2) ?? '0.00'}
+              {csvPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0).toFixed(2) ??
+                '0.00'}
               . All imported as Uncategorized -- edit them afterwards to assign categories.
             </Text>
 
@@ -1185,7 +1376,9 @@ export default function TransactionsScreen() {
               renderItem={({ item }) => (
                 <View className="flex-row justify-between py-2 border-b border-gray-100 dark:border-tabby-700">
                   <View className="flex-1">
-                    <Text className="font-nunito text-sm dark:text-tabby-200">{item.description || '(no description)'}</Text>
+                    <Text className="font-nunito text-sm dark:text-tabby-200">
+                      {item.description || '(no description)'}
+                    </Text>
                     <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
                       {item.isIncome ? 'Income' : 'Expense'} · {item.occurredAt}
                     </Text>
@@ -1193,7 +1386,8 @@ export default function TransactionsScreen() {
                   <Text
                     className={`font-nunito-semibold text-sm ${
                       item.isIncome ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
-                    }`}>
+                    }`}
+                  >
                     {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
                   </Text>
                 </View>
@@ -1207,7 +1401,8 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                 accessibilityRole="button"
-                accessibilityLabel="Confirm import">
+                accessibilityLabel="Confirm import"
+              >
                 {csvImporting ? (
                   <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                 ) : (
@@ -1220,7 +1415,8 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 className="px-4 py-3 items-center justify-center"
                 accessibilityRole="button"
-                accessibilityLabel="Cancel import">
+                accessibilityLabel="Cancel import"
+              >
                 <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
               </Pressable>
             </View>
@@ -1270,7 +1466,8 @@ export default function TransactionsScreen() {
                         onPress={() => removeAiPreviewItem(index)}
                         style={pressFeedback}
                         accessibilityRole="button"
-                        accessibilityLabel={`Remove ${item.description}`}>
+                        accessibilityLabel={`Remove ${item.description}`}
+                      >
                         <Feather name="x" size={16} color="#9ca3af" />
                       </Pressable>
                     </View>
@@ -1283,22 +1480,30 @@ export default function TransactionsScreen() {
                       <Pressable
                         onPress={() => updateAiPreviewItem(index, { isIncome: false, categoryName: null })}
                         style={pressFeedback}
-                        className={`rounded-md px-3 py-1 ${!item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                        className={`rounded-md px-3 py-1 ${!item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
+                      >
                         <Text
                           className={`font-nunito-semibold text-xs ${
-                            !item.isIncome ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
-                          }`}>
+                            !item.isIncome
+                              ? 'text-gray-900 dark:text-white'
+                              : 'text-gray-500 dark:text-tabby-300'
+                          }`}
+                        >
                           Expense
                         </Text>
                       </Pressable>
                       <Pressable
                         onPress={() => updateAiPreviewItem(index, { isIncome: true, categoryName: null })}
                         style={pressFeedback}
-                        className={`rounded-md px-3 py-1 ${item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}>
+                        className={`rounded-md px-3 py-1 ${item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
+                      >
                         <Text
                           className={`font-nunito-semibold text-xs ${
-                            item.isIncome ? 'text-green-700 dark:text-green-400' : 'text-gray-500 dark:text-tabby-300'
-                          }`}>
+                            item.isIncome
+                              ? 'text-green-700 dark:text-green-400'
+                              : 'text-gray-500 dark:text-tabby-300'
+                          }`}
+                        >
                           Income
                         </Text>
                       </Pressable>
@@ -1320,13 +1525,15 @@ export default function TransactionsScreen() {
                               item.categoryName === cat.name
                                 ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                                 : 'border-gray-300 dark:border-tabby-600'
-                            }`}>
+                            }`}
+                          >
                             <Text
                               className={`font-nunito-medium text-xs ${
                                 item.categoryName === cat.name
                                   ? 'text-white dark:text-tabby-900'
                                   : 'text-gray-600 dark:text-tabby-200'
-                              }`}>
+                              }`}
+                            >
                               {cat.name}
                             </Text>
                           </Pressable>
@@ -1349,8 +1556,14 @@ export default function TransactionsScreen() {
               />
 
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                Net: {(aiPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0) ?? 0) < 0 ? '-' : '+'}$
-                {Math.abs(aiPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0) ?? 0).toFixed(2)}
+                Net:{' '}
+                {(aiPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0) ?? 0) < 0
+                  ? '-'
+                  : '+'}
+                $
+                {Math.abs(
+                  aiPreview?.reduce((sum, t) => sum + (t.isIncome ? t.amount : -t.amount), 0) ?? 0,
+                ).toFixed(2)}
               </Text>
 
               <View className="flex-row gap-2 pt-1">
@@ -1359,17 +1572,21 @@ export default function TransactionsScreen() {
                   disabled={aiImporting || !aiPreview?.every((p) => p.amount > 0)}
                   style={pressFeedback}
                   className={`flex-1 rounded-lg py-3 items-center ${
-                    aiPreview?.every((p) => p.amount > 0) ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-300 dark:bg-tabby-700'
+                    aiPreview?.every((p) => p.amount > 0)
+                      ? 'bg-tabby-600 dark:bg-white'
+                      : 'bg-gray-300 dark:bg-tabby-700'
                   }`}
                   accessibilityRole="button"
-                  accessibilityLabel="Confirm add">
+                  accessibilityLabel="Confirm add"
+                >
                   {aiImporting ? (
                     <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
                   ) : (
                     <Text
                       className={`font-nunito-semibold text-white ${
                         aiPreview?.every((p) => p.amount > 0) ? 'dark:text-tabby-900' : ''
-                      }`}>
+                      }`}
+                    >
                       Confirm
                     </Text>
                   )}
@@ -1380,7 +1597,8 @@ export default function TransactionsScreen() {
                   style={pressFeedback}
                   className="px-4 py-3 items-center justify-center"
                   accessibilityRole="button"
-                  accessibilityLabel="Cancel">
+                  accessibilityLabel="Cancel"
+                >
                   <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
                 </Pressable>
               </View>

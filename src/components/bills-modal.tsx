@@ -21,7 +21,8 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryIcon } from '@/components/category-icon';
+import { CategoryIcon, CUSTOM_CATEGORY_ICONS } from '@/components/category-icon';
+import { categorizeTransaction } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
   BILL_COUNT_SOFT_CAP,
@@ -38,7 +39,7 @@ import {
   requestBillNotificationPermission,
   scheduleBillReminder,
 } from '@/lib/bill-notifications';
-import { fetchCategories, type Category } from '@/lib/transactions';
+import { createCategory, fetchCategories, type Category } from '@/lib/transactions';
 import type { IncomeFrequency } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -100,6 +101,11 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showWeekdayPicker, setShowWeekdayPicker] = useState(false);
   const [showDayOfMonthPicker, setShowDayOfMonthPicker] = useState(false);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [suggestingCategory, setSuggestingCategory] = useState(false);
+  const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
+  const [newCategoryBusy, setNewCategoryBusy] = useState(false);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
 
   const load = async () => {
     if (!userId) return;
@@ -219,6 +225,40 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
       setMessage(err instanceof Error ? err.message : 'Failed to save bill.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Suggests a category from the bill name, same categorizeTransaction
+  // call the manual transaction form already uses -- only when nothing's
+  // been picked yet, so it never overrides an explicit choice (including
+  // one already set when editing an existing bill).
+  const handleSuggestCategory = async () => {
+    if (!form.name.trim() || form.categoryId !== null) return;
+    setSuggestingCategory(true);
+    try {
+      const suggestedId = await categorizeTransaction(form.name, categories);
+      if (suggestedId) setForm((f) => (f.categoryId === null ? { ...f, categoryId: suggestedId } : f));
+    } finally {
+      setSuggestingCategory(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!userId || !categorySearch.trim()) return;
+    setNewCategoryBusy(true);
+    setNewCategoryError(null);
+    try {
+      const created = await createCategory(userId, categorySearch, newCategoryIcon, 'expense');
+      setCategories((prev) => [...prev, created]);
+      setForm((f) => ({ ...f, categoryId: created.id }));
+      setShowCategoryPicker(false);
+      setShowNewCategory(false);
+      setCategorySearch('');
+      setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+    } catch (err) {
+      setNewCategoryError(err instanceof Error ? err.message : 'Failed to create category.');
+    } finally {
+      setNewCategoryBusy(false);
     }
   };
 
@@ -405,9 +445,18 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
               <TextInput
                 value={form.name}
                 onChangeText={(name) => setForm((f) => ({ ...f, name }))}
+                onBlur={handleSuggestCategory}
                 placeholder="Bill name (e.g. Rent, Power)"
                 className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
               />
+              {suggestingCategory && (
+                <View className="flex-row items-center gap-2 -mt-1">
+                  <ActivityIndicator size="small" />
+                  <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                    Suggesting a category...
+                  </Text>
+                </View>
+              )}
 
               <View className="flex-row items-center justify-between rounded-lg border border-gray-300 dark:border-tabby-600 px-3 py-2.5">
                 <View>
@@ -547,10 +596,73 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                       </Pressable>
                     ))}
                   </View>
+
+                  <Pressable
+                    onPress={() => setShowNewCategory((v) => !v)}
+                    style={pressFeedback}
+                    className="flex-row items-center gap-2 px-2 py-2"
+                  >
+                    <Feather name="plus" size={14} color={isDark ? '#E8C39E' : '#4b5563'} />
+                    <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
+                      New category{categorySearch.trim() ? `: "${categorySearch.trim()}"` : ''}
+                    </Text>
+                  </Pressable>
+
+                  {showNewCategory && (
+                    <View className="gap-2 px-2 pb-1">
+                      <View className="flex-row flex-wrap gap-2">
+                        {CUSTOM_CATEGORY_ICONS.map((icon) => (
+                          <Pressable
+                            key={icon}
+                            onPress={() => setNewCategoryIcon(icon)}
+                            style={pressFeedback}
+                            className={`w-8 h-8 rounded-full items-center justify-center border ${
+                              newCategoryIcon === icon
+                                ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
+                                : 'border-gray-300 dark:border-tabby-600'
+                            }`}
+                          >
+                            <CategoryIcon
+                              name={icon}
+                              size={14}
+                              color={
+                                newCategoryIcon === icon
+                                  ? isDark
+                                    ? '#2B1810'
+                                    : '#fff'
+                                  : isDark
+                                    ? '#E8C39E'
+                                    : '#4b5563'
+                              }
+                            />
+                          </Pressable>
+                        ))}
+                      </View>
+                      {newCategoryError && (
+                        <Text className="font-nunito text-xs text-red-500">{newCategoryError}</Text>
+                      )}
+                      <Pressable
+                        onPress={handleCreateCategory}
+                        disabled={newCategoryBusy || !categorySearch.trim()}
+                        style={pressFeedback}
+                        className="self-start bg-tabby-600 dark:bg-white rounded-lg px-3 py-1.5"
+                      >
+                        {newCategoryBusy ? (
+                          <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                        ) : (
+                          <Text className="font-nunito-semibold text-xs text-white dark:text-tabby-900">
+                            Create
+                          </Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  )}
+
                   <Pressable
                     onPress={() => {
                       setShowCategoryPicker(false);
                       setCategorySearch('');
+                      setShowNewCategory(false);
                     }}
                     style={pressFeedback}
                     className="self-end px-3 py-1.5"

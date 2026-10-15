@@ -3,6 +3,25 @@ import { useColorScheme } from 'react-native';
 
 type FeatherIconName = keyof typeof Feather.glyphMap;
 
+// A small, deliberate set offered when creating a custom category --
+// not the full Feather set (most names mean nothing as a spending
+// category), just enough variety that custom categories don't all end up
+// looking like the same generic fallback tag icon.
+export const CUSTOM_CATEGORY_ICONS: FeatherIconName[] = [
+  'tag',
+  'coffee',
+  'shopping-bag',
+  'home',
+  'truck',
+  'zap',
+  'film',
+  'heart',
+  'gift',
+  'briefcase',
+  'book',
+  'music',
+];
+
 // Falls back to a generic tag icon for any unrecognized name, so a bad/typo'd
 // icon value in the DB never crashes the icon lookup -- just looks slightly
 // generic instead.
