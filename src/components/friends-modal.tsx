@@ -308,7 +308,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
                   </View>
                 </Pressable>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                  Anyone who opens it still has to accept -- sharing it doesn&apos;t add them automatically.
+                  Anyone who opens it still has to accept. Sharing it doesn&apos;t add them automatically.
                 </Text>
               </View>
             </ScrollView>
@@ -414,7 +414,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
                 </Text>
                 {friends.length === 0 ? (
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                    No friends yet -- tap + to add one.
+                    No friends yet. Tap + to add one.
                   </Text>
                 ) : (
                   <View className="gap-1">

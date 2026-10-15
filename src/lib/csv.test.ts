@@ -44,6 +44,7 @@ describe('parseTransactionsFromCSV', () => {
       description: 'Pak n Save, Wellington',
       occurredAt: '2026-10-05',
       isIncome: false,
+      categoryId: null,
     });
     expect(result[3].description).toBe('Coffee "The Good One"');
   });

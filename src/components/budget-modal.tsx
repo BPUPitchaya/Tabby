@@ -185,8 +185,8 @@ export function BudgetModal({
                 Set your pay schedule first
               </Text>
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm text-center">
-                A budget needs a pay cycle to attach to -- set how much you earn and how often before
-                budgeting part of it.
+                A budget needs a pay cycle to attach to. Set how much you earn and how often before budgeting
+                part of it.
               </Text>
               <Pressable
                 onPress={onNeedsPaySchedule}

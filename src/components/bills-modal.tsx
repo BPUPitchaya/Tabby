@@ -130,7 +130,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
     if (bills.length >= BILL_COUNT_SOFT_CAP) {
       Alert.alert(
         'That’s a lot of bills',
-        `You have ${bills.length} bills scheduled. Reminders may become unreliable past a certain number on this device -- consider removing any you no longer need.`,
+        `You have ${bills.length} bills scheduled. Reminders may become unreliable past a certain number on this device. Consider removing any you no longer need.`,
         [
           { text: 'Add anyway', onPress: () => beginAddForm() },
           { text: 'Cancel', style: 'cancel' },
@@ -462,7 +462,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                 <View>
                   <Text className="font-nunito-medium dark:text-white">Variable amount</Text>
                   <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                    Different each time -- you&apos;ll be asked to enter it on the due date.
+                    Different each time. You&apos;ll be asked to enter it on the due date.
                   </Text>
                 </View>
                 <Switch
@@ -541,7 +541,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                     />
                   )}
                   <Text className="font-nunito text-gray-800 dark:text-white text-sm">
-                    {selectedCategory?.name ?? 'Category -- optional'}
+                    {selectedCategory?.name ?? 'Category (optional)'}
                   </Text>
                 </View>
                 <Feather name="chevron-down" size={16} color={isDark ? '#E8C39E' : '#9ca3af'} />
