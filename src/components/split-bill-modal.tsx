@@ -298,7 +298,7 @@ export function SplitBillModal({
         categories.map((c) => ({ id: c.id, name: c.name })),
       );
       if (!parsed || parsed.length === 0) {
-        setError("Couldn't find any line items in that -- try a clearer photo, or enter the total manually.");
+        setError("Couldn't find any line items in that. Try a clearer photo, or enter the total manually.");
         return;
       }
       const scannedItems = parsed
@@ -553,7 +553,7 @@ export function SplitBillModal({
                   <TextInput
                     value={merchant}
                     onChangeText={setMerchant}
-                    placeholder="Where? -- optional"
+                    placeholder="Where? (optional)"
                     className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 dark:text-white"
                   />
                 </View>
@@ -653,7 +653,7 @@ export function SplitBillModal({
                       />
                     )}
                     <Text className="font-nunito text-gray-800 dark:text-white text-sm">
-                      {selectedCategory?.name ?? 'Category -- optional'}
+                      {selectedCategory?.name ?? 'Category (optional)'}
                     </Text>
                   </View>
                   <Feather name="chevron-down" size={16} color={isDark ? '#E8C39E' : '#9ca3af'} />

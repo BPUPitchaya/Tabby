@@ -29,7 +29,7 @@ async function callGemini(input: GeminiInput, schema: Record<string, unknown>): 
 
 export async function categorizeTransaction(
   description: string,
-  categories: { id: string; name: string }[]
+  categories: { id: string; name: string }[],
 ): Promise<string | null> {
   if (!description.trim() || categories.length === 0) return null;
 
@@ -40,12 +40,57 @@ export async function categorizeTransaction(
         type: 'object',
         properties: { category: { type: 'string', enum: categories.map((c) => c.name) } },
         required: ['category'],
-      }
+      },
     )) as { category: string };
 
     return categories.find((c) => c.name === result.category)?.id ?? null;
   } catch {
     return null; // fall back to manual category selection, never block the user
+  }
+}
+
+// Past this many rows, a CSV import stops requesting AI categories --
+// one prompt already holding a few hundred descriptions is plenty of
+// tokens; the rest just come back uncategorized, same as before this
+// feature existed (never a hard failure, just no suggestion).
+const CSV_CATEGORIZE_CAP = 150;
+
+// One batched call for a whole CSV import, not one call per row -- an
+// import can be a few hundred transactions, and categorizeTransaction's
+// one-call-per-description shape would mean a few hundred round trips.
+// Same enum-constrained schema shape as categorizeTransaction, just an
+// array in and an array out, same order as `descriptions`.
+export async function categorizeTransactionsBatch(
+  descriptions: string[],
+  categories: { id: string; name: string }[],
+): Promise<(string | null)[]> {
+  if (descriptions.length === 0 || categories.length === 0) return descriptions.map(() => null);
+
+  const capped = descriptions.slice(0, CSV_CATEGORIZE_CAP);
+
+  try {
+    const result = (await callGemini(
+      `For each of these transaction descriptions, pick the single best-fitting category name from this exact list, in the same order as given: ${categories.map((c) => c.name).join(', ')}. If nothing fits well for one, use "None" for that one.\n\n${capped.map((d, i) => `${i + 1}. ${d.trim() || '(no description)'}`).join('\n')}`,
+      {
+        type: 'object',
+        properties: {
+          categories: {
+            type: 'array',
+            items: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+          },
+        },
+        required: ['categories'],
+      },
+    )) as { categories: string[] };
+
+    const resolved = capped.map((_, i) => {
+      const name = result.categories?.[i];
+      return name && name !== 'None' ? (categories.find((c) => c.name === name)?.id ?? null) : null;
+    });
+    // Rows past the cap, if any, just get no suggestion.
+    return [...resolved, ...descriptions.slice(CSV_CATEGORIZE_CAP).map(() => null)];
+  } catch {
+    return descriptions.map(() => null);
   }
 }
 
@@ -115,7 +160,7 @@ function mapRawExpenses(expenses: RawParsedExpense[] | undefined): ParsedExpense
 // back correctly split.
 export async function parseNaturalLanguageExpenses(
   text: string,
-  categories: { id: string; name: string }[]
+  categories: { id: string; name: string }[],
 ): Promise<ParsedExpense[] | null> {
   if (!text.trim()) return null;
 
@@ -123,7 +168,7 @@ export async function parseNaturalLanguageExpenses(
     const today = new Date().toISOString().slice(0, 10);
     const result = (await callGemini(
       `Today's date is ${today}. Extract one or more transactions from this text -- it may describe a single purchase or payment, or a list of several, separated by commas or "and": "${text}". For each one, decide isIncome: true if money came IN (a gift, salary, refund, being paid back, selling something), false if money went OUT (a purchase, bill, payment). The description should be just what the money was for (e.g. "Coffee", "Birthday gift"), excluding any date words, dollar amounts, merchant names, or filler. If a specific shop/business/brand/person name is mentioned (e.g. "at Starbucks", "from Pak'nSave"), extract it separately as the merchant -- otherwise merchant is "None". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. For the date: if a specific day is mentioned ("on the 9th of September", "yesterday", "last Tuesday", "July 10th"), resolve it to YYYY-MM-DD relative to today's date above -- for a month/day with no year, assume this year unless that would be in the future, in which case assume last year (these are things that already happened). If no date is mentioned at all, use today's date.`,
-      expensesSchema(categories)
+      expensesSchema(categories),
     )) as { expenses: RawParsedExpense[] };
 
     return mapRawExpenses(result.expenses);
@@ -141,7 +186,7 @@ export async function parseNaturalLanguageExpenses(
 export async function parseFinancialDocument(
   base64Data: string,
   mimeType: string,
-  categories: { id: string; name: string }[]
+  categories: { id: string; name: string }[],
 ): Promise<ParsedExpense[] | null> {
   if (!base64Data) return null;
 
@@ -156,7 +201,7 @@ export async function parseFinancialDocument(
         },
         { type: partType, data: base64Data, mime_type: mimeType },
       ],
-      expensesSchema(categories)
+      expensesSchema(categories),
     )) as { expenses: RawParsedExpense[] };
 
     return mapRawExpenses(result.expenses);
@@ -185,7 +230,7 @@ export type ParsedBillSplit = {
 // fall back to the regular parseNaturalLanguageExpenses path.
 export async function parseBillSplit(
   text: string,
-  categories: { id: string; name: string }[]
+  categories: { id: string; name: string }[],
 ): Promise<ParsedBillSplit | null> {
   if (!text.trim()) return null;
 
@@ -214,8 +259,16 @@ export async function parseBillSplit(
             },
           },
         },
-        required: ['isSplit', 'title', 'merchant', 'totalAmount', 'occurredAt', 'categoryName', 'participants'],
-      }
+        required: [
+          'isSplit',
+          'title',
+          'merchant',
+          'totalAmount',
+          'occurredAt',
+          'categoryName',
+          'participants',
+        ],
+      },
     )) as {
       isSplit: boolean;
       title: string;
@@ -234,7 +287,10 @@ export async function parseBillSplit(
       totalAmount: result.totalAmount,
       occurredAt: result.occurredAt,
       categoryName: result.categoryName || null,
-      participants: result.participants.map((p) => ({ name: p.name, amount: p.amount > 0 ? p.amount : null })),
+      participants: result.participants.map((p) => ({
+        name: p.name,
+        amount: p.amount > 0 ? p.amount : null,
+      })),
     };
   } catch {
     return null;
@@ -253,7 +309,7 @@ export async function generateMonthlySummary(params: {
         type: 'object',
         properties: { summary: { type: 'string' } },
         required: ['summary'],
-      }
+      },
     )) as { summary: string };
 
     return result.summary;

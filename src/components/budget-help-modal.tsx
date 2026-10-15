@@ -7,7 +7,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 const SECTIONS = [
   {
     heading: 'Only one number is ever active',
-    body: "Home shows either your overall budget or the sum of your category budgets -- never both at once, so there's nothing to reconcile.",
+    body: "Home shows either your overall budget or the sum of your category budgets, never both at once, so there's nothing to reconcile.",
   },
   {
     heading: 'Overall budget',
@@ -15,11 +15,11 @@ const SECTIONS = [
   },
   {
     heading: 'Category budgets',
-    body: 'Optional. Cap specific categories instead -- Groceries, Eating Out, whatever you want to watch closely. The moment you set even one cap, your overall figure switches to the sum of your capped categories.',
+    body: 'Optional. Cap specific categories instead, like Groceries or Eating Out, whatever you want to watch closely. The moment you set even one cap, your overall figure switches to the sum of your capped categories.',
   },
   {
     heading: 'Switching back',
-    body: '"Use overall budget instead" clears every category cap at once and returns to a single number -- or clear categories one at a time if you only want to drop a few.',
+    body: '"Use overall budget instead" clears every category cap at once and returns to a single number. Or clear categories one at a time if you only want to drop a few.',
   },
 ];
 
