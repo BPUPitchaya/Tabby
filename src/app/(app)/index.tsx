@@ -71,6 +71,7 @@ import {
   fetchIncomeSettings,
   fetchMyPaymentDetails,
   getNextPaydayDate,
+  getOverspendPrediction,
   getPendingPayday,
   type IncomeFrequency,
   type IncomeProgress,
@@ -123,11 +124,18 @@ function MoneyFlowRow({
   const pct =
     progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
   const over = pct !== null && pct >= 100;
+  // Pacing to clear budget by cycle end, even though not over yet -- a
+  // quieter amber cue here, not new text in this already-tight cell. The
+  // actual "on pace to go $X over" line lives on the Budget screen itself,
+  // where there's room to say it (see budget-modal.tsx).
+  const pacingOver = !over && progress ? getOverspendPrediction(progress) !== null : false;
   const barColor = over
     ? 'bg-rust-500 dark:bg-rust-400'
-    : pct !== null && pct >= 80
-      ? 'bg-tabby-400'
-      : 'bg-tabby-600 dark:bg-white';
+    : pacingOver
+      ? 'bg-amber-500 dark:bg-amber-400'
+      : pct !== null && pct >= 80
+        ? 'bg-tabby-400'
+        : 'bg-tabby-600 dark:bg-white';
 
   return (
     <View className="flex-row border border-tabby-100 dark:border-tabby-700 rounded-2xl overflow-hidden">
@@ -160,7 +168,13 @@ function MoneyFlowRow({
         {pct !== null && progress ? (
           <>
             <Text
-              className={`font-nunito-bold text-base ${over ? 'text-rust-600 dark:text-rust-400' : 'text-tabby-600 dark:text-tabby-300'}`}
+              className={`font-nunito-bold text-base ${
+                over
+                  ? 'text-rust-600 dark:text-rust-400'
+                  : pacingOver
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-tabby-600 dark:text-tabby-300'
+              }`}
             >
               {pct}%
             </Text>

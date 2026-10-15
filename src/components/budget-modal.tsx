@@ -14,6 +14,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { BudgetHelpModal } from '@/components/budget-help-modal';
 import { CategoryBudgetsModal } from '@/components/category-budgets-modal';
+import { CategorySpendModal } from '@/components/category-spend-modal';
 import { useAuth } from '@/lib/auth-context';
 import {
   clearAllCategoryBudgets,
@@ -27,6 +28,7 @@ import {
   computeIncomeCycle,
   fetchIncomeProgress,
   fetchIncomeSettings,
+  getOverspendPrediction,
   updateBudgetAmount,
   type IncomeProgress,
 } from '@/lib/profile';
@@ -55,6 +57,7 @@ export function BudgetModal({
   const isDark = useColorScheme() === 'dark';
 
   const [loading, setLoading] = useState(true);
+  const [viewingCategory, setViewingCategory] = useState<CategoryBudgetProgress | null>(null);
   const [hasIncome, setHasIncome] = useState(false);
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
@@ -147,6 +150,7 @@ export function BudgetModal({
   const pct =
     progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
   const over = pct !== null && pct >= 100;
+  const overspendPrediction = progress ? getOverspendPrediction(progress) : null;
 
   return (
     <Modal visible={visible} animationType="slide">
@@ -225,6 +229,11 @@ export function BudgetModal({
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs mt-2">
                     ${progress.spent.toFixed(2)} of ${progress.budgetAmount.toFixed(2)} spent
                   </Text>
+                  {overspendPrediction && (
+                    <Text className="font-nunito-semibold text-amber-600 dark:text-amber-400 text-xs mt-1">
+                      On pace to go ${overspendPrediction.overBy.toFixed(2)} over by cycle end
+                    </Text>
+                  )}
                 </View>
               )}
 
@@ -356,7 +365,14 @@ export function BudgetModal({
                       const catPct = c.budgetAmount > 0 ? Math.min(100, (c.spent / c.budgetAmount) * 100) : 0;
                       const catOver = c.spent >= c.budgetAmount;
                       return (
-                        <View key={c.categoryId} className="flex-row items-center justify-between py-1.5">
+                        <Pressable
+                          key={c.categoryId}
+                          onPress={() => setViewingCategory(c)}
+                          style={pressFeedback}
+                          accessibilityRole="button"
+                          accessibilityLabel={`See transactions for ${c.name}`}
+                          className="flex-row items-center justify-between py-1.5"
+                        >
                           <Text className="font-nunito text-sm text-gray-600 dark:text-tabby-200">
                             {c.name}
                           </Text>
@@ -371,7 +387,7 @@ export function BudgetModal({
                               ${c.spent.toFixed(0)} / ${c.budgetAmount.toFixed(0)}
                             </Text>
                           </View>
-                        </View>
+                        </Pressable>
                       );
                     })}
                   </View>
@@ -391,6 +407,14 @@ export function BudgetModal({
         onSaved={onSaved}
       />
       <BudgetHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
+      <CategorySpendModal
+        visible={viewingCategory !== null}
+        onClose={() => setViewingCategory(null)}
+        categoryId={viewingCategory?.categoryId ?? null}
+        categoryName={viewingCategory?.name ?? ''}
+        categoryIcon={viewingCategory?.icon ?? null}
+        cycle={progress?.cycle ?? null}
+      />
     </Modal>
   );
 }
