@@ -22,6 +22,37 @@ export const CUSTOM_CATEGORY_ICONS: FeatherIconName[] = [
   'music',
 ];
 
+// Keyword map for guessCategoryIcon -- checked before reaching for an AI
+// call, since picking 1 of 12 icons from a name is cheap enough to do
+// locally most of the time. Order matters: first keyword match wins, so
+// more specific terms are listed ahead of broader ones where they could
+// otherwise collide (none currently do, but keep that in mind extending
+// this list).
+const ICON_KEYWORDS: { icon: FeatherIconName; keywords: string[] }[] = [
+  { icon: 'coffee', keywords: ['coffee', 'cafe', 'café', 'bar', 'drinks'] },
+  { icon: 'shopping-bag', keywords: ['shop', 'shopping', 'store', 'clothes', 'clothing', 'retail'] },
+  { icon: 'home', keywords: ['home', 'house', 'rent', 'mortgage', 'furniture'] },
+  {
+    icon: 'truck',
+    keywords: ['car', 'transport', 'fuel', 'gas', 'uber', 'taxi', 'bus', 'train', 'parking'],
+  },
+  { icon: 'zap', keywords: ['electric', 'power', 'utility', 'utilities', 'internet', 'phone', 'water'] },
+  { icon: 'film', keywords: ['movie', 'cinema', 'film', 'netflix', 'streaming', 'show'] },
+  { icon: 'heart', keywords: ['health', 'gym', 'doctor', 'medical', 'fitness', 'wellness'] },
+  { icon: 'gift', keywords: ['gift', 'present', 'birthday', 'christmas'] },
+  { icon: 'briefcase', keywords: ['work', 'business', 'office', 'job'] },
+  { icon: 'book', keywords: ['book', 'education', 'school', 'course', 'study', 'tuition'] },
+  { icon: 'music', keywords: ['music', 'concert', 'spotify', 'song', 'band'] },
+];
+
+// Instant, local-only guess from a handful of common keywords -- null means
+// nothing matched, in which case the caller falls back to the (slower)
+// AI suggestion instead of making every category wait on a network call.
+export function guessCategoryIcon(name: string): FeatherIconName | null {
+  const lower = name.toLowerCase();
+  return ICON_KEYWORDS.find((entry) => entry.keywords.some((kw) => lower.includes(kw)))?.icon ?? null;
+}
+
 // Falls back to a generic tag icon for any unrecognized name, so a bad/typo'd
 // icon value in the DB never crashes the icon lookup -- just looks slightly
 // generic instead.

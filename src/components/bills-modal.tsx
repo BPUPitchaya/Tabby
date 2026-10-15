@@ -4,7 +4,7 @@
 // bill has nothing to do with Friends, and a bill has nothing to do with
 // Money Owing either -- its own place.
 import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -21,8 +21,8 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { CategoryIcon, CUSTOM_CATEGORY_ICONS } from '@/components/category-icon';
-import { categorizeTransaction } from '@/lib/ai';
+import { CategoryIcon, CUSTOM_CATEGORY_ICONS, guessCategoryIcon } from '@/components/category-icon';
+import { categorizeTransaction, suggestCategoryIcon } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
   BILL_COUNT_SOFT_CAP,
@@ -104,6 +104,10 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [suggestingCategory, setSuggestingCategory] = useState(false);
   const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
+  // A ref, not state -- same reasoning as transactions.tsx's
+  // newCategoryIconTouchedRef, a captured state value would be stale if
+  // the user tapped an icon while the AI suggestion call was in flight.
+  const newCategoryIconTouchedRef = useRef(false);
   const [newCategoryBusy, setNewCategoryBusy] = useState(false);
   const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
 
@@ -243,6 +247,26 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
     }
   };
 
+  // Suggests an icon from the typed name as soon as the "New category"
+  // panel opens -- only while the user hasn't manually picked one, same
+  // guard as transactions.tsx.
+  const handleOpenNewCategory = () => {
+    setShowNewCategory((v) => !v);
+    if (!categorySearch.trim() || newCategoryIconTouchedRef.current) return;
+
+    const guessed = guessCategoryIcon(categorySearch);
+    if (guessed) {
+      setNewCategoryIcon(guessed);
+      return;
+    }
+
+    suggestCategoryIcon(categorySearch, CUSTOM_CATEGORY_ICONS).then((suggested) => {
+      if (suggested && !newCategoryIconTouchedRef.current) {
+        setNewCategoryIcon(suggested as (typeof CUSTOM_CATEGORY_ICONS)[number]);
+      }
+    });
+  };
+
   const handleCreateCategory = async () => {
     if (!userId || !categorySearch.trim()) return;
     setNewCategoryBusy(true);
@@ -255,6 +279,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
       setShowNewCategory(false);
       setCategorySearch('');
       setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+      newCategoryIconTouchedRef.current = false;
     } catch (err) {
       setNewCategoryError(err instanceof Error ? err.message : 'Failed to create category.');
     } finally {
@@ -598,7 +623,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                   </View>
 
                   <Pressable
-                    onPress={() => setShowNewCategory((v) => !v)}
+                    onPress={handleOpenNewCategory}
                     style={pressFeedback}
                     className="flex-row items-center gap-2 px-2 py-2"
                   >
@@ -614,7 +639,10 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                         {CUSTOM_CATEGORY_ICONS.map((icon) => (
                           <Pressable
                             key={icon}
-                            onPress={() => setNewCategoryIcon(icon)}
+                            onPress={() => {
+                              newCategoryIconTouchedRef.current = true;
+                              setNewCategoryIcon(icon);
+                            }}
                             style={pressFeedback}
                             className={`w-8 h-8 rounded-full items-center justify-center border ${
                               newCategoryIcon === icon

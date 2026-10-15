@@ -49,6 +49,30 @@ export async function categorizeTransaction(
   }
 }
 
+// Picks a starting icon for a new custom category from its name, so
+// creating one isn't always the same generic tag icon until the user
+// manually taps through the grid -- they can still override it before
+// saving. `icons` is CUSTOM_CATEGORY_ICONS from category-icon.tsx, kept
+// as a plain string[] param here so lib/ai.ts doesn't import a component.
+export async function suggestCategoryIcon(name: string, icons: string[]): Promise<string | null> {
+  if (!name.trim() || icons.length === 0) return null;
+
+  try {
+    const result = (await callGemini(
+      `Pick the single best-fitting icon for a personal finance category named "${name}". Choose from this exact list: ${icons.join(', ')}.`,
+      {
+        type: 'object',
+        properties: { icon: { type: 'string', enum: icons } },
+        required: ['icon'],
+      },
+    )) as { icon: string };
+
+    return icons.includes(result.icon) ? result.icon : null;
+  } catch {
+    return null; // fall back to whatever icon is already selected, never block the user
+  }
+}
+
 // Past this many rows, a CSV import stops requesting AI categories --
 // one prompt already holding a few hundred descriptions is plenty of
 // tokens; the rest just come back uncategorized, same as before this

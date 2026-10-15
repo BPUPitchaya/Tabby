@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,10 +27,11 @@ import {
   parseBillSplit,
   parseFinancialDocument,
   parseNaturalLanguageExpenses,
+  suggestCategoryIcon,
   type ParsedBillSplit,
   type ParsedExpense,
 } from '@/lib/ai';
-import { CategoryIcon, CUSTOM_CATEGORY_ICONS } from '@/components/category-icon';
+import { CategoryIcon, CUSTOM_CATEGORY_ICONS, guessCategoryIcon } from '@/components/category-icon';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
@@ -283,6 +284,10 @@ export default function TransactionsScreen() {
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
+  // A ref, not state -- handleSuggestCategoryIcon reads this after an
+  // await, where a captured state value would be stale if the user tapped
+  // an icon while the AI call was still in flight.
+  const newCategoryIconTouchedRef = useRef(false);
   const [newCategoryBusy, setNewCategoryBusy] = useState(false);
   const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
 
@@ -349,7 +354,29 @@ export default function TransactionsScreen() {
     setShowNewCategory(false);
     setNewCategoryName('');
     setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+    newCategoryIconTouchedRef.current = false;
     setNewCategoryError(null);
+  };
+
+  // Suggests an icon from the typed name -- a local keyword guess first
+  // (instant, covers most common names), AI only as a fallback when
+  // nothing matches, so this isn't a network round trip every time. Only
+  // while the user hasn't manually picked one themselves, so it never
+  // overrides an explicit choice (checked both before and after the AI
+  // call, since the user could tap an icon while it's in flight).
+  const handleSuggestCategoryIcon = async () => {
+    if (!newCategoryName.trim() || newCategoryIconTouchedRef.current) return;
+
+    const guessed = guessCategoryIcon(newCategoryName);
+    if (guessed) {
+      setNewCategoryIcon(guessed);
+      return;
+    }
+
+    const suggested = await suggestCategoryIcon(newCategoryName, CUSTOM_CATEGORY_ICONS);
+    if (suggested && !newCategoryIconTouchedRef.current) {
+      setNewCategoryIcon(suggested as (typeof CUSTOM_CATEGORY_ICONS)[number]);
+    }
   };
 
   const handleCreateCategory = async () => {
@@ -364,6 +391,7 @@ export default function TransactionsScreen() {
       setShowNewCategory(false);
       setNewCategoryName('');
       setNewCategoryIcon(CUSTOM_CATEGORY_ICONS[0]);
+      newCategoryIconTouchedRef.current = false;
     } catch (err) {
       setNewCategoryError(err instanceof Error ? err.message : 'Failed to create category.');
     } finally {
@@ -1283,6 +1311,7 @@ export default function TransactionsScreen() {
                   <TextInput
                     value={newCategoryName}
                     onChangeText={setNewCategoryName}
+                    onBlur={handleSuggestCategoryIcon}
                     placeholder="Category name"
                     autoFocus
                     className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
@@ -1291,7 +1320,10 @@ export default function TransactionsScreen() {
                     {CUSTOM_CATEGORY_ICONS.map((icon) => (
                       <Pressable
                         key={icon}
-                        onPress={() => setNewCategoryIcon(icon)}
+                        onPress={() => {
+                          newCategoryIconTouchedRef.current = true;
+                          setNewCategoryIcon(icon);
+                        }}
                         style={pressFeedback}
                         className={`w-9 h-9 rounded-full items-center justify-center border ${
                           newCategoryIcon === icon
