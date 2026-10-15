@@ -1,3 +1,4 @@
+import { fetchCategoryBudgets } from '@/lib/category-budgets';
 import { supabase } from '@/lib/supabase';
 
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'monthly';
@@ -329,18 +330,53 @@ export type IncomeProgress = {
   frequency: IncomeFrequency;
   cycle: IncomeCycle;
   spent: number;
+  // true once any per-category budgets exist -- budgetAmount/spent are
+  // then the sum of caps and the sum of spend in exactly those budgeted
+  // categories, not the old single manually-set figure. See
+  // category-budgets.ts; the overall number never drifts from the
+  // category breakdown because it's derived from the same caps.
+  isDerivedFromCategories: boolean;
 };
 
 // null whenever there's nothing to show progress against -- no income set
-// up at all, or income set up but no budget chosen yet (the Budget cell
-// falls back to "Set it" in that case, same as before this had a separate
-// budget figure).
+// up at all, and neither an overall budget nor any category budgets
+// chosen yet (the Budget cell falls back to "Set it" in that case).
 export async function fetchIncomeProgress(userId: string): Promise<IncomeProgress | null> {
   const settings = await fetchIncomeSettings(userId);
-  if (!settings || settings.budgetAmount === null) return null;
+  if (!settings) return null;
 
   const cycle = computeIncomeCycle(settings);
   if (!cycle) return null;
+
+  const categoryBudgets = await fetchCategoryBudgets(userId);
+
+  if (categoryBudgets.length > 0) {
+    const budgetedCategoryIds = categoryBudgets.map((b) => b.categoryId);
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('is_income', false)
+      .eq('skipped', false)
+      .in('category_id', budgetedCategoryIds)
+      .gte('occurred_at', cycle.startDate)
+      .lt('occurred_at', cycle.endDate);
+
+    if (error) throw error;
+
+    const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
+    const budgetAmount = categoryBudgets.reduce((sum, b) => sum + b.amount, 0);
+
+    return {
+      budgetAmount,
+      frequency: settings.frequency,
+      cycle,
+      spent: Math.round(spent * 100) / 100,
+      isDerivedFromCategories: true,
+    };
+  }
+
+  if (settings.budgetAmount === null) return null;
 
   const { data, error } = await supabase
     .from('transactions')
@@ -360,5 +396,6 @@ export async function fetchIncomeProgress(userId: string): Promise<IncomeProgres
     frequency: settings.frequency,
     cycle,
     spent: Math.round(spent * 100) / 100,
+    isDerivedFromCategories: false,
   };
 }
