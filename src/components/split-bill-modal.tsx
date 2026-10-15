@@ -23,7 +23,13 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { parseFinancialDocument } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
-import { createBillSplit, findUserIdByEmail, type BillSplitItem, type DraftShare } from '@/lib/bill-splits';
+import {
+  createBillSplit,
+  findUserIdByEmail,
+  matchKnownParticipant,
+  type BillSplitItem,
+  type DraftShare,
+} from '@/lib/bill-splits';
 import { addTransaction, fetchCategories, type Category } from '@/lib/transactions';
 import { CategoryIcon } from '@/components/category-icon';
 import { presentScanSheet } from '@/lib/document-scan';
@@ -143,37 +149,53 @@ export function SplitBillModal({
     setError(null);
     setResult(null);
 
-    if (draft && draft.participants.length > 0) {
-      const draftParticipants = draft.participants.map((p) => ({
-        key: `guest:${p.name}:${Date.now()}:${Math.random()}`,
-        userId: null,
-        label: p.name,
-      }));
-      setParticipants(draftParticipants);
-      const hasNamedAmounts = draft.participants.some((p) => p.amount !== null);
-      setSplitMode(hasNamedAmounts ? 'custom' : 'equal');
-      setCustomAmounts(
-        hasNamedAmounts
-          ? Object.fromEntries(
-              draftParticipants.map((p, i) => [p.key, draft.participants[i].amount?.toFixed(2) ?? ''])
-            )
-          : {}
-      );
-    } else {
+    if (!draft || draft.participants.length === 0) {
       setParticipants([]);
       setSplitMode('equal');
       setCustomAmounts({});
     }
     setItemAssignments({});
 
-    fetchMyFlat(userId)
-      .then((flat) => (flat ? fetchFlatMembers(flat.id) : []))
-      .then((members) => setFlatMembers(members.filter((m) => m.user_id !== userId)))
-      .catch(() => setFlatMembers([]));
+    // Flatmates/friends have to be in hand before a draft's participant
+    // names can be matched against them -- otherwise "Sarah" always ends
+    // up a guest even when she's a real friend, since knownPeople would
+    // still be empty at match time.
+    Promise.all([
+      fetchMyFlat(userId)
+        .then((flat) => (flat ? fetchFlatMembers(flat.id) : []))
+        .then((members) => members.filter((m) => m.user_id !== userId))
+        .catch(() => [] as FlatMember[]),
+      fetchFriends(userId).catch(() => [] as Friend[]),
+    ]).then(([members, friendsList]) => {
+      setFlatMembers(members);
+      setFriends(friendsList);
 
-    fetchFriends(userId)
-      .then(setFriends)
-      .catch(() => setFriends([]));
+      if (!draft || draft.participants.length === 0) return;
+
+      const known = [
+        ...members.map((m) => ({ userId: m.user_id, label: m.profiles?.display_name ?? 'Flatmate' })),
+        ...friendsList
+          .filter((f) => !members.some((m) => m.user_id === f.userId))
+          .map((f) => ({ userId: f.userId, label: f.displayName })),
+      ];
+
+      const draftParticipants = draft.participants.map((p) => {
+        const matched = matchKnownParticipant(p.name, known);
+        return matched
+          ? { key: `user:${matched.userId}`, userId: matched.userId, label: matched.label }
+          : { key: `guest:${p.name}:${Date.now()}:${Math.random()}`, userId: null, label: p.name };
+      });
+      setParticipants(draftParticipants);
+      const hasNamedAmounts = draft.participants.some((p) => p.amount !== null);
+      setSplitMode(hasNamedAmounts ? 'custom' : 'equal');
+      setCustomAmounts(
+        hasNamedAmounts
+          ? Object.fromEntries(
+              draftParticipants.map((p, i) => [p.key, draft.participants[i].amount?.toFixed(2) ?? '']),
+            )
+          : {},
+      );
+    });
 
     fetchCategories('expense')
       .then((cats) => {
@@ -189,7 +211,11 @@ export function SplitBillModal({
   // for the picker -- deduped by user_id so someone who's both (a
   // flatmate you've also friended) shows up once, not twice.
   const knownPeople = [
-    ...flatMembers.map((m) => ({ userId: m.user_id, label: m.profiles?.display_name ?? 'Flatmate', tag: 'Flatmate' })),
+    ...flatMembers.map((m) => ({
+      userId: m.user_id,
+      label: m.profiles?.display_name ?? 'Flatmate',
+      tag: 'Flatmate',
+    })),
     ...friends
       .filter((f) => !flatMembers.some((m) => m.user_id === f.userId))
       .map((f) => ({ userId: f.userId, label: f.displayName, tag: 'Friend' })),
@@ -742,7 +768,9 @@ export function SplitBillModal({
                       .map((p) => (
                         <Pressable
                           key={p.userId}
-                          onPress={() => addParticipant({ key: `user:${p.userId}`, userId: p.userId, label: p.label })}
+                          onPress={() =>
+                            addParticipant({ key: `user:${p.userId}`, userId: p.userId, label: p.label })
+                          }
                           style={pressFeedback}
                           className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-300 dark:border-tabby-600"
                         >
@@ -750,7 +778,9 @@ export function SplitBillModal({
                           <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
                             {p.label}
                           </Text>
-                          <Text className="font-nunito text-xs text-gray-400 dark:text-tabby-400">{p.tag}</Text>
+                          <Text className="font-nunito text-xs text-gray-400 dark:text-tabby-400">
+                            {p.tag}
+                          </Text>
                         </Pressable>
                       ))}
                   </View>
