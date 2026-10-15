@@ -31,11 +31,43 @@ export async function fetchCategories(type: CategoryType) {
   return data as Category[];
 }
 
+// Case-insensitive duplicate check against this user's OWN categories only
+// -- a custom "Groceries" still collides with another custom "groceries"
+// the user made earlier, but never with the fixed global default of the
+// same name (that's a different row, user_id null, not something this
+// check should block re-adding a personal variant of).
+export async function createCategory(
+  userId: string,
+  name: string,
+  icon: string,
+  type: CategoryType,
+): Promise<Category> {
+  const trimmed = name.trim();
+  const { data: existing, error: fetchError } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('type', type)
+    .ilike('name', trimmed);
+  if (fetchError) throw fetchError;
+  if (existing && existing.length > 0) {
+    throw new Error(`You already have a category named "${trimmed}".`);
+  }
+
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ user_id: userId, name: trimmed, icon, type })
+    .select('id, name, icon, type')
+    .single();
+  if (error) throw error;
+  return data as Category;
+}
+
 export async function fetchTransactions(userId: string) {
   const { data, error } = await supabase
     .from('transactions')
     .select(
-      'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type)'
+      'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type)',
     )
     .eq('user_id', userId)
     .order('occurred_at', { ascending: false })
@@ -102,7 +134,7 @@ export async function updateTransaction(
     categoryId: string | null;
     occurredAt: string;
     isIncome?: boolean;
-  }
+  },
 ) {
   const { error } = await supabase
     .from('transactions')
@@ -133,7 +165,7 @@ export async function bulkAddTransactions(
     occurredAt: string;
     categoryId?: string | null;
     isIncome?: boolean;
-  }[]
+  }[],
 ) {
   const { error } = await supabase.from('transactions').insert(
     rows.map((r) => ({
@@ -144,7 +176,7 @@ export async function bulkAddTransactions(
       category_id: r.categoryId ?? null,
       occurred_at: r.occurredAt,
       is_income: r.isIncome ?? false,
-    }))
+    })),
   );
   if (error) throw error;
 }
