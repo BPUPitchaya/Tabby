@@ -1,4 +1,3 @@
-import { fetchCategoryBudgets } from '@/lib/category-budgets';
 import { supabase } from '@/lib/supabase';
 
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'monthly';
@@ -90,97 +89,14 @@ export async function updateWantsFlat(userId: string, wantsFlat: boolean) {
   if (error) throw error;
 }
 
-// Recurring expected income, stored in its own table (income_settings) --
-// deliberately NOT a column on profiles, since profiles has a
-// "viewable by any authenticated user" policy (so flatmates can see each
-// other's display_name) and income is sensitive enough to need a strict,
-// self-only policy instead.
-//
-// budgetAmount is separate from amount (what you earn) -- how much of your
-// income you actually intend to spend, not a restatement of income itself.
-// null until the user sets it explicitly; always null if income itself
-// hasn't been set (there's no pay cycle to attach a budget to otherwise).
-export type IncomeSettings = {
-  amount: number;
-  frequency: IncomeFrequency;
-  payWeekday: number | null; // 0-6, Sunday-Saturday
-  payDayOfMonth: number | null; // 1-31
-  budgetAmount: number | null;
-  // Most recent payday the user actually confirmed income for -- distinct
-  // from the schedule math in computeIncomeCycle(), which only knows when
-  // paydays fall, not whether this one was acknowledged. See
-  // getPendingPayday().
-  lastConfirmedPayday: string | null;
-};
-
-export async function fetchIncomeSettings(userId: string): Promise<IncomeSettings | null> {
-  const { data, error } = await supabase
-    .from('income_settings')
-    .select(
-      'income_amount, income_frequency, income_pay_weekday, income_pay_day_of_month, budget_amount, last_confirmed_payday',
-    )
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) return null;
-
-  return {
-    amount: data.income_amount,
-    frequency: data.income_frequency,
-    payWeekday: data.income_pay_weekday,
-    payDayOfMonth: data.income_pay_day_of_month,
-    budgetAmount: data.budget_amount,
-    lastConfirmedPayday: data.last_confirmed_payday,
-  };
-}
-
-// No row exists until the user sets income up, so this is an upsert rather
-// than a plain update -- there's nothing to update the first time. Only
-// writes the income columns (not budget_amount), so saving income never
-// clobbers a budget that was set separately -- upsert's ON CONFLICT only
-// touches the columns listed here.
-export async function updateIncomeSettings(
-  userId: string,
-  settings: Pick<IncomeSettings, 'amount' | 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
-) {
-  const { error } = await supabase.from('income_settings').upsert(
-    {
-      user_id: userId,
-      income_amount: settings.amount,
-      income_frequency: settings.frequency,
-      income_pay_weekday: settings.payWeekday,
-      income_pay_day_of_month: settings.payDayOfMonth,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' },
-  );
-  if (error) throw error;
-}
-
-export async function clearIncomeSettings(userId: string) {
-  const { error } = await supabase.from('income_settings').delete().eq('user_id', userId);
-  if (error) throw error;
-}
-
-// Plain update, not upsert -- a budget can only be set once an
-// income_settings row already exists (the UI gates on this: Budget can't
-// be opened for editing until Earned has been set up at least once).
-export async function updateBudgetAmount(userId: string, budgetAmount: number) {
-  const { error } = await supabase
-    .from('income_settings')
-    .update({ budget_amount: budgetAmount, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-  if (error) throw error;
-}
-
-export async function clearBudgetAmount(userId: string) {
-  const { error } = await supabase
-    .from('income_settings')
-    .update({ budget_amount: null, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-  if (error) throw error;
-}
+// income_settings (the old single-job singleton this type/these functions
+// used to read and write) is retired as of Phase 5 of the income-sources
+// plan -- income_sources is now the only live read/write path, via
+// income-sources.ts. The table itself still exists with historical data,
+// just unread by the app. See IncomeCycle/computeIncomeCycle below (still
+// shared pure math, reused by income-sources.ts and bills.ts) and
+// getOverspendPrediction (still shared, structurally typed against
+// whatever progress shape is passed in).
 
 // Supabase Auth's email change sends a confirmation link to the new
 // address -- the email on the session doesn't actually change until the
@@ -242,7 +158,7 @@ function mostRecentWeekday(now: Date, weekday: number): Date {
 // month's, if that day hasn't happened yet this month), clamped to the
 // last day of shorter months.
 export function computeIncomeCycle(
-  settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
+  settings: { frequency: IncomeFrequency; payWeekday: number | null; payDayOfMonth: number | null },
   now: Date = new Date(),
 ): IncomeCycle | null {
   const { frequency, payWeekday, payDayOfMonth } = settings;
@@ -290,54 +206,6 @@ export function computeIncomeCycle(
   return null;
 }
 
-// The most recent payday (cycle.startDate) if it hasn't been confirmed
-// yet -- shown as a "did you get paid?" prompt. null means either no
-// schedule is set, or the latest payday is already confirmed.
-export function getPendingPayday(
-  settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth' | 'lastConfirmedPayday'>,
-  now: Date = new Date(),
-): string | null {
-  const cycle = computeIncomeCycle(settings, now);
-  if (!cycle) return null;
-  if (settings.lastConfirmedPayday && settings.lastConfirmedPayday >= cycle.startDate) return null;
-  return cycle.startDate;
-}
-
-// The next payday after `now` -- cycle.endDate is defined as "the first
-// day of the next cycle," which is exactly the next payday. Used to
-// schedule the next local reminder ahead of time.
-export function getNextPaydayDate(
-  settings: Pick<IncomeSettings, 'frequency' | 'payWeekday' | 'payDayOfMonth'>,
-  now: Date = new Date(),
-): string | null {
-  return computeIncomeCycle(settings, now)?.endDate ?? null;
-}
-
-// Atomic -- logs the income transaction AND advances last_confirmed_payday
-// in one Postgres function call, so a crash/kill mid-confirm can't leave
-// the two out of sync. See confirm_bill_payment/skip_bill_payment for the
-// same pattern (and why it matters) in bills.ts.
-export async function confirmPaydayPayment(amount: number, paydayDate: string): Promise<void> {
-  const { error } = await supabase.rpc('confirm_payday_payment', {
-    p_amount: amount,
-    p_payday_date: paydayDate,
-  });
-  if (error) throw error;
-}
-
-export type IncomeProgress = {
-  budgetAmount: number;
-  frequency: IncomeFrequency;
-  cycle: IncomeCycle;
-  spent: number;
-  // true once any per-category budgets exist -- budgetAmount/spent are
-  // then the sum of caps and the sum of spend in exactly those budgeted
-  // categories, not the old single manually-set figure. See
-  // category-budgets.ts; the overall number never drifts from the
-  // category breakdown because it's derived from the same caps.
-  isDerivedFromCategories: boolean;
-};
-
 export type OverspendPrediction = {
   projectedTotal: number;
   overBy: number;
@@ -352,7 +220,7 @@ export type OverspendPrediction = {
 // so), and a 10%-over-budget floor so a projection that's merely a few
 // dollars over isn't presented as if it were a warning.
 export function getOverspendPrediction(
-  progress: Pick<IncomeProgress, 'cycle' | 'budgetAmount' | 'spent'>,
+  progress: { cycle: IncomeCycle; budgetAmount: number; spent: number },
   now: Date = new Date(),
 ): OverspendPrediction | null {
   if (progress.budgetAmount <= 0) return null;
@@ -380,64 +248,6 @@ export function getOverspendPrediction(
   };
 }
 
-// null whenever there's nothing to show progress against -- no income set
-// up at all, and neither an overall budget nor any category budgets
-// chosen yet (the Budget cell falls back to "Set it" in that case).
-export async function fetchIncomeProgress(userId: string): Promise<IncomeProgress | null> {
-  const settings = await fetchIncomeSettings(userId);
-  if (!settings) return null;
-
-  const cycle = computeIncomeCycle(settings);
-  if (!cycle) return null;
-
-  const categoryBudgets = await fetchCategoryBudgets(userId);
-
-  if (categoryBudgets.length > 0) {
-    const budgetedCategoryIds = categoryBudgets.map((b) => b.categoryId);
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('amount')
-      .eq('user_id', userId)
-      .eq('is_income', false)
-      .eq('skipped', false)
-      .in('category_id', budgetedCategoryIds)
-      .gte('occurred_at', cycle.startDate)
-      .lt('occurred_at', cycle.endDate);
-
-    if (error) throw error;
-
-    const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
-    const budgetAmount = categoryBudgets.reduce((sum, b) => sum + b.amount, 0);
-
-    return {
-      budgetAmount,
-      frequency: settings.frequency,
-      cycle,
-      spent: Math.round(spent * 100) / 100,
-      isDerivedFromCategories: true,
-    };
-  }
-
-  if (settings.budgetAmount === null) return null;
-
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('is_income', false)
-    .eq('skipped', false) // a skipped bill is logged for history, not counted against budget
-    .gte('occurred_at', cycle.startDate)
-    .lt('occurred_at', cycle.endDate);
-
-  if (error) throw error;
-
-  const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
-
-  return {
-    budgetAmount: settings.budgetAmount,
-    frequency: settings.frequency,
-    cycle,
-    spent: Math.round(spent * 100) / 100,
-    isDerivedFromCategories: false,
-  };
-}
+// fetchIncomeProgress (the income_settings-based version of this) is
+// retired -- see getIncomeSourceProgress in income-sources.ts, which reads
+// the primary income source's cycle/budget_amount instead.

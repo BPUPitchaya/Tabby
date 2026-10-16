@@ -3,6 +3,7 @@
 // gross/net tax tracking. See 0028_add_income_sources.sql for the schema
 // and the two DB-level constraints (one primary per user, one main tax
 // code per user) this file's pure helpers mirror for friendlier UX.
+import { fetchCategoryBudgets } from '@/lib/category-budgets';
 import { computeIncomeCycle, type IncomeCycle, type IncomeFrequency } from '@/lib/profile';
 import { supabase } from '@/lib/supabase';
 
@@ -25,6 +26,10 @@ export type IncomeSource = {
   hasStudentLoan: boolean;
   kiwiSaverPct: KiwiSaverPct | null; // net tracking only, null = opted out
   lastConfirmedPayday: string | null;
+  // Only ever read off the primary source -- Budget rides whichever
+  // source's cycle is primary, same one-budget-per-cycle shape the old
+  // income_settings singleton had. See 0030_add_budget_amount_to_income_sources.sql.
+  budgetAmount: number | null;
 };
 
 type IncomeSourceRow = {
@@ -42,6 +47,7 @@ type IncomeSourceRow = {
   has_student_loan: boolean;
   kiwisaver_pct: KiwiSaverPct | null;
   last_confirmed_payday: string | null;
+  budget_amount: number | null;
 };
 
 function fromRow(row: IncomeSourceRow): IncomeSource {
@@ -60,11 +66,12 @@ function fromRow(row: IncomeSourceRow): IncomeSource {
     hasStudentLoan: row.has_student_loan,
     kiwiSaverPct: row.kiwisaver_pct,
     lastConfirmedPayday: row.last_confirmed_payday,
+    budgetAmount: row.budget_amount,
   };
 }
 
 const SELECT_COLUMNS =
-  'id, label, is_primary, mode, amount, hourly_rate, frequency, pay_weekday, day_of_month, tracking_mode, tax_code, has_student_loan, kiwisaver_pct, last_confirmed_payday';
+  'id, label, is_primary, mode, amount, hourly_rate, frequency, pay_weekday, day_of_month, tracking_mode, tax_code, has_student_loan, kiwisaver_pct, last_confirmed_payday, budget_amount';
 
 export async function fetchIncomeSources(userId: string): Promise<IncomeSource[]> {
   const { data, error } = await supabase
@@ -95,11 +102,18 @@ export type IncomeSourceParams = {
 // trusting the caller to already have -- mirrors the DB's own CHECK
 // constraint shape (mode = 'fixed' implies hourly_rate is null, etc.) so
 // the two can't drift apart.
+// is_primary is always written false here, never true -- the unique
+// index allows only one true row per user, so setting true inline can
+// collide with whichever row currently holds it (two plain updates each
+// trying to be true at once). setPrimaryIncomeSource below is the only
+// path allowed to write true: it clears the old one first. Writing false
+// here is always safe (false rows aren't in that index) and is exactly
+// right for the "turn this source's primary switch off" case too.
 function toRow(userId: string, params: IncomeSourceParams) {
   return {
     user_id: userId,
     label: params.label.trim(),
-    is_primary: params.isPrimary,
+    is_primary: false,
     mode: params.mode,
     amount: params.mode === 'fixed' ? params.amount : null,
     hourly_rate: params.mode === 'hourly' ? params.hourlyRate : null,
@@ -156,6 +170,21 @@ export async function setPrimaryIncomeSource(userId: string, id: string): Promis
 
 export function getPrimaryIncomeSource(sources: IncomeSource[]): IncomeSource | null {
   return sources.find((s) => s.isPrimary) ?? null;
+}
+
+// Plain updates, not RPCs -- same reasoning as setPrimaryIncomeSource: no
+// money involved, just a figure Budget reads back.
+export async function updateSourceBudgetAmount(sourceId: string, budgetAmount: number): Promise<void> {
+  const { error } = await supabase
+    .from('income_sources')
+    .update({ budget_amount: budgetAmount })
+    .eq('id', sourceId);
+  if (error) throw error;
+}
+
+export async function clearSourceBudgetAmount(sourceId: string): Promise<void> {
+  const { error } = await supabase.from('income_sources').update({ budget_amount: null }).eq('id', sourceId);
+  if (error) throw error;
 }
 
 // Mirrors the DB's income_sources_one_main_tax_code partial unique index --
@@ -244,4 +273,79 @@ export async function skipIncomeSourcePayment(sourceId: string, paydayDate: stri
     p_payday_date: paydayDate,
   });
   if (error) throw error;
+}
+
+// Phase 5: same shape as profile.ts's IncomeProgress/fetchIncomeProgress,
+// but keyed off the primary income source's cycle and budget_amount
+// instead of the old income_settings singleton -- getOverspendPrediction
+// (profile.ts) still works on this unchanged, since the shape matches.
+export type IncomeSourceProgress = {
+  budgetAmount: number;
+  frequency: IncomeFrequency;
+  cycle: IncomeCycle;
+  spent: number;
+  isDerivedFromCategories: boolean;
+};
+
+// null whenever there's nothing to show progress against -- no primary
+// source at all, or neither an overall budget nor any category budgets
+// chosen yet.
+export async function getIncomeSourceProgress(userId: string): Promise<IncomeSourceProgress | null> {
+  const sources = await fetchIncomeSources(userId);
+  const primary = getPrimaryIncomeSource(sources);
+  if (!primary) return null;
+
+  const cycle = getIncomeSourceCycle(primary);
+  if (!cycle) return null;
+
+  const categoryBudgets = await fetchCategoryBudgets(userId);
+
+  if (categoryBudgets.length > 0) {
+    const budgetedCategoryIds = categoryBudgets.map((b) => b.categoryId);
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('amount')
+      .eq('user_id', userId)
+      .eq('is_income', false)
+      .eq('skipped', false)
+      .in('category_id', budgetedCategoryIds)
+      .gte('occurred_at', cycle.startDate)
+      .lt('occurred_at', cycle.endDate);
+
+    if (error) throw error;
+
+    const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
+    const budgetAmount = categoryBudgets.reduce((sum, b) => sum + b.amount, 0);
+
+    return {
+      budgetAmount,
+      frequency: primary.frequency,
+      cycle,
+      spent: Math.round(spent * 100) / 100,
+      isDerivedFromCategories: true,
+    };
+  }
+
+  if (primary.budgetAmount === null) return null;
+
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('user_id', userId)
+    .eq('is_income', false)
+    .eq('skipped', false)
+    .gte('occurred_at', cycle.startDate)
+    .lt('occurred_at', cycle.endDate);
+
+  if (error) throw error;
+
+  const spent = (data ?? []).reduce((sum, row) => sum + (row as { amount: number }).amount, 0);
+
+  return {
+    budgetAmount: primary.budgetAmount,
+    frequency: primary.frequency,
+    cycle,
+    spent: Math.round(spent * 100) / 100,
+    isDerivedFromCategories: false,
+  };
 }

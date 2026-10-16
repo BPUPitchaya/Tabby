@@ -1,10 +1,12 @@
 // Multi-job income management -- list + form, same shape as bills-modal.tsx.
 // Phase 2's replacement for Pay Schedule's own entry points (Home's Earned
-// cell, Budget's redirect) -- see pay-schedule-modal.tsx, now retired from
-// those call sites. Earned and Budget still compute off the old
-// income_settings singleton until Phase 5's actual cutover, so this screen
-// carries the same "won't change Earned" disclaimer pay-schedule-modal.tsx
-// used to show. See income-sources.ts / 0028_add_income_sources.sql.
+// cell, Budget's redirect) -- Pay Schedule itself is deleted, no remaining
+// callers. Phase 5 cut Earned/Budget over to read the primary income
+// source's cycle + budget_amount directly (see getIncomeSourceProgress in
+// income-sources.ts), so the "won't change Earned" disclaimer below refers
+// to the Earned total specifically staying a record of logged
+// transactions -- it's not a stale leftover from before the cutover.
+// See income-sources.ts / 0028_add_income_sources.sql / 0030_add_budget_amount_to_income_sources.sql.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
@@ -27,6 +29,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   canUseTaxCode,
   createIncomeSource,
+  getPrimaryIncomeSource,
   deleteIncomeSource,
   fetchIncomeSources,
   setPrimaryIncomeSource,
@@ -496,7 +499,26 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                 <Text className="font-nunito-medium dark:text-white">Primary income</Text>
                 <Switch
                   value={form.isPrimary}
-                  onValueChange={(isPrimary) => setForm((f) => ({ ...f, isPrimary }))}
+                  onValueChange={(isPrimary) => {
+                    // Turning it off is non-destructive -- only this row
+                    // changes. Turning it on replaces whichever other
+                    // source currently holds it, so confirm that swap
+                    // before it's saved, same as any other irreversible-
+                    // feeling settings change.
+                    const currentPrimary = getPrimaryIncomeSource(sources);
+                    if (isPrimary && currentPrimary && currentPrimary.id !== form.id) {
+                      Alert.alert(
+                        'Make this your primary income?',
+                        `Budget and your overall pay cycle will switch to follow this source instead of "${currentPrimary.label}".`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Make primary', onPress: () => setForm((f) => ({ ...f, isPrimary: true })) },
+                        ],
+                      );
+                      return;
+                    }
+                    setForm((f) => ({ ...f, isPrimary }));
+                  }}
                 />
               </View>
               <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300 -mt-2">

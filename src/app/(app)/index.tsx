@@ -67,30 +67,17 @@ import {
 import {
   confirmIncomeSourcePayment,
   fetchIncomeSources,
+  getIncomeSourceCycle,
+  getIncomeSourceProgress,
   getNextIncomeSourcePaydayDate,
   getPendingIncomeSourcePayday,
+  getPrimaryIncomeSource,
   skipIncomeSourcePayment,
   type IncomeSource,
+  type IncomeSourceProgress,
 } from '@/lib/income-sources';
-import {
-  cancelPaydayFollowUp,
-  schedulePaydayFollowUp,
-  schedulePaydayReminder,
-} from '@/lib/payday-notifications';
 import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
-import {
-  computeIncomeCycle,
-  confirmPaydayPayment,
-  fetchIncomeProgress,
-  fetchIncomeSettings,
-  fetchMyPaymentDetails,
-  getNextPaydayDate,
-  getOverspendPrediction,
-  getPendingPayday,
-  type IncomeFrequency,
-  type IncomeProgress,
-  type IncomeSettings,
-} from '@/lib/profile';
+import { fetchMyPaymentDetails, getOverspendPrediction, type IncomeFrequency } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : undefined);
 
@@ -133,7 +120,7 @@ function MoneyFlowRow({
 }: {
   earned: number;
   spent: number;
-  progress: IncomeProgress | null;
+  progress: IncomeSourceProgress | null;
   periodLabel: string;
   onPressEarned: () => void;
   onPressBudget: () => void;
@@ -337,10 +324,10 @@ export default function HomeScreen() {
   const userId = session?.user.id;
 
   const [data, setData] = useState<DashboardData | null>(null);
-  const [incomeProgress, setIncomeProgress] = useState<IncomeProgress | null>(null);
-  // null = dashboard period is the calendar month (no pay schedule set, or
-  // the user picked "Always this month" in Settings). Non-null = Earned/
-  // Spent/category breakdown follow this pay cycle instead.
+  const [incomeProgress, setIncomeProgress] = useState<IncomeSourceProgress | null>(null);
+  // null = dashboard period is the calendar month (no primary income source
+  // set, or the user picked "Always this month" in Settings). Non-null =
+  // Earned/Spent/category breakdown follow this pay cycle instead.
   const [periodFrequency, setPeriodFrequency] = useState<IncomeFrequency | null>(null);
   const [trendPreference, setTrendPreference] = useState<TrendPeriodPreference>('auto');
   const [insight, setInsight] = useState<string | null>(null);
@@ -356,9 +343,6 @@ export default function HomeScreen() {
   const [overdueShares, setOverdueShares] = useState<OwedToMeShare[]>([]);
   const [reminders, setReminders] = useState<MyBillSplitShare[]>([]);
   const [myPaymentDetails, setMyPaymentDetails] = useState<string | null>(null);
-  const [incomeSettings, setIncomeSettings] = useState<IncomeSettings | null>(null);
-  const [pendingPayday, setPendingPayday] = useState<string | null>(null);
-  const [paydayBusy, setPaydayBusy] = useState(false);
   const [pendingBills, setPendingBills] = useState<(Bill & { dueDate: string })[]>([]);
   const [billBusyId, setBillBusyId] = useState<string | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -374,25 +358,24 @@ export default function HomeScreen() {
       setError(null);
       setInsight(null);
 
-      const [periodPreference, trendPref, incomeSettings] = await Promise.all([
+      const [periodPreference, trendPref, incomeSources] = await Promise.all([
         loadDashboardPeriodPreference(),
         loadTrendPeriodPreference(),
-        fetchIncomeSettings(userId),
+        fetchIncomeSources(userId),
       ]);
       setTrendPreference(trendPref);
-      setIncomeSettings(incomeSettings);
-      setPendingPayday(incomeSettings ? getPendingPayday(incomeSettings) : null);
-      // computeIncomeCycle only needs frequency/payday, which income
-      // settings always has once set -- unlike IncomeProgress, this isn't
-      // gated on a budget amount existing too, since Earned/Spent
+      const primary = getPrimaryIncomeSource(incomeSources);
+      // getIncomeSourceCycle only needs frequency/payday, which the primary
+      // source always has once set -- unlike IncomeSourceProgress, this
+      // isn't gated on a budget amount existing too, since Earned/Spent
       // following pay schedule shouldn't require a budget to be set.
-      const cycle = incomeSettings ? computeIncomeCycle(incomeSettings) : null;
+      const cycle = primary ? getIncomeSourceCycle(primary) : null;
       const period: DashboardPeriod | null = periodPreference === 'pay-cycle' ? cycle : null;
-      setPeriodFrequency(period ? incomeSettings!.frequency : null);
+      setPeriodFrequency(period ? primary!.frequency : null);
 
       const [result, progress] = await Promise.all([
         fetchDashboardData(userId, period),
-        fetchIncomeProgress(userId),
+        getIncomeSourceProgress(userId),
       ]);
       setData(result);
       setIncomeProgress(progress);
@@ -500,29 +483,10 @@ export default function HomeScreen() {
     await loadNotifications();
   };
 
-  // `amount` comes from the bell's own editable field, prefilled from
-  // incomeSettings.amount but not locked to it -- an hourly/variable
-  // payday is rarely exactly the configured expected figure.
-  const handleConfirmPayday = async (amount: number) => {
-    if (!userId || !incomeSettings || !pendingPayday) return;
-    setPaydayBusy(true);
-    try {
-      await confirmPaydayPayment(amount, pendingPayday);
-      await cancelPaydayFollowUp().catch(() => {});
-      const nextPayday = getNextPaydayDate(incomeSettings);
-      if (nextPayday) await schedulePaydayReminder(nextPayday).catch(() => {});
-      setPendingPayday(null);
-      await load();
-    } finally {
-      setPaydayBusy(false);
-    }
-  };
-
-  // Declining doesn't clear pendingPayday -- it's still unconfirmed, just
-  // re-asked later. Only the 12h follow-up reminder changes.
-  const handleDeclinePayday = async () => {
-    await schedulePaydayFollowUp().catch(() => {});
-  };
+  // The old singleton payday confirm/decline (income_settings-based) is
+  // retired here -- every income source, primary included, now goes
+  // through handleConfirmIncomeSource/handleDeclineIncomeSource below,
+  // which already covers this same job via the INCOME bell section.
 
   const rescheduleBillReminder = async (bill: Bill) => {
     const nextDue = getNextBillDueDate(bill);
@@ -678,8 +642,7 @@ export default function HomeScreen() {
               overdueShares.length +
               reminders.length +
               pendingBills.length +
-              pendingIncomeSources.length +
-              (pendingPayday ? 1 : 0) >
+              pendingIncomeSources.length >
               0 && (
               <View className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 items-center justify-center">
                 <Text className="font-nunito-bold text-white text-[10px]">
@@ -688,8 +651,7 @@ export default function HomeScreen() {
                     overdueShares.length +
                     reminders.length +
                     pendingBills.length +
-                    pendingIncomeSources.length +
-                    (pendingPayday ? 1 : 0)}
+                    pendingIncomeSources.length}
                 </Text>
               </View>
             )}
@@ -861,9 +823,6 @@ export default function HomeScreen() {
         proposedShares={proposedShares}
         overdueShares={overdueShares}
         reminders={reminders}
-        pendingPayday={pendingPayday}
-        paydayAmount={incomeSettings?.amount ?? 0}
-        paydayBusy={paydayBusy}
         pendingBills={pendingBills}
         billBusyId={billBusyId}
         pendingIncomeSources={pendingIncomeSources}
@@ -873,8 +832,6 @@ export default function HomeScreen() {
         onRemindInApp={handleRemindInApp}
         onRemindViaMessage={handleRemindViaMessage}
         onMarkPaid={handleMarkPaid}
-        onConfirmPayday={handleConfirmPayday}
-        onDeclinePayday={handleDeclinePayday}
         onConfirmBill={handleConfirmBill}
         onDeclineBill={handleDeclineBill}
         onSkipBill={handleSkipBill}

@@ -27,7 +27,7 @@ import {
   type CategoryBudgetProgress,
 } from '@/lib/category-budgets';
 import { fetchDashboardData } from '@/lib/dashboard';
-import { computeIncomeCycle, fetchIncomeSettings } from '@/lib/profile';
+import { fetchIncomeSources, getIncomeSourceCycle, getPrimaryIncomeSource } from '@/lib/income-sources';
 import { fetchCategories, type Category } from '@/lib/transactions';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -55,8 +55,9 @@ export function CategoryBudgetsModal({
   const load = async () => {
     if (!userId) return;
     try {
-      const settings = await fetchIncomeSettings(userId);
-      const cycle = settings ? computeIncomeCycle(settings) : null;
+      const sources = await fetchIncomeSources(userId);
+      const primary = getPrimaryIncomeSource(sources);
+      const cycle = primary ? getIncomeSourceCycle(primary) : null;
 
       const [cats, budgets, dashboard] = await Promise.all([
         fetchCategories('expense'),
