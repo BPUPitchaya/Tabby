@@ -1,10 +1,10 @@
 // Multi-job income management -- list + form, same shape as bills-modal.tsx.
-// Deliberately NOT yet wired in as the replacement for Pay Schedule's own
-// entry points (Home's Earned cell, Budget's redirect) -- those still read
-// the old income_settings singleton untouched. This screen writes to the
-// new income_sources table and is reachable on its own from Profile so it
-// can be tried and tested before anything else cuts over to reading it.
-// See income-sources.ts / 0028_add_income_sources.sql.
+// Phase 2's replacement for Pay Schedule's own entry points (Home's Earned
+// cell, Budget's redirect) -- see pay-schedule-modal.tsx, now retired from
+// those call sites. Earned and Budget still compute off the old
+// income_settings singleton until Phase 5's actual cutover, so this screen
+// carries the same "won't change Earned" disclaimer pay-schedule-modal.tsx
+// used to show. See income-sources.ts / 0028_add_income_sources.sql.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
@@ -343,6 +343,11 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
             </View>
           ) : view === 'list' ? (
             <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
+              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                Add each job you&apos;re paid by, how much and how often. This sets the pay cycle Budget
+                measures against -- it won&apos;t change the Earned total, which only counts income
+                transactions you log yourself (confirmed from the bell, or added by hand).
+              </Text>
               {error && (
                 <View className="px-3 py-2 bg-red-50 dark:bg-red-950 rounded-lg">
                   <Text className="font-nunito text-red-600 dark:text-red-400 text-sm">{error}</Text>
@@ -350,7 +355,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
               )}
               {sources.length === 0 ? (
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  No income sources yet. Add one to start tracking Earned and Budget.
+                  No income sources yet. Add your first one below.
                 </Text>
               ) : (
                 sources.map((source) => (

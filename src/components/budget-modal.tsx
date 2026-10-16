@@ -40,7 +40,8 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 // income defines (frequency + payday), so there's nothing to attach it to
 // otherwise. Rather than let the user set a budget with no cycle (which
 // would mean introducing a second, independent time window alongside the
-// pay cycle already used everywhere else), this just redirects to Pay Schedule.
+// pay cycle already used everywhere else), this just redirects to Income
+// Sources (formerly Pay Schedule -- see income-sources-modal.tsx).
 export function BudgetModal({
   visible,
   onClose,
@@ -186,10 +187,10 @@ export function BudgetModal({
           ) : !hasIncome ? (
             <View className="flex-1 items-center justify-center px-8 gap-4">
               <Text className="font-fredoka-semibold text-lg text-center dark:text-white">
-                Set your pay schedule first
+                Add an income source first
               </Text>
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm text-center">
-                A budget needs a pay cycle to attach to. Set how much you earn and how often before budgeting
+                A budget needs a pay cycle to attach to. Add how much you earn and how often before budgeting
                 part of it.
               </Text>
               <Pressable
@@ -199,7 +200,7 @@ export function BudgetModal({
                 accessibilityRole="button"
               >
                 <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">
-                  Set pay schedule
+                  Add income source
                 </Text>
               </Pressable>
             </View>
