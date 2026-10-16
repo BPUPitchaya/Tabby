@@ -59,6 +59,20 @@ import {
 } from '@/lib/dashboard';
 import { fetchIncomingRequests, respondToFriendRequest, type FriendRequest } from '@/lib/friendships';
 import {
+  cancelIncomeSourceFollowUp,
+  requestIncomeSourceNotificationPermission,
+  scheduleIncomeSourceFollowUp,
+  scheduleIncomeSourceReminder,
+} from '@/lib/income-source-notifications';
+import {
+  confirmIncomeSourcePayment,
+  fetchIncomeSources,
+  getNextIncomeSourcePaydayDate,
+  getPendingIncomeSourcePayday,
+  skipIncomeSourcePayment,
+  type IncomeSource,
+} from '@/lib/income-sources';
+import {
   cancelPaydayFollowUp,
   schedulePaydayFollowUp,
   schedulePaydayReminder,
@@ -346,6 +360,10 @@ export default function HomeScreen() {
   const [billBusyId, setBillBusyId] = useState<string | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [showBills, setShowBills] = useState(false);
+  const [pendingIncomeSources, setPendingIncomeSources] = useState<(IncomeSource & { paydayDate: string })[]>(
+    [],
+  );
+  const [incomeSourceBusyId, setIncomeSourceBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -394,13 +412,14 @@ export default function HomeScreen() {
   const loadNotifications = useCallback(async () => {
     if (!userId) return;
     try {
-      const [incoming, shares, owedToMe, myReminders, paymentDetails, bills] = await Promise.all([
+      const [incoming, shares, owedToMe, myReminders, paymentDetails, bills, incomeSources] = await Promise.all([
         fetchIncomingRequests(userId),
         fetchMyProposedShares(userId),
         fetchOwedToMe(userId),
         fetchMyReminders(userId),
         fetchMyPaymentDetails(userId),
         fetchBills(userId),
+        fetchIncomeSources(userId),
       ]);
       setIncomingRequests(incoming);
       setProposedShares(shares);
@@ -412,6 +431,12 @@ export default function HomeScreen() {
         bills.flatMap((bill) => {
           const dueDate = getPendingBillDue(bill);
           return dueDate ? [{ ...bill, dueDate }] : [];
+        }),
+      );
+      setPendingIncomeSources(
+        incomeSources.flatMap((source) => {
+          const paydayDate = getPendingIncomeSourcePayday(source);
+          return paydayDate ? [{ ...source, paydayDate }] : [];
         }),
       );
     } catch {
@@ -534,6 +559,46 @@ export default function HomeScreen() {
     }
   };
 
+  const rescheduleIncomeSourceReminder = async (source: IncomeSource) => {
+    const nextPayday = getNextIncomeSourcePaydayDate(source);
+    if (!nextPayday) return;
+    const granted = await requestIncomeSourceNotificationPermission();
+    if (granted) await scheduleIncomeSourceReminder(source.id, source.label, nextPayday);
+  };
+
+  // `amount` is the bell's own editable field for fixed-mode sources, or
+  // rate x paid hours for hourly-mode (computed in the bell before this is
+  // called, via computeGrossPay) -- "paid" not "worked" hours, since paid
+  // leave still counts (see income-sources.ts).
+  const handleConfirmIncomeSource = async (source: IncomeSource & { paydayDate: string }, amount: number) => {
+    setIncomeSourceBusyId(source.id);
+    try {
+      await confirmIncomeSourcePayment(source.id, amount, source.paydayDate);
+      await cancelIncomeSourceFollowUp(source.id).catch(() => {});
+      await rescheduleIncomeSourceReminder(source).catch(() => {});
+      await Promise.all([load(), loadNotifications()]);
+    } finally {
+      setIncomeSourceBusyId(null);
+    }
+  };
+
+  // Same as bills' decline -- stays pending, re-asked after the follow-up.
+  const handleDeclineIncomeSource = async (source: IncomeSource & { paydayDate: string }) => {
+    await scheduleIncomeSourceFollowUp(source.id, source.label).catch(() => {});
+  };
+
+  const handleSkipIncomeSource = async (source: IncomeSource & { paydayDate: string }) => {
+    setIncomeSourceBusyId(source.id);
+    try {
+      await skipIncomeSourcePayment(source.id, source.paydayDate);
+      await cancelIncomeSourceFollowUp(source.id).catch(() => {});
+      await rescheduleIncomeSourceReminder(source).catch(() => {});
+      await Promise.all([load(), loadNotifications()]);
+    } finally {
+      setIncomeSourceBusyId(null);
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-tabby-50 dark:bg-tabby-900">
@@ -610,6 +675,7 @@ export default function HomeScreen() {
               overdueShares.length +
               reminders.length +
               pendingBills.length +
+              pendingIncomeSources.length +
               (pendingPayday ? 1 : 0) >
               0 && (
               <View className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 items-center justify-center">
@@ -619,6 +685,7 @@ export default function HomeScreen() {
                     overdueShares.length +
                     reminders.length +
                     pendingBills.length +
+                    pendingIncomeSources.length +
                     (pendingPayday ? 1 : 0)}
                 </Text>
               </View>
@@ -794,6 +861,8 @@ export default function HomeScreen() {
         paydayBusy={paydayBusy}
         pendingBills={pendingBills}
         billBusyId={billBusyId}
+        pendingIncomeSources={pendingIncomeSources}
+        incomeSourceBusyId={incomeSourceBusyId}
         onRespondRequest={handleRespondRequest}
         onRespondShare={handleRespondShare}
         onRemindInApp={handleRemindInApp}
@@ -804,6 +873,9 @@ export default function HomeScreen() {
         onConfirmBill={handleConfirmBill}
         onDeclineBill={handleDeclineBill}
         onSkipBill={handleSkipBill}
+        onConfirmIncomeSource={handleConfirmIncomeSource}
+        onDeclineIncomeSource={handleDeclineIncomeSource}
+        onSkipIncomeSource={handleSkipIncomeSource}
       />
       <BillsModal
         visible={showBills}

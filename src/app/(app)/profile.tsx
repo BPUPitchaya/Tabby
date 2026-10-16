@@ -9,6 +9,7 @@ import { BudgetModal } from '@/components/budget-modal';
 import { EditProfileModal } from '@/components/edit-profile-modal';
 import { FlatSettingsModal } from '@/components/flat-settings-modal';
 import { FriendsModal } from '@/components/friends-modal';
+import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { MoneyOwingModal } from '@/components/money-owing-modal';
 import { PayScheduleModal } from '@/components/pay-schedule-modal';
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
   const [showBills, setShowBills] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
   const [showPaySchedule, setShowPaySchedule] = useState(false);
+  const [showIncomeSources, setShowIncomeSources] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
   const handleSignOut = () => {
@@ -115,6 +117,12 @@ export default function ProfileScreen() {
             />
             <ListRow icon="calendar" label="Bills" onPress={() => setShowBills(true)} isDark={isDark} />
             <ListRow icon="pie-chart" label="Budget" onPress={() => setShowBudget(true)} isDark={isDark} />
+            <ListRow
+              icon="briefcase"
+              label="Income Sources"
+              onPress={() => setShowIncomeSources(true)}
+              isDark={isDark}
+            />
             <ListRow
               icon="settings"
               label="Settings"
@@ -180,6 +188,7 @@ export default function ProfileScreen() {
         }}
       />
       <PayScheduleModal visible={showPaySchedule} onClose={() => setShowPaySchedule(false)} />
+      <IncomeSourcesModal visible={showIncomeSources} onClose={() => setShowIncomeSources(false)} />
     </SafeAreaView>
   );
 }

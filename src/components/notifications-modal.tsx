@@ -25,6 +25,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { type Bill } from '@/lib/bills';
 import { type MyBillSplitShare, type OwedToMeShare } from '@/lib/bill-splits';
 import { type FriendRequest } from '@/lib/friendships';
+import { computeGrossPay, type IncomeSource } from '@/lib/income-sources';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -41,6 +42,8 @@ export function NotificationsModal({
   paydayBusy,
   pendingBills,
   billBusyId,
+  pendingIncomeSources,
+  incomeSourceBusyId,
   onRespondRequest,
   onRespondShare,
   onRemindInApp,
@@ -51,6 +54,9 @@ export function NotificationsModal({
   onConfirmBill,
   onDeclineBill,
   onSkipBill,
+  onConfirmIncomeSource,
+  onDeclineIncomeSource,
+  onSkipIncomeSource,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -64,6 +70,8 @@ export function NotificationsModal({
   paydayBusy: boolean;
   pendingBills: (Bill & { dueDate: string })[];
   billBusyId: string | null;
+  pendingIncomeSources: (IncomeSource & { paydayDate: string })[];
+  incomeSourceBusyId: string | null;
   onRespondRequest: (id: string, accept: boolean) => void;
   onRespondShare: (id: string, accept: boolean) => void;
   onRemindInApp: (share: OwedToMeShare) => void;
@@ -74,6 +82,9 @@ export function NotificationsModal({
   onConfirmBill: (bill: Bill & { dueDate: string }, amount: number) => void;
   onDeclineBill: (bill: Bill & { dueDate: string }) => void;
   onSkipBill: (bill: Bill & { dueDate: string }) => void;
+  onConfirmIncomeSource: (source: IncomeSource & { paydayDate: string }, amount: number) => void;
+  onDeclineIncomeSource: (source: IncomeSource & { paydayDate: string }) => void;
+  onSkipIncomeSource: (source: IncomeSource & { paydayDate: string }) => void;
 }) {
   const isDark = useColorScheme() === 'dark';
   const [billAmountDrafts, setBillAmountDrafts] = useState<Record<string, string>>({});
@@ -81,6 +92,12 @@ export function NotificationsModal({
   // payday is rarely exactly what was configured, and the old flow had no
   // way to log anything else (see Phase 0 of the income-sources plan).
   const [paydayAmountDraft, setPaydayAmountDraft] = useState<string | null>(null);
+  // Fixed-mode sources: an editable amount, same as the old singleton
+  // payday. Hourly-mode sources: paid hours instead, run through
+  // computeGrossPay -- "paid" not "worked" since paid leave still counts
+  // (see income-sources.ts).
+  const [incomeAmountDrafts, setIncomeAmountDrafts] = useState<Record<string, string>>({});
+  const [incomeHoursDrafts, setIncomeHoursDrafts] = useState<Record<string, string>>({});
 
   // Re-seed the draft from the newly expected amount whenever the pending
   // payday itself changes (a new cycle, or the prompt clearing) -- without
@@ -94,6 +111,7 @@ export function NotificationsModal({
     overdueShares.length === 0 &&
     reminders.length === 0 &&
     pendingBills.length === 0 &&
+    pendingIncomeSources.length === 0 &&
     !pendingPayday;
 
   const presentOverdueActions = (share: OwedToMeShare) => {
@@ -267,6 +285,93 @@ export function NotificationsModal({
                             </Pressable>
                             <Pressable
                               onPress={() => onSkipBill(bill)}
+                              disabled={busy}
+                              style={pressFeedback}
+                              className="px-3 items-center justify-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
+                            >
+                              <Text className="font-nunito-semibold text-sm text-gray-500 dark:text-tabby-300">
+                                Skip
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {pendingIncomeSources.length > 0 && (
+                <View className="gap-2">
+                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide">
+                    INCOME
+                  </Text>
+                  <View className="gap-1.5">
+                    {pendingIncomeSources.map((source) => {
+                      const busy = incomeSourceBusyId === source.id;
+                      const amountDraft = incomeAmountDrafts[source.id] ?? '';
+                      const hoursDraft = incomeHoursDrafts[source.id] ?? '';
+                      const confirmAmount =
+                        source.mode === 'fixed'
+                          ? parseFloat(amountDraft || String(source.amount ?? 0))
+                          : (computeGrossPay(source, parseFloat(hoursDraft)) ?? NaN);
+                      const canConfirm = !isNaN(confirmAmount) && confirmAmount > 0;
+                      return (
+                        <View
+                          key={source.id}
+                          className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-tabby-400 dark:border-tabby-200 gap-2"
+                        >
+                          <Text className="font-nunito-medium dark:text-white">
+                            Did you get paid by {source.label} on {source.paydayDate}?
+                          </Text>
+                          {source.mode === 'fixed' ? (
+                            <TextInput
+                              value={amountDraft || (source.amount ?? 0).toFixed(2)}
+                              onChangeText={(text) =>
+                                setIncomeAmountDrafts((d) => ({ ...d, [source.id]: text }))
+                              }
+                              placeholder="Amount"
+                              keyboardType="decimal-pad"
+                              className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
+                            />
+                          ) : (
+                            <TextInput
+                              value={hoursDraft}
+                              onChangeText={(text) =>
+                                setIncomeHoursDrafts((d) => ({ ...d, [source.id]: text }))
+                              }
+                              placeholder="How many hours were you paid for?"
+                              keyboardType="decimal-pad"
+                              className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
+                            />
+                          )}
+                          <View className="flex-row gap-2">
+                            <Pressable
+                              onPress={() => onConfirmIncomeSource(source, confirmAmount)}
+                              disabled={busy || !canConfirm}
+                              style={pressFeedback}
+                              className={`flex-1 items-center py-1.5 rounded-lg ${canConfirm ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-300 dark:bg-tabby-700'}`}
+                            >
+                              {busy ? (
+                                <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                              ) : (
+                                <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
+                                  Yes, log it
+                                </Text>
+                              )}
+                            </Pressable>
+                            <Pressable
+                              onPress={() => onDeclineIncomeSource(source)}
+                              disabled={busy}
+                              style={pressFeedback}
+                              className="flex-1 items-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
+                            >
+                              <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">
+                                Not yet
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => onSkipIncomeSource(source)}
                               disabled={busy}
                               style={pressFeedback}
                               className="px-3 items-center justify-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
