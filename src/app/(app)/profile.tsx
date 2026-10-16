@@ -12,7 +12,6 @@ import { FriendsModal } from '@/components/friends-modal';
 import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { MoneyOwingModal } from '@/components/money-owing-modal';
-import { PayScheduleModal } from '@/components/pay-schedule-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
@@ -61,7 +60,6 @@ export default function ProfileScreen() {
   const [showMoneyOwing, setShowMoneyOwing] = useState(false);
   const [showBills, setShowBills] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
-  const [showPaySchedule, setShowPaySchedule] = useState(false);
   const [showIncomeSources, setShowIncomeSources] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
@@ -184,10 +182,9 @@ export default function ProfileScreen() {
         onClose={() => setShowBudget(false)}
         onNeedsPaySchedule={() => {
           setShowBudget(false);
-          setShowPaySchedule(true);
+          setShowIncomeSources(true);
         }}
       />
-      <PayScheduleModal visible={showPaySchedule} onClose={() => setShowPaySchedule(false)} />
       <IncomeSourcesModal visible={showIncomeSources} onClose={() => setShowIncomeSources(false)} />
     </SafeAreaView>
   );
