@@ -29,8 +29,8 @@ import {
 } from '@/lib/bill-splits';
 import { BudgetModal } from '@/components/budget-modal';
 import { CategoryIcon } from '@/components/category-icon';
+import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { NotificationsModal } from '@/components/notifications-modal';
-import { PayScheduleModal } from '@/components/pay-schedule-modal';
 import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -100,11 +100,14 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 // Budget stays its own cell rather than folding into Spent: Spent is
 // recorded fact, Budget is a figure the user sets separately from what
 // they earn, and blending them would make "what happened" and "what you
-// intend" indistinguishable. Earned is tappable too, into Pay Schedule
+// intend" indistinguishable. Earned is tappable too, into Income Sources
 // (not literally "edit Earned" -- Earned stays a record of actual income
 // transactions either way) -- the modal's own copy says plainly that it
 // won't change this figure, since a first pass without that line read as
-// a bug ("I set my earnings and Earned still shows $0.00").
+// a bug ("I set my earnings and Earned still shows $0.00"). Phase 2 of the
+// income-sources plan retired the old single-job Pay Schedule screen from
+// this call site in favor of the new multi-job one -- see
+// income-sources-modal.tsx.
 const FREQUENCY_LABELS: Record<IncomeFrequency, string> = {
   weekly: 'Weekly',
   biweekly: 'Fortnightly',
@@ -157,7 +160,7 @@ function MoneyFlowRow({
         onPress={onPressEarned}
         style={pressFeedback}
         accessibilityRole="button"
-        accessibilityLabel="Edit pay schedule"
+        accessibilityLabel="Manage income sources"
         className="flex-1 p-3.5 gap-1"
       >
         <Text className="font-nunito-semibold text-sage-700 dark:text-sage-400 text-xs">Earned</Text>
@@ -344,7 +347,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showPayScheduleModal, setShowPayScheduleModal] = useState(false);
+  const [showIncomeSourcesModal, setShowIncomeSourcesModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
@@ -791,7 +794,7 @@ export default function HomeScreen() {
           spent={data?.periodTotal ?? 0}
           progress={incomeProgress}
           periodLabel={periodLabel}
-          onPressEarned={() => setShowPayScheduleModal(true)}
+          onPressEarned={() => setShowIncomeSourcesModal(true)}
           onPressBudget={() => setShowBudgetModal(true)}
         />
 
@@ -834,10 +837,12 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <PayScheduleModal
-        visible={showPayScheduleModal}
-        onClose={() => setShowPayScheduleModal(false)}
-        onSaved={load}
+      <IncomeSourcesModal
+        visible={showIncomeSourcesModal}
+        onClose={() => {
+          setShowIncomeSourcesModal(false);
+          loadNotifications();
+        }}
       />
       <BudgetModal
         visible={showBudgetModal}
@@ -845,7 +850,7 @@ export default function HomeScreen() {
         onSaved={load}
         onNeedsPaySchedule={() => {
           setShowBudgetModal(false);
-          setShowPayScheduleModal(true);
+          setShowIncomeSourcesModal(true);
         }}
       />
       <NotificationsModal
