@@ -3,7 +3,7 @@
 // as flats.test.ts and dashboard.test.ts. Stubbed out since these tests
 // only touch the pure computeIncomeCycle function, which never calls
 // supabase.
-import { computeIncomeCycle, getNextPaydayDate, getOverspendPrediction, getPendingPayday } from './profile';
+import { computeIncomeCycle, getOverspendPrediction } from './profile';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -72,51 +72,6 @@ describe('computeIncomeCycle', () => {
       expect(result?.startDate).toBe('2026-02-28');
       expect(result?.endDate).toBe('2026-03-31');
     });
-  });
-});
-
-describe('getPendingPayday', () => {
-  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026
-
-  it('returns the latest payday when never confirmed', () => {
-    // weekday 1 = Monday -- most recent Monday on/before Oct 15 is Oct 12
-    const result = getPendingPayday(
-      { frequency: 'weekly', payWeekday: 1, payDayOfMonth: null, lastConfirmedPayday: null },
-      now,
-    );
-    expect(result).toBe('2026-10-12');
-  });
-
-  it('returns null once that payday has been confirmed', () => {
-    const result = getPendingPayday(
-      { frequency: 'weekly', payWeekday: 1, payDayOfMonth: null, lastConfirmedPayday: '2026-10-12' },
-      now,
-    );
-    expect(result).toBeNull();
-  });
-
-  it('returns the new payday once a cycle has moved on past an old confirmation', () => {
-    const result = getPendingPayday(
-      { frequency: 'weekly', payWeekday: 1, payDayOfMonth: null, lastConfirmedPayday: '2026-10-05' },
-      now,
-    );
-    expect(result).toBe('2026-10-12');
-  });
-
-  it('returns null when no schedule is set', () => {
-    const result = getPendingPayday(
-      { frequency: undefined as never, payWeekday: null, payDayOfMonth: null, lastConfirmedPayday: null },
-      now,
-    );
-    expect(result).toBeNull();
-  });
-});
-
-describe('getNextPaydayDate', () => {
-  it('returns the next occurrence after now', () => {
-    const now = new Date(2026, 9, 15); // Thu Oct 15, 2026
-    const result = getNextPaydayDate({ frequency: 'weekly', payWeekday: 1, payDayOfMonth: null }, now);
-    expect(result).toBe('2026-10-19');
   });
 });
 

@@ -24,14 +24,15 @@ import {
 } from '@/lib/category-budgets';
 import { fetchDashboardData } from '@/lib/dashboard';
 import {
-  clearBudgetAmount,
-  computeIncomeCycle,
-  fetchIncomeProgress,
-  fetchIncomeSettings,
-  getOverspendPrediction,
-  updateBudgetAmount,
-  type IncomeProgress,
-} from '@/lib/profile';
+  clearSourceBudgetAmount,
+  fetchIncomeSources,
+  getIncomeSourceCycle,
+  getIncomeSourceProgress,
+  getPrimaryIncomeSource,
+  updateSourceBudgetAmount,
+  type IncomeSourceProgress,
+} from '@/lib/income-sources';
+import { getOverspendPrediction } from '@/lib/profile';
 import { fetchCategories } from '@/lib/transactions';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -59,28 +60,29 @@ export function BudgetModal({
 
   const [loading, setLoading] = useState(true);
   const [viewingCategory, setViewingCategory] = useState<CategoryBudgetProgress | null>(null);
-  const [hasIncome, setHasIncome] = useState(false);
+  const [primarySourceId, setPrimarySourceId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showCategoryBudgets, setShowCategoryBudgets] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [progress, setProgress] = useState<IncomeProgress | null>(null);
+  const [progress, setProgress] = useState<IncomeSourceProgress | null>(null);
   const [categoryProgress, setCategoryProgress] = useState<CategoryBudgetProgress[]>([]);
 
   const load = async () => {
     if (!userId) return;
-    const [income, incomeProgress, categoryBudgets] = await Promise.all([
-      fetchIncomeSettings(userId),
-      fetchIncomeProgress(userId),
+    const [sources, incomeProgress, categoryBudgets] = await Promise.all([
+      fetchIncomeSources(userId),
+      getIncomeSourceProgress(userId),
       fetchCategoryBudgets(userId),
     ]);
-    setHasIncome(income !== null);
-    setAmount(income?.budgetAmount ? String(income.budgetAmount) : '');
+    const primary = getPrimaryIncomeSource(sources);
+    setPrimarySourceId(primary?.id ?? null);
+    setAmount(primary?.budgetAmount ? String(primary.budgetAmount) : '');
     setProgress(incomeProgress);
 
     if (categoryBudgets.length > 0) {
-      const cycle = income ? computeIncomeCycle(income) : null;
+      const cycle = primary ? getIncomeSourceCycle(primary) : null;
       const [cats, dashboard] = await Promise.all([
         fetchCategories('expense'),
         fetchDashboardData(userId, cycle),
@@ -99,7 +101,7 @@ export function BudgetModal({
   }, [visible, userId]);
 
   const handleSave = async () => {
-    if (!userId) return;
+    if (!primarySourceId) return;
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       setMessage('Enter a valid amount.');
@@ -108,7 +110,7 @@ export function BudgetModal({
     setBusy(true);
     setMessage(null);
     try {
-      await updateBudgetAmount(userId, parsedAmount);
+      await updateSourceBudgetAmount(primarySourceId, parsedAmount);
       onSaved?.();
       onClose();
     } catch (err) {
@@ -119,10 +121,10 @@ export function BudgetModal({
   };
 
   const handleClear = async () => {
-    if (!userId) return;
+    if (!primarySourceId) return;
     setBusy(true);
     try {
-      await clearBudgetAmount(userId);
+      await clearSourceBudgetAmount(primarySourceId);
       setAmount('');
       onSaved?.();
       onClose();
@@ -184,7 +186,7 @@ export function BudgetModal({
             <View className="flex-1 items-center justify-center">
               <ActivityIndicator />
             </View>
-          ) : !hasIncome ? (
+          ) : !primarySourceId ? (
             <View className="flex-1 items-center justify-center px-8 gap-4">
               <Text className="font-fredoka-semibold text-lg text-center dark:text-white">
                 Add an income source first

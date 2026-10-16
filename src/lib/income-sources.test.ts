@@ -28,6 +28,7 @@ function source(partial: Partial<IncomeSource>): IncomeSource {
     hasStudentLoan: false,
     kiwiSaverPct: null,
     lastConfirmedPayday: null,
+    budgetAmount: null,
     ...partial,
   };
 }
