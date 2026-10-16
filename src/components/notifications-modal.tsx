@@ -26,6 +26,7 @@ import { type Bill } from '@/lib/bills';
 import { type MyBillSplitShare, type OwedToMeShare } from '@/lib/bill-splits';
 import { type FriendRequest } from '@/lib/friendships';
 import { computeGrossPay, type IncomeSource } from '@/lib/income-sources';
+import { computeNetPay, type NzTaxCode } from '@/lib/nz-tax';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -311,11 +312,26 @@ export function NotificationsModal({
                       const busy = incomeSourceBusyId === source.id;
                       const amountDraft = incomeAmountDrafts[source.id] ?? '';
                       const hoursDraft = incomeHoursDrafts[source.id] ?? '';
-                      const confirmAmount =
+                      // The field above always holds GROSS pay (what the payslip
+                      // itself shows) -- for net-tracked sources, what actually
+                      // gets logged as Earned is the estimated take-home, computed
+                      // from that gross figure via lib/nz-tax.ts.
+                      const grossAmount =
                         source.mode === 'fixed'
                           ? parseFloat(amountDraft || String(source.amount ?? 0))
                           : (computeGrossPay(source, parseFloat(hoursDraft)) ?? NaN);
-                      const canConfirm = !isNaN(confirmAmount) && confirmAmount > 0;
+                      const canConfirm = !isNaN(grossAmount) && grossAmount > 0;
+                      const netBreakdown =
+                        canConfirm && source.trackingMode === 'net' && source.taxCode
+                          ? computeNetPay({
+                              grossPay: grossAmount,
+                              frequency: source.frequency,
+                              taxCode: source.taxCode as NzTaxCode,
+                              hasStudentLoan: source.hasStudentLoan,
+                              kiwiSaverPct: source.kiwiSaverPct,
+                            })
+                          : null;
+                      const confirmAmount = netBreakdown ? netBreakdown.netPay : grossAmount;
                       return (
                         <View
                           key={source.id}
@@ -330,7 +346,7 @@ export function NotificationsModal({
                               onChangeText={(text) =>
                                 setIncomeAmountDrafts((d) => ({ ...d, [source.id]: text }))
                               }
-                              placeholder="Amount"
+                              placeholder={source.trackingMode === 'net' ? 'Gross amount' : 'Amount'}
                               keyboardType="decimal-pad"
                               className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
                             />
@@ -344,6 +360,12 @@ export function NotificationsModal({
                               keyboardType="decimal-pad"
                               className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
                             />
+                          )}
+                          {netBreakdown && (
+                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                              Est. take-home ${netBreakdown.netPay.toFixed(2)} after tax (gross $
+                              {grossAmount.toFixed(2)}) -- this is what gets logged.
+                            </Text>
                           )}
                           <View className="flex-row gap-2">
                             <Pressable

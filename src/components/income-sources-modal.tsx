@@ -36,6 +36,7 @@ import {
   type KiwiSaverPct,
   type TrackingMode,
 } from '@/lib/income-sources';
+import { computeNetPay, type NzTaxCode } from '@/lib/nz-tax';
 import type { IncomeFrequency } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -604,9 +605,72 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                     </View>
                   </View>
 
+                  {form.mode === 'fixed' && form.taxCode && form.frequency && parseFloat(form.amount) > 0 ? (
+                    (() => {
+                      const breakdown = computeNetPay({
+                        grossPay: parseFloat(form.amount),
+                        frequency: form.frequency!,
+                        taxCode: form.taxCode as NzTaxCode,
+                        hasStudentLoan: form.hasStudentLoan,
+                        kiwiSaverPct: form.kiwiSaverPct,
+                      });
+                      return (
+                        <View className="gap-1 bg-gray-50 dark:bg-tabby-800 rounded-lg p-2.5">
+                          <View className="flex-row justify-between">
+                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                              Income tax
+                            </Text>
+                            <Text className="font-nunito text-xs dark:text-white">
+                              -${breakdown.incomeTax.toFixed(2)}
+                            </Text>
+                          </View>
+                          <View className="flex-row justify-between">
+                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                              ACC earner levy
+                            </Text>
+                            <Text className="font-nunito text-xs dark:text-white">
+                              -${breakdown.accLevy.toFixed(2)}
+                            </Text>
+                          </View>
+                          {form.hasStudentLoan && (
+                            <View className="flex-row justify-between">
+                              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                                Student loan
+                              </Text>
+                              <Text className="font-nunito text-xs dark:text-white">
+                                -${breakdown.studentLoan.toFixed(2)}
+                              </Text>
+                            </View>
+                          )}
+                          {form.kiwiSaverPct && (
+                            <View className="flex-row justify-between">
+                              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                                KiwiSaver ({form.kiwiSaverPct}%)
+                              </Text>
+                              <Text className="font-nunito text-xs dark:text-white">
+                                -${breakdown.kiwiSaver.toFixed(2)}
+                              </Text>
+                            </View>
+                          )}
+                          <View className="flex-row justify-between pt-1 mt-1 border-t border-gray-200 dark:border-tabby-700">
+                            <Text className="font-nunito-semibold text-xs dark:text-white">
+                              Estimated take-home
+                            </Text>
+                            <Text className="font-nunito-bold text-xs dark:text-white">
+                              ${breakdown.netPay.toFixed(2)}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })()
+                  ) : (
+                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                      Pick a tax code and enter an amount to see an estimated take-home figure. Hourly jobs
+                      show their estimate per payday instead, once hours are entered.
+                    </Text>
+                  )}
                   <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                    Estimate only -- check your actual payslip. Take-home calculation isn&apos;t wired up yet,
-                    these are saved for when it is.
+                    Estimate only -- check your actual payslip.
                   </Text>
                 </View>
               )}
