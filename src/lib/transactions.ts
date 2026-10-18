@@ -18,7 +18,21 @@ export type Transaction = {
   category_id: string | null;
   is_income: boolean;
   categories: Category | null;
+  // Payslip-style breakdown, only present on a transaction logged via an
+  // income source's bell confirm (see income-sources.ts's IncomeBreakdown
+  // and 0031_add_income_breakdown_to_transactions.sql). All null for an
+  // ordinary manual/imported transaction.
+  income_source_id: string | null;
+  gross_amount: number | null;
+  income_tax: number | null;
+  acc_levy: number | null;
+  student_loan: number | null;
+  kiwisaver_amount: number | null;
+  hours_paid: number | null;
 };
+
+const TRANSACTION_COLUMNS =
+  'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type), income_source_id, gross_amount, income_tax, acc_levy, student_loan, kiwisaver_amount, hours_paid';
 
 export async function fetchCategories(type: CategoryType) {
   const { data, error } = await supabase
@@ -66,9 +80,7 @@ export async function createCategory(
 export async function fetchTransactions(userId: string) {
   const { data, error } = await supabase
     .from('transactions')
-    .select(
-      'id, amount, description, merchant, occurred_at, category_id, is_income, categories(id, name, icon, type)',
-    )
+    .select(TRANSACTION_COLUMNS)
     .eq('user_id', userId)
     .order('occurred_at', { ascending: false })
     .order('created_at', { ascending: false });
@@ -159,6 +171,18 @@ export async function updateTransaction(
     categoryId: string | null;
     occurredAt: string;
     isIncome?: boolean;
+    // Only set when correcting an income-source payday's figures inline
+    // (income-transaction-detail-modal.tsx) -- omitted, the breakdown
+    // columns are left exactly as they were (a plain amount/date/category
+    // edit shouldn't touch them).
+    incomeBreakdown?: {
+      grossAmount: number | null;
+      incomeTax: number | null;
+      accLevy: number | null;
+      studentLoan: number | null;
+      kiwiSaverAmount: number | null;
+      hoursPaid: number | null;
+    };
   },
 ) {
   const { error } = await supabase
@@ -170,6 +194,14 @@ export async function updateTransaction(
       category_id: params.categoryId,
       occurred_at: params.occurredAt,
       is_income: params.isIncome ?? false,
+      ...(params.incomeBreakdown && {
+        gross_amount: params.incomeBreakdown.grossAmount,
+        income_tax: params.incomeBreakdown.incomeTax,
+        acc_levy: params.incomeBreakdown.accLevy,
+        student_loan: params.incomeBreakdown.studentLoan,
+        kiwisaver_amount: params.incomeBreakdown.kiwiSaverAmount,
+        hours_paid: params.incomeBreakdown.hoursPaid,
+      }),
     })
     .eq('id', id);
 

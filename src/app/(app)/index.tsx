@@ -73,6 +73,7 @@ import {
   getPendingIncomeSourcePayday,
   getPrimaryIncomeSource,
   skipIncomeSourcePayment,
+  type IncomeBreakdown,
   type IncomeSource,
   type IncomeSourceProgress,
 } from '@/lib/income-sources';
@@ -537,10 +538,14 @@ export default function HomeScreen() {
   // rate x paid hours for hourly-mode (computed in the bell before this is
   // called, via computeGrossPay) -- "paid" not "worked" hours, since paid
   // leave still counts (see income-sources.ts).
-  const handleConfirmIncomeSource = async (source: IncomeSource & { paydayDate: string }, amount: number) => {
+  const handleConfirmIncomeSource = async (
+    source: IncomeSource & { paydayDate: string },
+    amount: number,
+    breakdown?: IncomeBreakdown,
+  ) => {
     setIncomeSourceBusyId(source.id);
     try {
-      await confirmIncomeSourcePayment(source.id, amount, source.paydayDate);
+      await confirmIncomeSourcePayment(source.id, amount, source.paydayDate, breakdown);
       await cancelIncomeSourceFollowUp(source.id).catch(() => {});
       await rescheduleIncomeSourceReminder(source).catch(() => {});
       await Promise.all([load(), loadNotifications()]);

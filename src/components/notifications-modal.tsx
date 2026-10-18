@@ -22,10 +22,12 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { parsePaidHours, parsePayslip } from '@/lib/ai';
 import { type Bill } from '@/lib/bills';
 import { type MyBillSplitShare, type OwedToMeShare } from '@/lib/bill-splits';
+import { presentScanSheet } from '@/lib/document-scan';
 import { type FriendRequest } from '@/lib/friendships';
-import { computeGrossPay, type IncomeSource } from '@/lib/income-sources';
+import { computeGrossPay, type IncomeBreakdown, type IncomeSource } from '@/lib/income-sources';
 import { computeNetPay, type NzTaxCode } from '@/lib/nz-tax';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -73,7 +75,11 @@ export function NotificationsModal({
   onConfirmBill: (bill: Bill & { dueDate: string }, amount: number) => void;
   onDeclineBill: (bill: Bill & { dueDate: string }) => void;
   onSkipBill: (bill: Bill & { dueDate: string }) => void;
-  onConfirmIncomeSource: (source: IncomeSource & { paydayDate: string }, amount: number) => void;
+  onConfirmIncomeSource: (
+    source: IncomeSource & { paydayDate: string },
+    amount: number,
+    breakdown?: IncomeBreakdown,
+  ) => void;
   onDeclineIncomeSource: (source: IncomeSource & { paydayDate: string }) => void;
   onSkipIncomeSource: (source: IncomeSource & { paydayDate: string }) => void;
 }) {
@@ -85,6 +91,12 @@ export function NotificationsModal({
   // (see income-sources.ts).
   const [incomeAmountDrafts, setIncomeAmountDrafts] = useState<Record<string, string>>({});
   const [incomeHoursDrafts, setIncomeHoursDrafts] = useState<Record<string, string>>({});
+  // Phase 6: which source is mid AI round-trip right now -- either reading
+  // a scanned payslip, or parsing free-text hours. Separate from the
+  // parent's own `busy`/`incomeSourceBusyId` (that one covers the actual
+  // confirm/skip RPC), since this covers the AI step that happens before
+  // the user even taps confirm.
+  const [aiBusyId, setAiBusyId] = useState<string | null>(null);
 
   const isEmpty =
     incoming.length === 0 &&
@@ -109,6 +121,70 @@ export function NotificationsModal({
         { text: 'Mark as Paid', onPress: () => onMarkPaid(share.id) },
         { text: 'Cancel', style: 'cancel' },
       ]);
+    }
+  };
+
+  // Phase 6: scan a photographed payslip as ground truth, reusing the same
+  // picker/AI infra as receipt scanning (document-scan.ts / lib/ai.ts).
+  // Only ever prefills the input the user still reviews and taps confirm
+  // on -- never auto-submits, and never touches tax code or rate (that AI
+  // use was ruled out earlier in this project). For a net-tracked source,
+  // only grossPay is used to prefill -- the field there means gross (tax
+  // is computed from it), so filling it from a scanned netPay would get
+  // taxed a second time.
+  const handleScanPayslip = async (source: IncomeSource) => {
+    try {
+      const doc = await presentScanSheet();
+      if (!doc) return;
+      setAiBusyId(source.id);
+      const parsed = await parsePayslip(doc.base64Data, doc.mimeType);
+      if (!parsed) {
+        Alert.alert("Couldn't read that payslip", 'Enter the figure manually instead.');
+        return;
+      }
+      if (source.mode === 'hourly') {
+        if (parsed.hoursPaid !== null) {
+          setIncomeHoursDrafts((d) => ({ ...d, [source.id]: String(parsed.hoursPaid) }));
+        } else {
+          Alert.alert("Couldn't read hours from that payslip", 'Enter them manually instead.');
+        }
+        return;
+      }
+      if (source.trackingMode === 'net') {
+        if (parsed.grossPay !== null) {
+          setIncomeAmountDrafts((d) => ({ ...d, [source.id]: String(parsed.grossPay) }));
+        } else {
+          Alert.alert(
+            "Couldn't read a gross figure from that payslip",
+            'This source tracks net pay, which needs the gross amount to estimate tax from -- enter it manually instead.',
+          );
+        }
+        return;
+      }
+      const amount = parsed.grossPay ?? parsed.netPay;
+      if (amount !== null) {
+        setIncomeAmountDrafts((d) => ({ ...d, [source.id]: String(amount) }));
+      } else {
+        Alert.alert("Couldn't read an amount from that payslip", 'Enter it manually instead.');
+      }
+    } catch (err) {
+      Alert.alert('Scan failed', err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setAiBusyId(null);
+    }
+  };
+
+  // Plain numbers resolve for free, instantly -- only reaches for AI when
+  // the typed text isn't one (see parsePaidHours in lib/ai.ts), so a
+  // normal "40" never costs a round trip.
+  const resolveHours = async (sourceId: string, draft: string): Promise<number | null> => {
+    const plain = parseFloat(draft);
+    if (!isNaN(plain)) return plain;
+    setAiBusyId(sourceId);
+    try {
+      return await parsePaidHours(draft);
+    } finally {
+      setAiBusyId(null);
     }
   };
 
@@ -240,36 +316,103 @@ export function NotificationsModal({
                   <View className="gap-1.5">
                     {pendingIncomeSources.map((source) => {
                       const busy = incomeSourceBusyId === source.id;
+                      const aiBusy = aiBusyId === source.id;
                       const amountDraft = incomeAmountDrafts[source.id] ?? '';
                       const hoursDraft = incomeHoursDrafts[source.id] ?? '';
                       // The field above always holds GROSS pay (what the payslip
                       // itself shows) -- for net-tracked sources, what actually
                       // gets logged as Earned is the estimated take-home, computed
-                      // from that gross figure via lib/nz-tax.ts.
-                      const grossAmount =
+                      // from that gross figure via lib/nz-tax.ts. Only resolved
+                      // here when the typed text is already a plain number --
+                      // free-text hours ("32 plus 8 sick") only resolve on confirm,
+                      // via resolveHours's AI fallback.
+                      const plainGrossAmount =
                         source.mode === 'fixed'
                           ? parseFloat(amountDraft || String(source.amount ?? 0))
                           : (computeGrossPay(source, parseFloat(hoursDraft)) ?? NaN);
-                      const canConfirm = !isNaN(grossAmount) && grossAmount > 0;
+                      const canConfirm =
+                        source.mode === 'fixed'
+                          ? !isNaN(plainGrossAmount) && plainGrossAmount > 0
+                          : hoursDraft.trim().length > 0;
                       const netBreakdown =
-                        canConfirm && source.trackingMode === 'net' && source.taxCode
+                        !isNaN(plainGrossAmount) &&
+                        plainGrossAmount > 0 &&
+                        source.trackingMode === 'net' &&
+                        source.taxCode
                           ? computeNetPay({
-                              grossPay: grossAmount,
+                              grossPay: plainGrossAmount,
                               frequency: source.frequency,
                               taxCode: source.taxCode as NzTaxCode,
                               hasStudentLoan: source.hasStudentLoan,
                               kiwiSaverPct: source.kiwiSaverPct,
                             })
                           : null;
-                      const confirmAmount = netBreakdown ? netBreakdown.netPay : grossAmount;
+
+                      const handleConfirmPress = async () => {
+                        let grossAmount = plainGrossAmount;
+                        let hoursUsed: number | undefined;
+                        if (source.mode === 'hourly') {
+                          if (isNaN(grossAmount)) {
+                            const hours = await resolveHours(source.id, hoursDraft);
+                            if (hours === null || hours <= 0) {
+                              Alert.alert(
+                                "Couldn't understand those hours",
+                                'Try rephrasing, or enter a plain number like "40".',
+                              );
+                              return;
+                            }
+                            hoursUsed = hours;
+                            grossAmount = computeGrossPay(source, hours) ?? NaN;
+                          } else {
+                            hoursUsed = parseFloat(hoursDraft);
+                          }
+                        }
+                        if (isNaN(grossAmount) || grossAmount <= 0) return;
+                        const netBreakdownFinal =
+                          source.trackingMode === 'net' && source.taxCode
+                            ? computeNetPay({
+                                grossPay: grossAmount,
+                                frequency: source.frequency,
+                                taxCode: source.taxCode as NzTaxCode,
+                                hasStudentLoan: source.hasStudentLoan,
+                                kiwiSaverPct: source.kiwiSaverPct,
+                              })
+                            : null;
+                        const breakdown: IncomeBreakdown = {
+                          grossAmount,
+                          hoursPaid: hoursUsed,
+                          incomeTax: netBreakdownFinal?.incomeTax,
+                          accLevy: netBreakdownFinal?.accLevy,
+                          studentLoan: netBreakdownFinal?.studentLoan,
+                          kiwiSaver: netBreakdownFinal?.kiwiSaver,
+                        };
+                        onConfirmIncomeSource(
+                          source,
+                          netBreakdownFinal ? netBreakdownFinal.netPay : grossAmount,
+                          breakdown,
+                        );
+                      };
+
                       return (
                         <View
                           key={source.id}
                           className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-tabby-400 dark:border-tabby-200 gap-2"
                         >
-                          <Text className="font-nunito-medium dark:text-white">
-                            Did you get paid by {source.label} on {source.paydayDate}?
-                          </Text>
+                          <View className="flex-row items-center justify-between gap-2">
+                            <Text className="font-nunito-medium dark:text-white flex-1">
+                              Did you get paid by {source.label} on {source.paydayDate}?
+                            </Text>
+                            <Pressable
+                              onPress={() => handleScanPayslip(source)}
+                              disabled={busy || aiBusy}
+                              style={pressFeedback}
+                              accessibilityRole="button"
+                              accessibilityLabel="Scan payslip"
+                              className="w-8 h-8 rounded-full bg-white dark:bg-tabby-900 border border-gray-300 dark:border-tabby-600 items-center justify-center"
+                            >
+                              <Feather name="camera" size={14} color={isDark ? '#E8C39E' : '#4b5563'} />
+                            </Pressable>
+                          </View>
                           {source.mode === 'fixed' ? (
                             <TextInput
                               value={amountDraft || (source.amount ?? 0).toFixed(2)}
@@ -286,25 +429,24 @@ export function NotificationsModal({
                               onChangeText={(text) =>
                                 setIncomeHoursDrafts((d) => ({ ...d, [source.id]: text }))
                               }
-                              placeholder="How many hours were you paid for?"
-                              keyboardType="decimal-pad"
+                              placeholder='How many hours were you paid for? e.g. "40" or "32 plus 8 sick"'
                               className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
                             />
                           )}
                           {netBreakdown && (
                             <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
                               Est. take-home ${netBreakdown.netPay.toFixed(2)} after tax (gross $
-                              {grossAmount.toFixed(2)}) -- this is what gets logged.
+                              {plainGrossAmount.toFixed(2)}) -- this is what gets logged.
                             </Text>
                           )}
                           <View className="flex-row gap-2">
                             <Pressable
-                              onPress={() => onConfirmIncomeSource(source, confirmAmount)}
-                              disabled={busy || !canConfirm}
+                              onPress={handleConfirmPress}
+                              disabled={busy || aiBusy || !canConfirm}
                               style={pressFeedback}
                               className={`flex-1 items-center py-1.5 rounded-lg ${canConfirm ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-300 dark:bg-tabby-700'}`}
                             >
-                              {busy ? (
+                              {busy || aiBusy ? (
                                 <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
                               ) : (
                                 <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
@@ -314,7 +456,7 @@ export function NotificationsModal({
                             </Pressable>
                             <Pressable
                               onPress={() => onDeclineIncomeSource(source)}
-                              disabled={busy}
+                              disabled={busy || aiBusy}
                               style={pressFeedback}
                               className="flex-1 items-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
                             >
@@ -324,7 +466,7 @@ export function NotificationsModal({
                             </Pressable>
                             <Pressable
                               onPress={() => onSkipIncomeSource(source)}
-                              disabled={busy}
+                              disabled={busy || aiBusy}
                               style={pressFeedback}
                               className="px-3 items-center justify-center py-1.5 rounded-lg border border-gray-300 dark:border-tabby-600"
                             >
