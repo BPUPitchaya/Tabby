@@ -1,5 +1,5 @@
 // Full owe/owed history for bill splits -- the two existing fetch
-// functions (fetchMyPendingShares, markSharePaid) already existed in
+// functions (fetchMyPendingShares, fetchOwedToMe) already existed in
 // bill-splits.ts with nothing in the UI reading them; this is their home.
 // Proposed (not-yet-accepted) shares deliberately aren't duplicated here
 // -- those live in the Home bell and the Friends screen's Split Requests
@@ -13,9 +13,11 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -63,9 +65,15 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
   const [youOwe, setYouOwe] = useState<MyBillSplitShare[]>([]);
   const [owedToYou, setOwedToYou] = useState<OwedToMeShare[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [myPaymentDetails, setMyPaymentDetails] = useState<string | null>(null);
+  // Which "You Owe" row is expanded into its own confirm-with-note form --
+  // only one at a time, same reasoning as any other inline-edit-in-place
+  // pattern in this app (never two forms open at once).
+  const [expandedOweId, setExpandedOweId] = useState<string | null>(null);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   const load = async () => {
     if (!userId) return;
@@ -91,6 +99,12 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     load().finally(() => setLoading(false));
   }, [visible, userId]);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
   // Two-step settle -- a share only reaches 'paid' once BOTH sides have
   // confirmed. "You Owe" is your own half (the ower); "Owed To You" is
   // the other half (the payee). A guest share (no account on the other
@@ -99,7 +113,8 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
   const handleOwerConfirm = async (shareId: string) => {
     setPayingId(shareId);
     try {
-      await confirmSharePaidByOwer(shareId);
+      await confirmSharePaidByOwer(shareId, noteDrafts[shareId]);
+      setExpandedOweId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark as paid.');
@@ -138,20 +153,12 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
   };
 
   // Your own half of the settle -- the share only reaches 'paid' once the
-  // other party (the payee) confirms too.
-  const presentYouOweActions = (share: MyBillSplitShare) => {
+  // other party (the payee) confirms too. Expands in place to an optional
+  // note field (a bank ref, "paid via cash") rather than an ActionSheet --
+  // the payee's own cross-check, see confirmSharePaidByOwer.
+  const toggleYouOweExpanded = (share: MyBillSplitShare) => {
     if (share.ower_confirmed_at) return; // already confirmed your half
-    const options = ['Mark as Paid', 'Cancel'];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 1 }, (index) => {
-        if (index === 0) handleOwerConfirm(share.id);
-      });
-    } else {
-      Alert.alert(share.bill_splits?.title ?? 'A bill', undefined, [
-        { text: 'Mark as Paid', onPress: () => handleOwerConfirm(share.id) },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
-    }
+    setExpandedOweId((id) => (id === share.id ? null : share.id));
   };
 
   const presentOwedToYouActions = (share: OwedToMeShare) => {
@@ -254,7 +261,10 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
               <ActivityIndicator />
             </View>
           ) : (
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 20 }}>
+            <ScrollView
+              contentContainerStyle={{ padding: 16, gap: 20 }}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
               {error && (
                 <View className="px-3 py-2 bg-red-50 dark:bg-red-950 rounded-lg">
                   <Text className="font-nunito text-red-600 dark:text-red-400 text-sm">{error}</Text>
@@ -276,38 +286,75 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                   </Text>
                 ) : (
                   <View className="gap-1.5">
-                    {visibleYouOwe.map((share) => (
-                      <Pressable
-                        key={share.id}
-                        onPress={() => presentYouOweActions(share)}
-                        disabled={payingId === share.id || !!share.ower_confirmed_at}
-                        style={pressFeedback}
-                        className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border ${
-                          share.reminded_at || share.ower_confirmed_at
-                            ? 'border-amber-400 dark:border-amber-500'
-                            : 'border-gray-100 dark:border-tabby-700'
-                        }`}
-                      >
-                        <View className="flex-1">
-                          <Text className="font-nunito-medium dark:text-white">
-                            {share.bill_splits?.title ?? 'A bill'}
-                            {share.bill_splits?.merchant ? ` · ${share.bill_splits.merchant}` : ''}
-                          </Text>
-                          {share.status === 'pending' && (share.ower_confirmed_at || share.reminded_at) && (
-                            <Text className="font-nunito text-xs text-amber-600 dark:text-amber-400">
-                              {share.ower_confirmed_at ? 'Waiting for them to confirm' : 'Reminder sent'}
-                            </Text>
+                    {visibleYouOwe.map((share) => {
+                      const expanded = expandedOweId === share.id;
+                      return (
+                        <View
+                          key={share.id}
+                          className={`rounded-xl bg-gray-50 dark:bg-tabby-800 border ${
+                            share.reminded_at || share.ower_confirmed_at
+                              ? 'border-amber-400 dark:border-amber-500'
+                              : 'border-gray-100 dark:border-tabby-700'
+                          }`}
+                        >
+                          <Pressable
+                            onPress={() => toggleYouOweExpanded(share)}
+                            disabled={payingId === share.id || !!share.ower_confirmed_at}
+                            style={pressFeedback}
+                            className="flex-row items-center justify-between px-3 py-2.5"
+                          >
+                            <View className="flex-1">
+                              <Text className="font-nunito-medium dark:text-white">
+                                {share.bill_splits?.title ?? 'A bill'}
+                                {share.bill_splits?.merchant ? ` · ${share.bill_splits.merchant}` : ''}
+                              </Text>
+                              {share.status === 'pending' && (share.ower_confirmed_at || share.reminded_at) && (
+                                <Text className="font-nunito text-xs text-amber-600 dark:text-amber-400">
+                                  {share.ower_confirmed_at ? 'Waiting for them to confirm' : 'Reminder sent'}
+                                </Text>
+                              )}
+                            </View>
+                            {payingId === share.id ? (
+                              <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                            ) : (
+                              <Text className="font-nunito-bold dark:text-white">
+                                ${share.amount_owed.toFixed(2)}
+                              </Text>
+                            )}
+                          </Pressable>
+                          {expanded && (
+                            <View className="px-3 pb-3 gap-2">
+                              <TextInput
+                                value={noteDrafts[share.id] ?? ''}
+                                onChangeText={(text) => setNoteDrafts((d) => ({ ...d, [share.id]: text }))}
+                                placeholder='Add a reference (optional) -- bank ref, "paid via cash", etc.'
+                                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
+                              />
+                              <View className="flex-row gap-2">
+                                <Pressable
+                                  onPress={() => handleOwerConfirm(share.id)}
+                                  disabled={payingId === share.id}
+                                  style={pressFeedback}
+                                  className="flex-1 items-center py-2 rounded-lg bg-tabby-600 dark:bg-white"
+                                >
+                                  <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">
+                                    Mark as Paid
+                                  </Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => setExpandedOweId(null)}
+                                  disabled={payingId === share.id}
+                                  style={pressFeedback}
+                                  className="px-4 items-center justify-center rounded-lg border border-gray-300 dark:border-tabby-600"
+                                >
+                                  <Text className="font-nunito-semibold text-sm dark:text-white">Cancel</Text>
+                                </Pressable>
+                              </View>
+                            </View>
                           )}
                         </View>
-                        {payingId === share.id ? (
-                          <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />
-                        ) : (
-                          <Text className="font-nunito-bold dark:text-white">
-                            ${share.amount_owed.toFixed(2)}
-                          </Text>
-                        )}
-                      </Pressable>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -358,6 +405,11 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                                   ? 'Overdue -- tap to remind'
                                   : STATUS_LABEL[share.status]}
                             </Text>
+                            {share.note && (
+                              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300 mt-0.5">
+                                Their note: {share.note}
+                              </Text>
+                            )}
                           </View>
                           {payingId === share.id ? (
                             <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />

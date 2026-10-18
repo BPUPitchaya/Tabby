@@ -123,6 +123,10 @@ export type MyBillSplitShare = {
   // see confirmSharePaidByOwer/confirmSharePaidByPayee below.
   ower_confirmed_at: string | null;
   payee_confirmed_at: string | null;
+  // Optional reference the ower leaves on their own confirm (bank ref,
+  // "paid via cash", etc) -- the payee's own cross-check, cheaper and
+  // less risky than a screenshot. See confirmSharePaidByOwer.
+  note: string | null;
   bill_splits: { title: string; merchant: string | null; occurred_at: string; created_by: string } | null;
 };
 
@@ -135,7 +139,7 @@ export async function fetchMyPendingShares(userId: string): Promise<MyBillSplitS
   const { data, error } = await supabase
     .from('bill_split_shares')
     .select(
-      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, bill_splits(title, merchant, occurred_at, created_by)',
+      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, note, bill_splits(title, merchant, occurred_at, created_by)',
     )
     .eq('owed_by_user_id', userId)
     .in('status', ['pending', 'paid']);
@@ -168,7 +172,7 @@ export async function fetchMyProposedShares(userId: string): Promise<MyBillSplit
   const { data, error } = await supabase
     .from('bill_split_shares')
     .select(
-      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, bill_splits(title, merchant, occurred_at, created_by)',
+      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, note, bill_splits(title, merchant, occurred_at, created_by)',
     )
     .eq('owed_by_user_id', userId)
     .eq('status', 'proposed');
@@ -190,8 +194,11 @@ export async function respondToShare(shareId: string, accept: boolean): Promise<
 // ower confirms their own debt; the payee confirms they received it. A
 // guest share (no account, so no ower-side confirm is possible) still
 // settles on the payee's confirm alone.
-export async function confirmSharePaidByOwer(shareId: string): Promise<void> {
-  const { error } = await supabase.rpc('confirm_share_paid_by_ower', { p_share_id: shareId });
+export async function confirmSharePaidByOwer(shareId: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_share_paid_by_ower', {
+    p_share_id: shareId,
+    p_note: note?.trim() || null,
+  });
   if (error) throw error;
 }
 
@@ -212,6 +219,8 @@ export type OwedToMeShare = {
   owerConfirmedAt: string | null;
   payeeConfirmedAt: string | null;
   isGuest: boolean;
+  // Reference the ower left on their confirm -- your cross-check.
+  note: string | null;
 };
 
 // Shared by money-owing-modal.tsx and notifications-modal.tsx (via the
@@ -235,7 +244,7 @@ export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
   const { data, error } = await supabase
     .from('bill_split_shares')
     .select(
-      'id, amount_owed, status, guest_name, owed_by_user_id, ower_confirmed_at, payee_confirmed_at, bill_splits!inner(title, merchant, occurred_at, created_by)',
+      'id, amount_owed, status, guest_name, owed_by_user_id, ower_confirmed_at, payee_confirmed_at, note, bill_splits!inner(title, merchant, occurred_at, created_by)',
     )
     .eq('bill_splits.created_by', userId)
     .neq('status', 'declined');
@@ -249,6 +258,7 @@ export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
     owed_by_user_id: string | null;
     ower_confirmed_at: string | null;
     payee_confirmed_at: string | null;
+    note: string | null;
     bill_splits: { title: string; merchant: string | null; occurred_at: string } | null;
   }[];
 
@@ -266,5 +276,6 @@ export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
     owerConfirmedAt: r.ower_confirmed_at,
     payeeConfirmedAt: r.payee_confirmed_at,
     isGuest: r.owed_by_user_id === null,
+    note: r.note,
   }));
 }
