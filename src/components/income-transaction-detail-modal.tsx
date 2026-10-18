@@ -11,9 +11,11 @@
 // the job up, not the generic amount/description/merchant/date form (that
 // one doesn't know what a tax code or KiwiSaver % even is). A small link
 // still reaches the generic form for merchant/description/date typos.
+import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -29,6 +31,7 @@ import { DetailRow as Row } from '@/components/detail-row';
 import {
   computeGrossPay,
   fetchIncomeSourceById,
+  IRD_TAX_CODE_URL,
   KIWISAVER_OPTIONS,
   TAX_CODE_OPTIONS,
   type IncomeSource,
@@ -311,6 +314,18 @@ export function IncomeTransactionDetailModal({
                             </Pressable>
                           ))}
                         </View>
+                        <Pressable
+                          onPress={() => Linking.openURL(IRD_TAX_CODE_URL).catch(() => {})}
+                          style={pressFeedback}
+                          className="flex-row items-center gap-1.5 self-start mt-0.5"
+                          accessibilityRole="link"
+                          accessibilityLabel="Not sure which tax code to use -- check with IRD"
+                        >
+                          <Feather name="external-link" size={12} color="#8B5A2B" />
+                          <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">
+                            Not sure which code? Check with IRD
+                          </Text>
+                        </Pressable>
                       </View>
 
                       <View className="flex-row items-center justify-between">
