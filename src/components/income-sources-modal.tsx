@@ -9,11 +9,11 @@
 // See income-sources.ts / 0028_add_income_sources.sql / 0030_add_budget_amount_to_income_sources.sql.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -582,7 +582,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                       ))}
                     </View>
                     <Pressable
-                      onPress={() => Linking.openURL(IRD_TAX_CODE_URL).catch(() => {})}
+                      onPress={() => WebBrowser.openBrowserAsync(IRD_TAX_CODE_URL).catch(() => {})}
                       style={pressFeedback}
                       className="flex-row items-center gap-1.5 self-start mt-0.5"
                       accessibilityRole="link"
