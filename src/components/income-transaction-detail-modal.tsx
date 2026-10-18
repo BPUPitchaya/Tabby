@@ -12,10 +12,10 @@
 // one doesn't know what a tax code or KiwiSaver % even is). A small link
 // still reaches the generic form for merchant/description/date typos.
 import { Feather } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -315,7 +315,7 @@ export function IncomeTransactionDetailModal({
                           ))}
                         </View>
                         <Pressable
-                          onPress={() => Linking.openURL(IRD_TAX_CODE_URL).catch(() => {})}
+                          onPress={() => WebBrowser.openBrowserAsync(IRD_TAX_CODE_URL).catch(() => {})}
                           style={pressFeedback}
                           className="flex-row items-center gap-1.5 self-start mt-0.5"
                           accessibilityRole="link"
