@@ -23,11 +23,12 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
 import {
+  confirmSharePaidByOwer,
+  confirmSharePaidByPayee,
   fetchMyPendingShares,
   fetchOwedToMe,
   isOverdue,
   markReminded,
-  markSharePaid,
   type MyBillSplitShare,
   type OwedToMeShare,
 } from '@/lib/bill-splits';
@@ -90,10 +91,27 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     load().finally(() => setLoading(false));
   }, [visible, userId]);
 
-  const handleMarkPaid = async (shareId: string) => {
+  // Two-step settle -- a share only reaches 'paid' once BOTH sides have
+  // confirmed. "You Owe" is your own half (the ower); "Owed To You" is
+  // the other half (the payee). A guest share (no account on the other
+  // side) still settles on the payee's confirm alone -- see
+  // confirmSharePaidByPayee for that exception.
+  const handleOwerConfirm = async (shareId: string) => {
     setPayingId(shareId);
     try {
-      await markSharePaid(shareId);
+      await confirmSharePaidByOwer(shareId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark as paid.');
+    } finally {
+      setPayingId(null);
+    }
+  };
+
+  const handlePayeeConfirm = async (shareId: string) => {
+    setPayingId(shareId);
+    try {
+      await confirmSharePaidByPayee(shareId);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mark as paid.');
@@ -119,19 +137,18 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     }).catch(() => {});
   };
 
-  // Mark-as-paid here is self-service for the other party too (RLS: they
-  // own the share once accepted), but someone who paid you in cash or
-  // another app shouldn't have to wait on them -- recording it yourself
-  // just sets the same status they'd set.
+  // Your own half of the settle -- the share only reaches 'paid' once the
+  // other party (the payee) confirms too.
   const presentYouOweActions = (share: MyBillSplitShare) => {
+    if (share.ower_confirmed_at) return; // already confirmed your half
     const options = ['Mark as Paid', 'Cancel'];
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 1 }, (index) => {
-        if (index === 0) handleMarkPaid(share.id);
+        if (index === 0) handleOwerConfirm(share.id);
       });
     } else {
       Alert.alert(share.bill_splits?.title ?? 'A bill', undefined, [
-        { text: 'Mark as Paid', onPress: () => handleMarkPaid(share.id) },
+        { text: 'Mark as Paid', onPress: () => handleOwerConfirm(share.id) },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -139,18 +156,38 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
 
   const presentOwedToYouActions = (share: OwedToMeShare) => {
     if (share.status !== 'pending') return;
-    const options = ['Remind in App', 'Remind via Text/Other Apps', 'Mark as Paid', 'Cancel'];
+    // Already confirmed your own half -- nothing left to do but remind
+    // (or wait) until they confirm theirs.
+    if (share.payeeConfirmedAt) {
+      const options = ['Remind in App', 'Remind via Text/Other Apps', 'Cancel'];
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 2 }, (index) => {
+          if (index === 0) handleRemindInApp(share);
+          if (index === 1) handleRemindViaMessage(share);
+        });
+      } else {
+        Alert.alert(`${share.payerLabel} · ${share.billTitle}`, undefined, [
+          { text: 'Remind in App', onPress: () => handleRemindInApp(share) },
+          { text: 'Remind via Text/Other Apps', onPress: () => handleRemindViaMessage(share) },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+      return;
+    }
+
+    const markPaidLabel = share.isGuest || share.owerConfirmedAt ? 'Mark as Paid' : 'I received this';
+    const options = ['Remind in App', 'Remind via Text/Other Apps', markPaidLabel, 'Cancel'];
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 3 }, (index) => {
         if (index === 0) handleRemindInApp(share);
         if (index === 1) handleRemindViaMessage(share);
-        if (index === 2) handleMarkPaid(share.id);
+        if (index === 2) handlePayeeConfirm(share.id);
       });
     } else {
       Alert.alert(`${share.payerLabel} · ${share.billTitle}`, undefined, [
         { text: 'Remind in App', onPress: () => handleRemindInApp(share) },
         { text: 'Remind via Text/Other Apps', onPress: () => handleRemindViaMessage(share) },
-        { text: 'Mark as Paid', onPress: () => handleMarkPaid(share.id) },
+        { text: markPaidLabel, onPress: () => handlePayeeConfirm(share.id) },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -243,10 +280,10 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                       <Pressable
                         key={share.id}
                         onPress={() => presentYouOweActions(share)}
-                        disabled={payingId === share.id}
+                        disabled={payingId === share.id || !!share.ower_confirmed_at}
                         style={pressFeedback}
                         className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border ${
-                          share.reminded_at
+                          share.reminded_at || share.ower_confirmed_at
                             ? 'border-amber-400 dark:border-amber-500'
                             : 'border-gray-100 dark:border-tabby-700'
                         }`}
@@ -256,9 +293,9 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                             {share.bill_splits?.title ?? 'A bill'}
                             {share.bill_splits?.merchant ? ` · ${share.bill_splits.merchant}` : ''}
                           </Text>
-                          {share.reminded_at && (
+                          {share.status === 'pending' && (share.ower_confirmed_at || share.reminded_at) && (
                             <Text className="font-nunito text-xs text-amber-600 dark:text-amber-400">
-                              Reminder sent
+                              {share.ower_confirmed_at ? 'Waiting for them to confirm' : 'Reminder sent'}
                             </Text>
                           )}
                         </View>
@@ -310,12 +347,16 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                               className={`font-nunito text-xs ${
                                 share.status === 'paid'
                                   ? 'text-green-700 dark:text-green-400'
-                                  : overdue
+                                  : overdue || share.payeeConfirmedAt
                                     ? 'text-amber-600 dark:text-amber-400'
                                     : 'text-gray-500 dark:text-tabby-300'
                               }`}
                             >
-                              {overdue ? 'Overdue -- tap to remind' : STATUS_LABEL[share.status]}
+                              {share.payeeConfirmedAt
+                                ? 'Waiting for them to confirm'
+                                : overdue
+                                  ? 'Overdue -- tap to remind'
+                                  : STATUS_LABEL[share.status]}
                             </Text>
                           </View>
                           {payingId === share.id ? (
