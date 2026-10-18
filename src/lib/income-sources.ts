@@ -11,6 +11,13 @@ export type IncomeMode = 'fixed' | 'hourly';
 export type TrackingMode = 'gross' | 'net';
 export type KiwiSaverPct = 3 | 4 | 6 | 8 | 10;
 
+// Shared by income-sources-modal.tsx's form and
+// income-transaction-detail-modal.tsx's inline edit -- the same tax-code/
+// KiwiSaver choices apply whether you're setting up the job or correcting
+// one specific payday's figures.
+export const TAX_CODE_OPTIONS = ['M', 'ME', 'S', 'SB', 'SH', 'ST'];
+export const KIWISAVER_OPTIONS: KiwiSaverPct[] = [3, 4, 6, 8, 10];
+
 export type IncomeSource = {
   id: string;
   label: string;
@@ -81,6 +88,16 @@ export async function fetchIncomeSources(userId: string): Promise<IncomeSource[]
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []).map(fromRow);
+}
+
+// Used by income-transaction-detail-modal.tsx to look up the job behind a
+// logged payday -- needs the source's frequency/mode/current tax settings
+// to let the user correct one payday's figures the same way they'd set up
+// the job itself. RLS already scopes this to rows the caller owns.
+export async function fetchIncomeSourceById(id: string): Promise<IncomeSource | null> {
+  const { data, error } = await supabase.from('income_sources').select(SELECT_COLUMNS).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data) : null;
 }
 
 export type IncomeSourceParams = {
@@ -249,6 +266,20 @@ export function computeGrossPay(
   return Math.round(source.hourlyRate * paidHours * 100) / 100;
 }
 
+// Payslip-style breakdown stored alongside a net-tracked confirm, so
+// Transactions can later show "detail of the pay" instead of just a plain
+// edit form -- see 0031_add_income_breakdown_to_transactions.sql /
+// 0032_confirm_income_source_payment_with_breakdown.sql. Every field
+// optional: a gross-tracked source's confirm passes none of this.
+export type IncomeBreakdown = {
+  grossAmount: number;
+  incomeTax?: number;
+  accLevy?: number;
+  studentLoan?: number;
+  kiwiSaver?: number;
+  hoursPaid?: number;
+};
+
 // Both writes (transaction insert + last_confirmed_payday advance) happen
 // inside a single Postgres function call -- see confirm_income_source_payment
 // in 0029_add_income_source_payment_rpcs.sql for why this isn't two
@@ -258,11 +289,18 @@ export async function confirmIncomeSourcePayment(
   sourceId: string,
   amount: number,
   paydayDate: string,
+  breakdown?: IncomeBreakdown,
 ): Promise<void> {
   const { error } = await supabase.rpc('confirm_income_source_payment', {
     p_source_id: sourceId,
     p_amount: amount,
     p_payday_date: paydayDate,
+    p_gross_amount: breakdown?.grossAmount ?? null,
+    p_income_tax: breakdown?.incomeTax ?? null,
+    p_acc_levy: breakdown?.accLevy ?? null,
+    p_student_loan: breakdown?.studentLoan ?? null,
+    p_kiwisaver_amount: breakdown?.kiwiSaver ?? null,
+    p_hours_paid: breakdown?.hoursPaid ?? null,
   });
   if (error) throw error;
 }

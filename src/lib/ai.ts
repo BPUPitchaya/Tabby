@@ -321,6 +321,85 @@ export async function parseBillSplit(
   }
 }
 
+// Phase 6 of the income-sources plan: natural-language PAID hours entry
+// for an hourly income source's bell confirm -- "40" still parses locally
+// for free (see notifications-modal.tsx, which tries plain parseFloat
+// first and only calls this when that fails). This exists for phrasing a
+// plain number can't express: "32 plus 8 sick", "4 full days", "worked
+// Mon-Thu, 8 hours each". "Paid" hours, not "worked" -- paid leave (sick,
+// annual, public holiday) still counts, same distinction as the bell's
+// own copy. Never guesses a number that isn't actually stated -- returns
+// null rather than invent one, so the user re-types instead of silently
+// logging a wrong figure (same risk class as the tax-code/wage-rate AI
+// uses this project explicitly ruled out).
+export async function parsePaidHours(text: string): Promise<number | null> {
+  if (!text.trim()) return null;
+
+  try {
+    const result = (await callGemini(
+      `Extract the total number of PAID hours from this description of a pay period: "${text}". This includes hours actually worked AND any paid leave (sick, annual/holiday, public holiday) mentioned -- it should be the total hours this person was paid for, not just hours physically worked. If a number of days is given instead of hours (e.g. "4 full days"), assume an 8-hour day unless stated otherwise. If no usable number of hours can be determined at all, return -1 -- never guess a number that isn't actually stated.`,
+      {
+        type: 'object',
+        properties: { hours: { type: 'number' } },
+        required: ['hours'],
+      },
+    )) as { hours: number };
+
+    return result.hours === -1 ? null : result.hours;
+  } catch {
+    return null;
+  }
+}
+
+export type ParsedPayslip = {
+  grossPay: number | null;
+  netPay: number | null;
+  // Hours this pay period covered, for an hourly job -- null for a salaried
+  // payslip with no hourly breakdown, or if it's just not legible.
+  hoursPaid: number | null;
+};
+
+// Phase 6: reads a photographed/uploaded payslip as ground truth -- same
+// infra as parseFinancialDocument (document-scan.ts's presentScanSheet),
+// just a different extraction target and schema. This is read-only
+// evidence the user still reviews and can edit before confirming a
+// payday; it never decides a tax code or a wage rate itself (that AI use
+// was explicitly ruled out earlier in this project's design -- too risky
+// with real money, same reasoning as never guessing hours above).
+export async function parsePayslip(base64Data: string, mimeType: string): Promise<ParsedPayslip | null> {
+  if (!base64Data) return null;
+
+  try {
+    const partType = mimeType === 'application/pdf' ? 'document' : 'image';
+    const result = (await callGemini(
+      [
+        {
+          type: 'text',
+          text: `This is a photographed or scanned payslip/payslip summary. Extract: grossPay (gross/before-tax pay for this pay period), netPay (net/take-home pay for this pay period), and hoursPaid (total hours this pay period covers, if the payslip states an hourly breakdown, including any paid leave hours listed). For any of these three not legible or not present on the payslip, return -1 for that field -- never guess a figure that isn't actually printed on it.`,
+        },
+        { type: partType, data: base64Data, mime_type: mimeType },
+      ],
+      {
+        type: 'object',
+        properties: {
+          grossPay: { type: 'number' },
+          netPay: { type: 'number' },
+          hoursPaid: { type: 'number' },
+        },
+        required: ['grossPay', 'netPay', 'hoursPaid'],
+      },
+    )) as { grossPay: number; netPay: number; hoursPaid: number };
+
+    const grossPay = result.grossPay === -1 ? null : result.grossPay;
+    const netPay = result.netPay === -1 ? null : result.netPay;
+    const hoursPaid = result.hoursPaid === -1 ? null : result.hoursPaid;
+    if (grossPay === null && netPay === null && hoursPaid === null) return null;
+    return { grossPay, netPay, hoursPaid };
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMonthlySummary(params: {
   thisMonthTotal: number;
   lastMonthTotal: number;

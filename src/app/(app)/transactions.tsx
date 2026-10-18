@@ -32,6 +32,8 @@ import {
   type ParsedExpense,
 } from '@/lib/ai';
 import { CategoryIcon, CUSTOM_CATEGORY_ICONS, guessCategoryIcon } from '@/components/category-icon';
+import { IncomeTransactionDetailModal } from '@/components/income-transaction-detail-modal';
+import { TransactionDetailModal } from '@/components/transaction-detail-modal';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
@@ -646,6 +648,22 @@ export default function TransactionsScreen() {
     setManualOpen(true);
   };
 
+  // Every transaction now opens an overview first, edit form second -- a
+  // tap is usually "what was this again", not "I need to change it". A
+  // transaction logged via an income source's bell confirm carries a
+  // payslip-style breakdown (income_source_id set) and gets the dedicated
+  // income detail screen instead of the plain overview, since it has
+  // gross/tax/ACC/KiwiSaver to show that an ordinary transaction doesn't.
+  const [viewingIncomeDetail, setViewingIncomeDetail] = useState<Transaction | null>(null);
+  const [viewingDetail, setViewingDetail] = useState<Transaction | null>(null);
+  const handleItemPress = (item: Transaction) => {
+    if (item.income_source_id !== null) {
+      setViewingIncomeDetail(item);
+      return;
+    }
+    setViewingDetail(item);
+  };
+
   const handleSubmit = async () => {
     if (!userId) return;
     const parsedAmount = parseFloat(amount);
@@ -688,14 +706,27 @@ export default function TransactionsScreen() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteTransaction(id);
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
-      if (editingId === id) closeManualForm();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete transaction.');
-    }
+  // Confirmed first -- deleting used to fire straight from the row's trash
+  // icon (or the edit form's own delete button) with no way back if it was
+  // a mis-tap. Both call sites go through this one function, so the
+  // confirm only needs adding here.
+  const handleDelete = (id: string) => {
+    Alert.alert('Delete this transaction?', "This can't be undone.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTransaction(id);
+            setTransactions((prev) => prev.filter((t) => t.id !== id));
+            if (editingId === id) closeManualForm();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete transaction.');
+          }
+        },
+      },
+    ]);
   };
 
   const daySections = useMemo(() => groupByDay(transactions, todayISO), [transactions, todayISO]);
@@ -913,7 +944,7 @@ export default function TransactionsScreen() {
                 <TransactionRow
                   item={item}
                   showDate
-                  onPress={() => handleStartEdit(item)}
+                  onPress={() => handleItemPress(item)}
                   onDelete={() => handleDelete(item.id)}
                 />
               )}
@@ -1004,7 +1035,7 @@ export default function TransactionsScreen() {
                   <TransactionRow
                     item={item}
                     showDate={false}
-                    onPress={() => handleStartEdit(item)}
+                    onPress={() => handleItemPress(item)}
                     onDelete={() => handleDelete(item.id)}
                   />
                 )}
@@ -1690,6 +1721,29 @@ export default function TransactionsScreen() {
         }}
         onCreated={load}
         draft={splitDraft}
+      />
+
+      <IncomeTransactionDetailModal
+        visible={viewingIncomeDetail !== null}
+        onClose={() => setViewingIncomeDetail(null)}
+        transaction={viewingIncomeDetail}
+        onSaved={load}
+        onEditOtherFields={(item) => {
+          setViewingIncomeDetail(null);
+          handleStartEdit(item);
+        }}
+      />
+
+      <TransactionDetailModal
+        visible={viewingDetail !== null}
+        onClose={() => setViewingDetail(null)}
+        transaction={viewingDetail}
+        categories={categories}
+        onSaved={load}
+        onDelete={(id) => {
+          setViewingDetail(null);
+          handleDelete(id);
+        }}
       />
     </SafeAreaView>
   );

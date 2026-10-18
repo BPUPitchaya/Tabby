@@ -32,7 +32,9 @@ import {
   getPrimaryIncomeSource,
   deleteIncomeSource,
   fetchIncomeSources,
+  KIWISAVER_OPTIONS,
   setPrimaryIncomeSource,
+  TAX_CODE_OPTIONS,
   updateIncomeSource,
   type IncomeMode,
   type IncomeSource,
@@ -59,14 +61,6 @@ const FREQUENCY_OPTIONS: { value: IncomeFrequency; label: string }[] = [
   { value: 'biweekly', label: 'Fortnightly' },
   { value: 'monthly', label: 'Monthly' },
 ];
-
-// Base NZ tax codes -- student loan is captured as its own toggle rather
-// than separate "M SL" / "S SL" entries, see income-sources.ts and session
-// notes on why that's friendlier than making someone pick the SL variant
-// themselves.
-const TAX_CODE_OPTIONS = ['M', 'ME', 'S', 'SB', 'SH', 'ST'];
-
-const KIWISAVER_OPTIONS: KiwiSaverPct[] = [3, 4, 6, 8, 10];
 
 type FormState = {
   id: string | null;
