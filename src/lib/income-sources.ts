@@ -18,6 +18,16 @@ export type KiwiSaverPct = 3 | 4 | 6 | 8 | 10;
 export const TAX_CODE_OPTIONS = ['M', 'ME', 'S', 'SB', 'SH', 'ST'];
 export const KIWISAVER_OPTIONS: KiwiSaverPct[] = [3, 4, 6, 8, 10];
 
+// IRD's own "what tax code should I use?" tool -- deliberately a link
+// out, not a decision tree built into Tabby. /cassandra premortem on
+// building one: IRD's rules change most tax years, edge cases (multiple
+// jobs, overseas income, benefit + job combos) are already handled
+// there, and a wrong code here has real withholding consequences --
+// same "never guess, only read" principle as the tax-code AI use this
+// project already ruled out.
+export const IRD_TAX_CODE_URL =
+  'https://www.ird.govt.nz/income-tax/income-tax-for-individuals/tax-codes-and-tax-rates-for-individuals/what-tax-code-should-i-use';
+
 export type IncomeSource = {
   id: string;
   label: string;

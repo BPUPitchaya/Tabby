@@ -13,6 +13,7 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -32,6 +33,7 @@ import {
   getPrimaryIncomeSource,
   deleteIncomeSource,
   fetchIncomeSources,
+  IRD_TAX_CODE_URL,
   KIWISAVER_OPTIONS,
   setPrimaryIncomeSource,
   TAX_CODE_OPTIONS,
@@ -579,6 +581,18 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                         </Pressable>
                       ))}
                     </View>
+                    <Pressable
+                      onPress={() => Linking.openURL(IRD_TAX_CODE_URL).catch(() => {})}
+                      style={pressFeedback}
+                      className="flex-row items-center gap-1.5 self-start mt-0.5"
+                      accessibilityRole="link"
+                      accessibilityLabel="Not sure which tax code to use -- check with IRD"
+                    >
+                      <Feather name="external-link" size={12} color="#8B5A2B" />
+                      <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">
+                        Not sure which code? Check with IRD
+                      </Text>
+                    </Pressable>
                   </View>
 
                   <View className="flex-row items-center justify-between">
