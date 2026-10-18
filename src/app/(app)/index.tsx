@@ -22,7 +22,8 @@ import {
   markReminded,
   fetchOwedToMe,
   isOverdue,
-  markSharePaid,
+  confirmSharePaidByOwer,
+  confirmSharePaidByPayee,
   respondToShare,
   type MyBillSplitShare,
   type OwedToMeShare,
@@ -479,8 +480,18 @@ export default function HomeScreen() {
     }).catch(() => {});
   };
 
-  const handleMarkPaid = async (shareId: string) => {
-    await markSharePaid(shareId);
+  // Two-step settle: this is just my own half confirming -- the share only
+  // reaches 'paid' once the other side has confirmed too. See
+  // confirmSharePaidByOwer/confirmSharePaidByPayee for the guest-share
+  // exception (no account on the other side, so the payee's confirm alone
+  // settles it).
+  const handleOwerConfirmPaid = async (shareId: string) => {
+    await confirmSharePaidByOwer(shareId);
+    await loadNotifications();
+  };
+
+  const handlePayeeConfirmPaid = async (shareId: string) => {
+    await confirmSharePaidByPayee(shareId);
     await loadNotifications();
   };
 
@@ -836,7 +847,8 @@ export default function HomeScreen() {
         onRespondShare={handleRespondShare}
         onRemindInApp={handleRemindInApp}
         onRemindViaMessage={handleRemindViaMessage}
-        onMarkPaid={handleMarkPaid}
+        onOwerConfirmPaid={handleOwerConfirmPaid}
+        onPayeeConfirmPaid={handlePayeeConfirmPaid}
         onConfirmBill={handleConfirmBill}
         onDeclineBill={handleDeclineBill}
         onSkipBill={handleSkipBill}

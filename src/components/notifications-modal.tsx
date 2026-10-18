@@ -48,7 +48,8 @@ export function NotificationsModal({
   onRespondShare,
   onRemindInApp,
   onRemindViaMessage,
-  onMarkPaid,
+  onOwerConfirmPaid,
+  onPayeeConfirmPaid,
   onConfirmBill,
   onDeclineBill,
   onSkipBill,
@@ -71,7 +72,8 @@ export function NotificationsModal({
   onRespondShare: (id: string, accept: boolean) => void;
   onRemindInApp: (share: OwedToMeShare) => void;
   onRemindViaMessage: (share: OwedToMeShare) => void;
-  onMarkPaid: (shareId: string) => void;
+  onOwerConfirmPaid: (shareId: string) => void;
+  onPayeeConfirmPaid: (shareId: string) => void;
   onConfirmBill: (bill: Bill & { dueDate: string }, amount: number) => void;
   onDeclineBill: (bill: Bill & { dueDate: string }) => void;
   onSkipBill: (bill: Bill & { dueDate: string }) => void;
@@ -106,19 +108,46 @@ export function NotificationsModal({
     pendingBills.length === 0 &&
     pendingIncomeSources.length === 0;
 
+  // Two-step settle: a guest share (no account on the other side) still
+  // settles on this one confirm, same as a real user's share once THEY'VE
+  // already confirmed their half -- otherwise this is just the payee's
+  // own half, and the share stays "waiting for them" until the ower
+  // confirms too. Already confirmed your own half? Nothing left to do --
+  // the row that reached here shouldn't even be tappable then (see the
+  // OVERDUE section's own filter below).
   const presentOverdueActions = (share: OwedToMeShare) => {
-    const options = ['Remind in App', 'Remind via Text/Other Apps', 'Mark as Paid', 'Cancel'];
+    // Already confirmed your own half -- nothing left for you to do,
+    // just remind them (or wait).
+    if (share.payeeConfirmedAt) {
+      const options = ['Remind in App', 'Remind via Text/Other Apps', 'Cancel'];
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 2 }, (index) => {
+          if (index === 0) onRemindInApp(share);
+          if (index === 1) onRemindViaMessage(share);
+        });
+      } else {
+        Alert.alert(`${share.payerLabel} · ${share.billTitle}`, undefined, [
+          { text: 'Remind in App', onPress: () => onRemindInApp(share) },
+          { text: 'Remind via Text/Other Apps', onPress: () => onRemindViaMessage(share) },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+      return;
+    }
+
+    const markPaidLabel = share.isGuest || share.owerConfirmedAt ? 'Mark as Paid' : 'I received this';
+    const options = ['Remind in App', 'Remind via Text/Other Apps', markPaidLabel, 'Cancel'];
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 3 }, (index) => {
         if (index === 0) onRemindInApp(share);
         if (index === 1) onRemindViaMessage(share);
-        if (index === 2) onMarkPaid(share.id);
+        if (index === 2) onPayeeConfirmPaid(share.id);
       });
     } else {
       Alert.alert(`${share.payerLabel} · ${share.billTitle}`, undefined, [
         { text: 'Remind in App', onPress: () => onRemindInApp(share) },
         { text: 'Remind via Text/Other Apps', onPress: () => onRemindViaMessage(share) },
-        { text: 'Mark as Paid', onPress: () => onMarkPaid(share.id) },
+        { text: markPaidLabel, onPress: () => onPayeeConfirmPaid(share.id) },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -194,11 +223,11 @@ export function NotificationsModal({
     const options = ['Mark as Paid', 'Cancel'];
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 1 }, (index) => {
-        if (index === 0) onMarkPaid(shareId);
+        if (index === 0) onOwerConfirmPaid(shareId);
       });
     } else {
       Alert.alert('Mark as paid?', undefined, [
-        { text: 'Mark as Paid', onPress: () => onMarkPaid(shareId) },
+        { text: 'Mark as Paid', onPress: () => onOwerConfirmPaid(shareId) },
         { text: 'Cancel', style: 'cancel' },
       ]);
     }
@@ -530,7 +559,7 @@ export function NotificationsModal({
                             {share.payerLabel} · {share.billTitle}
                           </Text>
                           <Text className="font-nunito text-xs text-amber-600 dark:text-amber-400">
-                            Tap to remind
+                            {share.payeeConfirmedAt ? 'Waiting for them to confirm' : 'Tap to remind'}
                           </Text>
                         </View>
                         <Text className="font-nunito-bold dark:text-white">

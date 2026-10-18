@@ -118,6 +118,11 @@ export type MyBillSplitShare = {
   amount_owed: number;
   status: 'proposed' | 'pending' | 'paid' | 'declined';
   reminded_at: string | null;
+  // Two-step settle: status only reaches 'paid' once BOTH sides have
+  // confirmed. While pending, these say who (if anyone) already has --
+  // see confirmSharePaidByOwer/confirmSharePaidByPayee below.
+  ower_confirmed_at: string | null;
+  payee_confirmed_at: string | null;
   bill_splits: { title: string; merchant: string | null; occurred_at: string; created_by: string } | null;
 };
 
@@ -129,7 +134,9 @@ export type MyBillSplitShare = {
 export async function fetchMyPendingShares(userId: string): Promise<MyBillSplitShare[]> {
   const { data, error } = await supabase
     .from('bill_split_shares')
-    .select('id, amount_owed, status, reminded_at, bill_splits(title, merchant, occurred_at, created_by)')
+    .select(
+      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, bill_splits(title, merchant, occurred_at, created_by)',
+    )
     .eq('owed_by_user_id', userId)
     .in('status', ['pending', 'paid']);
 
@@ -142,7 +149,9 @@ export async function fetchMyPendingShares(userId: string): Promise<MyBillSplitS
 // outgoing text to you. See markReminded for the write side.
 export async function fetchMyReminders(userId: string): Promise<MyBillSplitShare[]> {
   const shares = await fetchMyPendingShares(userId);
-  return shares.filter((s) => s.status === 'pending' && s.reminded_at !== null);
+  // Already confirmed your own half -- re-nagging you to "mark as paid"
+  // makes no sense, you're just waiting on them now.
+  return shares.filter((s) => s.status === 'pending' && s.reminded_at !== null && s.ower_confirmed_at === null);
 }
 
 export async function markReminded(shareId: string): Promise<void> {
@@ -158,7 +167,9 @@ export async function markReminded(shareId: string): Promise<void> {
 export async function fetchMyProposedShares(userId: string): Promise<MyBillSplitShare[]> {
   const { data, error } = await supabase
     .from('bill_split_shares')
-    .select('id, amount_owed, status, bill_splits(title, merchant, occurred_at, created_by)')
+    .select(
+      'id, amount_owed, status, reminded_at, ower_confirmed_at, payee_confirmed_at, bill_splits(title, merchant, occurred_at, created_by)',
+    )
     .eq('owed_by_user_id', userId)
     .eq('status', 'proposed');
 
@@ -174,11 +185,18 @@ export async function respondToShare(shareId: string, accept: boolean): Promise<
   if (error) throw error;
 }
 
-export async function markSharePaid(shareId: string) {
-  const { error } = await supabase
-    .from('bill_split_shares')
-    .update({ status: 'paid', paid_at: new Date().toISOString() })
-    .eq('id', shareId);
+// Two-step settle -- status only reaches 'paid' once both sides have
+// confirmed (see 0034_add_two_step_share_confirmation.sql's RPCs). The
+// ower confirms their own debt; the payee confirms they received it. A
+// guest share (no account, so no ower-side confirm is possible) still
+// settles on the payee's confirm alone.
+export async function confirmSharePaidByOwer(shareId: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_share_paid_by_ower', { p_share_id: shareId });
+  if (error) throw error;
+}
+
+export async function confirmSharePaidByPayee(shareId: string): Promise<void> {
+  const { error } = await supabase.rpc('confirm_share_paid_by_payee', { p_share_id: shareId });
   if (error) throw error;
 }
 
@@ -190,6 +208,10 @@ export type OwedToMeShare = {
   billTitle: string;
   merchant: string | null;
   occurredAt: string;
+  // Two-step settle, same as MyBillSplitShare -- see confirmSharePaidByPayee.
+  owerConfirmedAt: string | null;
+  payeeConfirmedAt: string | null;
+  isGuest: boolean;
 };
 
 // Shared by money-owing-modal.tsx and notifications-modal.tsx (via the
@@ -206,14 +228,14 @@ export function isOverdue(share: OwedToMeShare): boolean {
 
 // The other side of fetchMyPendingShares -- shares on bills I created,
 // across every status, so "who still owes me" and "who's already paid"
-// are both answerable from one screen. Read-only here: only the ower can
-// mark their own share paid (RLS), same self-service pattern as a real
-// debt being settled by the person who owes it, not the person owed.
+// are both answerable from one screen. The payee (me) confirms via
+// confirmSharePaidByPayee -- see that function for the two-step settle
+// rule and the guest-share exception.
 export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
   const { data, error } = await supabase
     .from('bill_split_shares')
     .select(
-      'id, amount_owed, status, guest_name, owed_by_user_id, bill_splits!inner(title, merchant, occurred_at, created_by)',
+      'id, amount_owed, status, guest_name, owed_by_user_id, ower_confirmed_at, payee_confirmed_at, bill_splits!inner(title, merchant, occurred_at, created_by)',
     )
     .eq('bill_splits.created_by', userId)
     .neq('status', 'declined');
@@ -225,6 +247,8 @@ export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
     status: 'proposed' | 'pending' | 'paid' | 'declined';
     guest_name: string | null;
     owed_by_user_id: string | null;
+    ower_confirmed_at: string | null;
+    payee_confirmed_at: string | null;
     bill_splits: { title: string; merchant: string | null; occurred_at: string } | null;
   }[];
 
@@ -239,5 +263,8 @@ export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
     billTitle: r.bill_splits?.title ?? 'A bill',
     merchant: r.bill_splits?.merchant ?? null,
     occurredAt: r.bill_splits?.occurred_at ?? '',
+    owerConfirmedAt: r.ower_confirmed_at,
+    payeeConfirmedAt: r.payee_confirmed_at,
+    isGuest: r.owed_by_user_id === null,
   }));
 }
