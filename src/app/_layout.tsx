@@ -7,6 +7,7 @@
 // again as a side effect of an unrelated change.
 import '@/global.css';
 
+import { isRunningInExpoGo } from 'expo';
 import { Fraunces_600SemiBold, Fraunces_700Bold } from '@expo-google-fonts/fraunces';
 import {
   Fredoka_400Regular,
@@ -43,6 +44,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { vars } from 'nativewind';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useColorScheme, View } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -58,6 +60,17 @@ import { restoreThemePreference } from '@/lib/theme-preference';
 
 SplashScreen.preventAutoHideAsync();
 
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  sendDefaultPii: true,
+  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  replaysOnErrorSampleRate: 1.0,
+  replaysSessionSampleRate: __DEV__ ? 1.0 : 0.05,
+  integrations: [Sentry.mobileReplayIntegration()],
+  enableNativeFramesTracking: !isRunningInExpoGo(),
+  environment: __DEV__ ? 'development' : 'production',
+});
+
 // Governs how a payday reminder (or any future local notification)
 // presents while the app is already open in the foreground -- without
 // this, a foreground-delivered notification shows nothing at all on iOS.
@@ -70,7 +83,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function TabLayout() {
+function TabLayout() {
   const colorScheme = useColorScheme();
   const [fontsLoaded] = useFonts({
     Fredoka_400Regular,
@@ -143,6 +156,8 @@ export default function TabLayout() {
     </ThemeProvider>
   );
 }
+
+export default Sentry.wrap(TabLayout);
 
 // The actual font-switching mechanism: NativeWind's CSS vars resolved at
 // runtime, same way `dark:` variants resolve colorScheme -- not touching

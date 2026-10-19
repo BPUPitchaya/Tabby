@@ -44,7 +44,15 @@
           "cameraPermission": "Tabby needs your camera to take a photo of a receipt."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "tabby",
+          "organization": "pitchaya-projets"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
