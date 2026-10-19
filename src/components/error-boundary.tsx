@@ -4,6 +4,7 @@
 // componentDidCatch, there's no hook equivalent. Mounted once, at the very
 // root (see _layout.tsx), so it catches a crash from any screen or provider.
 import { Feather } from '@expo/vector-icons';
+import * as Sentry from '@sentry/react-native';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -20,11 +21,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // No crash-reporting service wired up yet -- this is the one place
-    // that'll actually surface a render crash until one is (see
-    // /prometheus's "no crash reporting" gap). Logged to the console in
-    // the meantime so it's not completely silent during development.
     console.error('Caught by ErrorBoundary:', error, info.componentStack);
+    Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } });
   }
 
   handleRetry = () => {
