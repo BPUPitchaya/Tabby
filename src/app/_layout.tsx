@@ -45,6 +45,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useColorScheme, View } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider } from '@/lib/auth-context';
 import {
   FONT_VARS,
@@ -118,20 +119,25 @@ export default function TabLayout() {
       <AnimatedSplashOverlay />
       <FontPreferenceProvider initialPack={fontPack}>
         <FontVarsView>
-          <AuthProvider>
-            {/* join/[code] is a public, always-reachable screen (see
-                app/join/[code].tsx) -- it's a sibling of (app) rather than
-                living inside it, so an invite link works before the
-                recipient has signed in, instead of depending on the tab bar
-                already being on screen. (app) still does its own full
-                auth/onboarding gate internally, unchanged from before this
-                split. */}
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="join/[code]" />
-              <Stack.Screen name="add-friend/[code]" />
-              <Stack.Screen name="(app)" />
-            </Stack>
-          </AuthProvider>
+          {/* Wraps every screen/provider below it -- a render crash
+              anywhere in the app shows the recovery screen instead of a
+              white screen with no way back. See error-boundary.tsx. */}
+          <ErrorBoundary>
+            <AuthProvider>
+              {/* join/[code] is a public, always-reachable screen (see
+                  app/join/[code].tsx) -- it's a sibling of (app) rather than
+                  living inside it, so an invite link works before the
+                  recipient has signed in, instead of depending on the tab bar
+                  already being on screen. (app) still does its own full
+                  auth/onboarding gate internally, unchanged from before this
+                  split. */}
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="join/[code]" />
+                <Stack.Screen name="add-friend/[code]" />
+                <Stack.Screen name="(app)" />
+              </Stack>
+            </AuthProvider>
+          </ErrorBoundary>
         </FontVarsView>
       </FontPreferenceProvider>
     </ThemeProvider>
