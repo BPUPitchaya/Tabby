@@ -14,31 +14,31 @@ export const PRIVACY_POLICY: LegalDoc = {
     {
       heading: '1. What we collect',
       body:
-        'Account information: your email address and password (stored securely by our authentication provider, Supabase -- we never see or store your plaintext password), and a display name you choose.\n\n' +
+        'Account information: your email address and password (stored securely by our authentication provider, Supabase; we never see or store your plaintext password), and a display name you choose.\n\n' +
         'Financial data you enter: transaction amounts, descriptions, dates, and categories you log for your own budgeting. This data is yours and is only ever visible to you.\n\n' +
-        "Flat/shared expense data: if you create or join a flat, we store the flat's name, an invite code, who its members are, shared expenses you or your flatmates log (amount, description, date, who paid, who it's split between), and settlement records (who paid whom back). This data is only visible to members of that specific flat -- never to anyone outside it, and never to us for any purpose beyond operating the app.\n\n" +
+        "Flat/shared expense data: if you create or join a flat, we store the flat's name, an invite code, who its members are, shared expenses you or your flatmates log (amount, description, date, who paid, who it's split between), and settlement records (who paid whom back). This data is only visible to members of that specific flat, never to anyone outside it, and never to us for any purpose beyond operating the app.\n\n" +
         'We do not collect your location, contacts, photos, or any data beyond what you directly enter into the app. We do not use advertising trackers or sell data to third parties.',
     },
     {
       heading: '2. How AI features work',
       body:
-        'Some features (automatic categorization, natural-language expense entry, monthly spending summaries) send the relevant text -- a transaction description, or a summary of your category totals -- to Google\'s Gemini API to generate a result. This happens through our own server-side proxy, not directly from your device, and only includes the minimum data needed for that specific feature (e.g. "coffee $8.50", not your full transaction history, email, or identity). We do not control Google\'s own data retention for API requests; refer to Google\'s API terms for details on their handling of this data.\n\n' +
-        "AI features are optional to use -- the app's core functionality (manually logging transactions and shared expenses) works without them.",
+        'Some features (automatic categorization, natural-language expense entry, monthly spending summaries) send the relevant text (a transaction description, or a summary of your category totals) to Google\'s Gemini API to generate a result. This happens through our own server-side proxy, not directly from your device, and only includes the minimum data needed for that specific feature (e.g. "coffee $8.50", not your full transaction history, email, or identity). We do not control Google\'s own data retention for API requests; refer to Google\'s API terms for details on their handling of this data.\n\n' +
+        "AI features are optional to use: the app's core functionality (manually logging transactions and shared expenses) works without them.",
     },
     {
       heading: '3. Where your data is stored',
       body:
-        'Your data is stored in a managed Postgres database hosted by Supabase. Access to your data is restricted by database-level security rules (Row Level Security) that only allow you to read your own personal data, and only allow flat members to read their shared flat\'s data -- enforced at the database level, not just in the app\'s interface.',
+        'Your data is stored in a managed Postgres database hosted by Supabase. Access to your data is restricted by database-level security rules (Row Level Security) that only allow you to read your own personal data, and only allow flat members to read their shared flat\'s data, enforced at the database level, not just in the app\'s interface.',
     },
     {
       heading: '4. Your rights',
       body:
-        "You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. You can delete your entire account and personal data yourself, at any time, from Profile -> Delete Account -- this is permanent and cannot be undone. If you shared expenses with others in a flat, that shared history stays visible to them (with your name replaced by \"Deleted User\") since their own records depend on it.",
+        "You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. You can delete your entire account and personal data yourself, at any time, from Profile -> Delete Account; this is permanent and cannot be undone. If you shared expenses with others in a flat, that shared history stays visible to them (with your name replaced by \"Deleted User\") since their own records depend on it.",
     },
     {
       heading: '5. Compliance',
       body:
-        'We aim to handle personal information consistently with the principles of the New Zealand Privacy Act 2020 -- collecting only what\'s needed, being transparent about its use, keeping it secure, and allowing you to access or correct it.',
+        'We aim to handle personal information consistently with the principles of the New Zealand Privacy Act 2020: collecting only what\'s needed, being transparent about its use, keeping it secure, and allowing you to access or correct it.',
     },
     {
       heading: "6. Children's privacy",
@@ -68,17 +68,17 @@ export const TERMS_OF_SERVICE: LegalDoc = {
     {
       heading: '2. Your account',
       body:
-        "You're responsible for keeping your login credentials secure and for all activity under your account. You must provide a real, working email address -- it's how you sign in and (if needed) how we'd contact you about your account.",
+        "You're responsible for keeping your login credentials secure and for all activity under your account. You must provide a real, working email address: it's how you sign in and (if needed) how we'd contact you about your account.",
     },
     {
       heading: '3. Your data, your content',
       body:
-        "Transactions, categories, and shared expenses you enter belong to you. By entering shared-expense data in a flat, you're sharing that specific data with the other members of that flat -- nothing more.",
+        "Transactions, categories, and shared expenses you enter belong to you. By entering shared-expense data in a flat, you're sharing that specific data with the other members of that flat, nothing more.",
     },
     {
       heading: '4. Not financial advice',
       body:
-        'Tabby is a budgeting and expense-splitting tool. It does not provide financial, tax, or legal advice. Spending summaries and category breakdowns are informational only. AI-generated insights and categorizations may occasionally be inaccurate -- always check figures that matter before acting on them (e.g. settling a balance with a flatmate).',
+        'Tabby is a budgeting and expense-splitting tool. It does not provide financial, tax, or legal advice. Spending summaries and category breakdowns are informational only. AI-generated insights and categorizations may occasionally be inaccurate; always check figures that matter before acting on them (e.g. settling a balance with a flatmate).',
     },
     {
       heading: '5. Acceptable use',
@@ -98,7 +98,7 @@ export const TERMS_OF_SERVICE: LegalDoc = {
     {
       heading: '8. Limitation of liability',
       body:
-        "To the extent permitted by law, we aren't liable for financial decisions made based on information in the app, or for disputes between flatmates about shared expenses -- the app is a record-keeping tool, not a party to those arrangements.",
+        "To the extent permitted by law, we aren't liable for financial decisions made based on information in the app, or for disputes between flatmates about shared expenses: the app is a record-keeping tool, not a party to those arrangements.",
     },
     {
       heading: '9. Changes',

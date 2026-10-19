@@ -192,7 +192,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
     if (form.trackingMode === 'net' && form.taxCode) {
       if (!canUseTaxCode(sources, form.taxCode, form.id)) {
         setMessage(
-          `${form.taxCode} is already used by another income source. Only one concurrent job can use the main tax code -- this one probably needs a secondary code (S, SB, SH, or ST) instead.`,
+          `${form.taxCode} is already used by another income source. Only one concurrent job can use the main tax code; this one probably needs a secondary code (S, SB, SH, or ST) instead.`,
         );
         return;
       }
@@ -345,7 +345,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
             <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                 Add each job you&apos;re paid by, how much and how often. This sets the pay cycle Budget
-                measures against -- it won&apos;t change the Earned total, which only counts income
+                measures against; it won&apos;t change the Earned total, which only counts income
                 transactions you log yourself (confirmed from the bell, or added by hand).
               </Text>
               {error && (
@@ -586,7 +586,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                       style={pressFeedback}
                       className="flex-row items-center gap-1.5 self-start mt-0.5"
                       accessibilityRole="link"
-                      accessibilityLabel="Not sure which tax code to use -- check with IRD"
+                      accessibilityLabel="Not sure which tax code to use? Check with IRD"
                     >
                       <Feather name="external-link" size={12} color="#8B5A2B" />
                       <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">
@@ -700,7 +700,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                     </Text>
                   )}
                   <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                    Estimate only -- check your actual payslip.
+                    Estimate only, check your actual payslip.
                   </Text>
                 </View>
               )}

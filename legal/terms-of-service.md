@@ -10,15 +10,15 @@ Tabby is a personal finance tracker with flatmate bill-splitting features. It he
 
 ## 2. Your account
 
-You're responsible for keeping your login credentials secure and for all activity under your account. You must provide a real, working email address — it's how you sign in and (if needed) how we'd contact you about your account.
+You're responsible for keeping your login credentials secure and for all activity under your account. You must provide a real, working email address: it's how you sign in and (if needed) how we'd contact you about your account.
 
 ## 3. Your data, your content
 
-Transactions, categories, and shared expenses you enter belong to you. By entering shared-expense data in a flat, you're sharing that specific data with the other members of that flat — nothing more.
+Transactions, categories, and shared expenses you enter belong to you. By entering shared-expense data in a flat, you're sharing that specific data with the other members of that flat, nothing more.
 
 ## 4. Not financial advice
 
-Tabby is a budgeting and expense-splitting tool. It does not provide financial, tax, or legal advice. Spending summaries and category breakdowns are informational only. AI-generated insights and categorizations may occasionally be inaccurate — always check figures that matter before acting on them (e.g. settling a balance with a flatmate).
+Tabby is a budgeting and expense-splitting tool. It does not provide financial, tax, or legal advice. Spending summaries and category breakdowns are informational only. AI-generated insights and categorizations may occasionally be inaccurate; always check figures that matter before acting on them (e.g. settling a balance with a flatmate).
 
 ## 5. Acceptable use
 
@@ -34,7 +34,7 @@ Tabby is provided "as is." We don't guarantee it will be error-free, available a
 
 ## 8. Limitation of liability
 
-To the extent permitted by law, we aren't liable for financial decisions made based on information in the app, or for disputes between flatmates about shared expenses — the app is a record-keeping tool, not a party to those arrangements.
+To the extent permitted by law, we aren't liable for financial decisions made based on information in the app, or for disputes between flatmates about shared expenses: the app is a record-keeping tool, not a party to those arrangements.
 
 ## 9. Changes
 

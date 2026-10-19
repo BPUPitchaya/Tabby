@@ -223,7 +223,7 @@ export function IncomeTransactionDetailModal({
                         )}
                       </View>
                       <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
-                        Estimate from when this payday was confirmed -- not re-checked against your actual
+                        Estimate from when this payday was confirmed, not re-checked against your actual
                         payslip.
                       </Text>
                     </View>
@@ -319,7 +319,7 @@ export function IncomeTransactionDetailModal({
                           style={pressFeedback}
                           className="flex-row items-center gap-1.5 self-start mt-0.5"
                           accessibilityRole="link"
-                          accessibilityLabel="Not sure which tax code to use -- check with IRD"
+                          accessibilityLabel="Not sure which tax code to use? Check with IRD"
                         >
                           <Feather name="external-link" size={12} color="#8B5A2B" />
                           <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">

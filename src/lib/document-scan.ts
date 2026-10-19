@@ -11,7 +11,7 @@ export type ScannedDocument = { base64Data: string; mimeType: string };
 export async function pickFromCamera(): Promise<ScannedDocument | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
-    throw new Error('Camera access is off for Tabby -- enable it in Settings to scan a receipt.');
+    throw new Error('Camera access is off for Tabby. Enable it in Settings to scan a receipt.');
   }
   const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6 });
   const asset = result.canceled ? null : result.assets[0];
@@ -22,7 +22,7 @@ export async function pickFromCamera(): Promise<ScannedDocument | null> {
 export async function pickFromLibrary(): Promise<ScannedDocument | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
-    throw new Error('Photo access is off for Tabby -- enable it in Settings to scan a receipt.');
+    throw new Error('Photo access is off for Tabby. Enable it in Settings to scan a receipt.');
   }
   const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6 });
   const asset = result.canceled ? null : result.assets[0];

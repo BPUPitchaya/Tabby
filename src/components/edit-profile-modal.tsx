@@ -160,7 +160,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     try {
       await updateEmail(newEmail.trim());
       setEmailMessage(
-        `Check ${newEmail.trim()} for a confirmation link -- your email won't change until you click it.`,
+        `Check ${newEmail.trim()} for a confirmation link. Your email won't change until you click it.`,
       );
       setNewEmail('');
     } catch (err) {
@@ -339,7 +339,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                   </View>
                   <Card>
                     <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                      Included in a reminder so people know how to pay you back -- bank account number,
+                      Included in a reminder so people know how to pay you back: bank account number,
                       reference, whatever you&apos;d normally give someone.
                     </Text>
                     <TextInput
