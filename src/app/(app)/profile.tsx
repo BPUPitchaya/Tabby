@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Alert, Pressable, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BillsModal } from '@/components/bills-modal';
@@ -15,6 +15,7 @@ import { MoneyOwingModal } from '@/components/money-owing-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
+import { deleteAccount } from '@/lib/profile';
 
 // A row inside the joined "Legal" list -- no border/radius of its own, a
 // divider between rows instead, so the group reads as one list rather than
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
   const [showBills, setShowBills] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
   const [showIncomeSources, setShowIncomeSources] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const isDark = useColorScheme() === 'dark';
 
   const handleSignOut = () => {
@@ -68,6 +70,51 @@ export default function ProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: signOut },
     ]);
+  };
+
+  // Two confirms, not one -- every other delete in this app (a
+  // transaction, a bill) is undoable in the sense that you could just
+  // re-add it; this one genuinely isn't. Same reasoning as why this
+  // needed its own Edge Function rather than a plain client-side delete
+  // (see lib/profile.ts's deleteAccount).
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your account and everything you logged -- transactions, bills, income sources, flat and split history. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              'There is no way to recover your account or data after this.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Everything',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      await deleteAccount();
+                      await signOut();
+                    } catch (err) {
+                      setDeletingAccount(false);
+                      Alert.alert(
+                        'Failed to delete account',
+                        err instanceof Error ? err.message : 'Something went wrong. Try again.',
+                      );
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -154,16 +201,37 @@ export default function ProfileScreen() {
 
         {/* Deliberately not boxed like the group above -- a plain row,
             set apart by space rather than by color alone. */}
-        <Pressable
-          onPress={handleSignOut}
-          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
-          accessibilityRole="button"
-          accessibilityLabel="Sign Out"
-          className="flex-row items-center gap-3 px-4"
-        >
-          <Feather name="log-out" size={18} color="#ef4444" />
-          <Text className="font-nunito-medium text-red-500 dark:text-red-400">Sign Out</Text>
-        </Pressable>
+        <View className="gap-4">
+          <Pressable
+            onPress={handleSignOut}
+            disabled={deletingAccount}
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            accessibilityRole="button"
+            accessibilityLabel="Sign Out"
+            className="flex-row items-center gap-3 px-4"
+          >
+            <Feather name="log-out" size={18} color="#ef4444" />
+            <Text className="font-nunito-medium text-red-500 dark:text-red-400">Sign Out</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={deletingAccount}
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+            accessibilityRole="button"
+            accessibilityLabel="Delete Account"
+            className="flex-row items-center gap-3 px-4"
+          >
+            {deletingAccount ? (
+              <ActivityIndicator size="small" color="#ef4444" />
+            ) : (
+              <Feather name="trash-2" size={18} color="#ef4444" />
+            )}
+            <Text className="font-nunito-medium text-red-500 dark:text-red-400">
+              {deletingAccount ? 'Deleting account...' : 'Delete Account'}
+            </Text>
+          </Pressable>
+        </View>
 
         <Text className="font-nunito text-center text-gray-500 dark:text-tabby-300 text-xs mt-auto">
           Tabby v1.0.0

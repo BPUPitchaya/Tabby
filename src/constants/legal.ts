@@ -33,7 +33,7 @@ export const PRIVACY_POLICY: LegalDoc = {
     {
       heading: '4. Your rights',
       body:
-        "You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. To request deletion of your entire account and all associated data, contact us at the email address below -- we aim to process such requests within a reasonable timeframe. (A self-service \"delete my account\" option within the app itself is planned but not yet implemented.)",
+        "You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. You can delete your entire account and personal data yourself, at any time, from Profile -> Delete Account -- this is permanent and cannot be undone. If you shared expenses with others in a flat, that shared history stays visible to them (with your name replaced by \"Deleted User\") since their own records depend on it.",
     },
     {
       heading: '5. Compliance',
@@ -51,7 +51,7 @@ export const PRIVACY_POLICY: LegalDoc = {
     },
     {
       heading: '8. Contact',
-      body: 'Questions about this policy or your data: [contact email to be added].',
+      body: 'Questions about this policy or your data: pitchayautai.dev@gmail.com.',
     },
   ],
 };
@@ -88,7 +88,7 @@ export const TERMS_OF_SERVICE: LegalDoc = {
     {
       heading: '6. Flats and shared data',
       body:
-        "Joining a flat shares your name and the shared expenses you log with other members of that flat. Leaving a flat removes your access to its data going forward but does not retroactively delete expense history you contributed while a member, since other members' balances depend on that history.",
+        "Joining a flat shares your name and the shared expenses you log with other members of that flat. Leaving a flat removes your access to its data going forward but does not retroactively delete expense history you contributed while a member, since other members' balances depend on that history. The same applies if you delete your account entirely: your own data is removed, but a shared expense, flat, or settlement you were part of stays visible to other members with your name replaced by \"Deleted User.\"",
     },
     {
       heading: '7. No warranty',
@@ -110,7 +110,7 @@ export const TERMS_OF_SERVICE: LegalDoc = {
     },
     {
       heading: '11. Contact',
-      body: 'Questions about these terms: [contact email to be added].',
+      body: 'Questions about these terms: pitchayautai.dev@gmail.com.',
     },
   ],
 };

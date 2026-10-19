@@ -26,7 +26,7 @@ Don't use Tabby to log, share, or process data you don't have the right to share
 
 ## 6. Flats and shared data
 
-Joining a flat shares your name and the shared expenses you log with other members of that flat. Leaving a flat removes your access to its data going forward but does not retroactively delete expense history you contributed while a member, since other members' balances depend on that history.
+Joining a flat shares your name and the shared expenses you log with other members of that flat. Leaving a flat removes your access to its data going forward but does not retroactively delete expense history you contributed while a member, since other members' balances depend on that history. The same applies if you delete your account entirely: your own data is removed, but a shared expense, flat, or settlement you were part of stays visible to other members with your name replaced by "Deleted User."
 
 ## 7. No warranty
 
@@ -46,4 +46,4 @@ These terms are governed by the laws of New Zealand.
 
 ## 11. Contact
 
-Questions about these terms: [contact email to be added].
+Questions about these terms: pitchayautai.dev@gmail.com.

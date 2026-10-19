@@ -327,7 +327,10 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   };
 
   const handleSettle = async (balance: Balance) => {
-    if (!userId) return;
+    // The "Deleted User" synthetic bucket has no real account left to
+    // record a settlement against -- the row's own Pressable is already
+    // hidden for it, this is just a second guard.
+    if (!userId || balance.userId === null) return;
     try {
       if (balance.netAmount > 0) {
         // they owe you -> they are "settling" by paying you
@@ -753,7 +756,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                             : `You owe $${Math.abs(b.netAmount).toFixed(2)}`}
                       </Text>
                     </View>
-                    {b.netAmount !== 0 && (
+                    {b.netAmount !== 0 && b.userId !== null && (
                       <Pressable
                         onPress={() => handleSettle(b)}
                         style={pressFeedback}
@@ -794,7 +797,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                           {e.description || 'Shared expense'}
                         </Text>
                         <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                          Paid by {e.profiles?.display_name ?? 'Unknown'} · {e.occurred_at}
+                          Paid by {e.profiles?.display_name ?? 'Deleted User'} · {e.occurred_at}
                         </Text>
                       </View>
                       <Text className="font-nunito-bold mr-3 dark:text-white">${e.amount.toFixed(2)}</Text>
