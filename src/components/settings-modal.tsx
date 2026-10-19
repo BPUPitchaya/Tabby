@@ -1,6 +1,5 @@
-import { Feather } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, useColorScheme, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -18,17 +17,28 @@ import {
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-const THEME_OPTIONS: { value: ThemePreference; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-  { value: 'system', label: 'Match device', icon: 'smartphone' },
-  { value: 'light', label: 'Light', icon: 'sun' },
-  { value: 'dark', label: 'Dark', icon: 'moon' },
+// Plain native style, not a conditional `shadow-sm` className -- a known
+// NativeWind/CSS interop race that only a native style prop sidesteps
+// (same pattern as income-sources-modal.tsx's Fixed/Hourly toggle).
+const SEGMENT_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.08,
+  shadowRadius: 2,
+  elevation: 1,
+};
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: 'Match device' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
 ];
 
 const FONT_OPTIONS: FontPack[] = ['default', 'fraunces', 'quicksand'];
 
 const PERIOD_OPTIONS: { value: DashboardPeriodPreference; label: string }[] = [
-  { value: 'pay-cycle', label: 'Follow pay schedule' },
-  { value: 'calendar-month', label: 'Always this month' },
+  { value: 'pay-cycle', label: 'Pay schedule' },
+  { value: 'calendar-month', label: 'Calendar month' },
 ];
 
 const TREND_OPTIONS: { value: TrendPeriodPreference; label: string }[] = [
@@ -37,8 +47,57 @@ const TREND_OPTIONS: { value: TrendPeriodPreference; label: string }[] = [
   { value: 'monthly', label: 'Monthly' },
 ];
 
+// One shared segmented control -- replaces what used to be four separate
+// vertical radio-lists, each its own boxed card. Every other 2-3-way
+// choice in the app (Fixed/Hourly, Gross/Net, Expense/Income) already
+// uses this exact pill shape; Settings was the one screen still using a
+// different pattern for the same kind of decision.
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T | null;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View className="flex-row gap-1.5 p-1 bg-gray-100 dark:bg-tabby-900 rounded-xl">
+      {options.map((option) => {
+        const selected = value === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            style={(state) => [pressFeedback(state), selected && SEGMENT_SHADOW]}
+            accessibilityRole="button"
+            accessibilityLabel={option.label}
+            className={`flex-1 rounded-lg py-2 items-center ${selected ? 'bg-white dark:bg-tabby-700' : ''}`}
+          >
+            <Text
+              className={`font-nunito-semibold text-xs text-center ${
+                selected ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-tabby-300'
+              }`}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View className="gap-2">
+      <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">{label}</Text>
+      {children}
+    </View>
+  );
+}
+
 export function SettingsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const isDark = useColorScheme() === 'dark';
   const [preference, setPreference] = useState<ThemePreference | null>(null);
   const { pack: fontPack, setPack: setFontPack } = useFontPreference();
   const [periodPreference, setPeriodPreference] = useState<DashboardPeriodPreference | null>(null);
@@ -82,120 +141,61 @@ export function SettingsModal({ visible, onClose }: { visible: boolean; onClose:
             </Pressable>
           </View>
 
-          <View className="p-4 gap-2">
-            <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
-              APPEARANCE
-            </Text>
-            <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700">
-              {THEME_OPTIONS.map((option, i) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => handleSelect(option.value)}
-                  style={pressFeedback}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  className={`flex-row items-center gap-3 py-3.5 px-4 ${
-                    i < THEME_OPTIONS.length - 1 ? 'border-b border-gray-100 dark:border-tabby-700' : ''
-                  }`}>
-                  <Feather
-                    name={option.icon}
-                    size={18}
-                    color={isDark ? '#E8C39E' : '#374151'}
-                    style={{ opacity: 0.7 }}
+          <View className="p-4 gap-6">
+            {/* Theme and font are both purely visual preferences -- one
+                card, not two near-identical boxes. */}
+            <View className="gap-2">
+              <Text className="font-nunito-bold text-[11px] tracking-wide text-gray-400 dark:text-tabby-400 px-1">
+                APPEARANCE
+              </Text>
+              <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700 p-4 gap-4">
+                <Field label="Theme">
+                  <Segmented options={THEME_OPTIONS} value={preference} onChange={handleSelect} />
+                </Field>
+                <View className="h-px bg-gray-100 dark:bg-tabby-700" />
+                <Field label="Font">
+                  <Segmented
+                    options={FONT_OPTIONS.map((o) => ({ value: o, label: FONT_PACK_LABELS[o] }))}
+                    value={fontPack}
+                    onChange={setFontPack}
                   />
-                  <Text className="flex-1 font-nunito-medium text-gray-800 dark:text-white">
-                    {option.label}
+                </Field>
+              </View>
+            </View>
+
+            {/* Dashboard period and history chart are both "what the data
+                on Home means" preferences -- same reasoning, one card. */}
+            <View className="gap-2">
+              <Text className="font-nunito-bold text-[11px] tracking-wide text-gray-400 dark:text-tabby-400 px-1">
+                DISPLAY
+              </Text>
+              <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700 p-4 gap-4">
+                <Field label="Dashboard period">
+                  <Segmented
+                    options={PERIOD_OPTIONS}
+                    value={periodPreference}
+                    onChange={handleSelectPeriod}
+                  />
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                    Controls what Earned, Spent, and the home screen total count as &ldquo;now&rdquo; -- your
+                    pay cycle (set in Income Sources) or always the calendar month. Budget follows your pay
+                    cycle either way.
                   </Text>
-                  {preference === option.value && (
-                    <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          <View className="p-4 gap-2">
-            <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
-              FONT
-            </Text>
-            <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700">
-              {FONT_OPTIONS.map((option, i) => (
-                <Pressable
-                  key={option}
-                  onPress={() => setFontPack(option)}
-                  style={pressFeedback}
-                  accessibilityRole="button"
-                  accessibilityLabel={FONT_PACK_LABELS[option]}
-                  className={`flex-row items-center gap-3 py-3.5 px-4 ${
-                    i < FONT_OPTIONS.length - 1 ? 'border-b border-gray-100 dark:border-tabby-700' : ''
-                  }`}>
-                  <Feather name="type" size={18} color={isDark ? '#E8C39E' : '#374151'} style={{ opacity: 0.7 }} />
-                  <Text className="flex-1 font-nunito-medium text-gray-800 dark:text-white">
-                    {FONT_PACK_LABELS[option]}
+                </Field>
+                <View className="h-px bg-gray-100 dark:bg-tabby-700" />
+                <Field label="History chart">
+                  <Segmented
+                    options={TREND_OPTIONS}
+                    value={trendPreference}
+                    onChange={handleSelectTrend}
+                  />
+                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                    Automatic shows weekly bars until you have about two months of history, then switches
+                    to the last 6 months.
                   </Text>
-                  {fontPack === option && <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />}
-                </Pressable>
-              ))}
+                </Field>
+              </View>
             </View>
-          </View>
-
-          <View className="p-4 gap-2">
-            <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
-              DASHBOARD PERIOD
-            </Text>
-            <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700">
-              {PERIOD_OPTIONS.map((option, i) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => handleSelectPeriod(option.value)}
-                  style={pressFeedback}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  className={`flex-row items-center gap-3 py-3.5 px-4 ${
-                    i < PERIOD_OPTIONS.length - 1 ? 'border-b border-gray-100 dark:border-tabby-700' : ''
-                  }`}>
-                  <Feather name="calendar" size={18} color={isDark ? '#E8C39E' : '#374151'} style={{ opacity: 0.7 }} />
-                  <Text className="flex-1 font-nunito-medium text-gray-800 dark:text-white">{option.label}</Text>
-                  {periodPreference === option.value && (
-                    <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
-                  )}
-                </Pressable>
-              ))}
-            </View>
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
-              Controls what Earned, Spent, and the home screen total count as &ldquo;now&rdquo; -- your
-              pay cycle (set in Pay Schedule) or always the calendar month. Budget follows your pay
-              cycle either way.
-            </Text>
-          </View>
-
-          <View className="p-4 gap-2">
-            <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
-              HISTORY CHART
-            </Text>
-            <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700">
-              {TREND_OPTIONS.map((option, i) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => handleSelectTrend(option.value)}
-                  style={pressFeedback}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  className={`flex-row items-center gap-3 py-3.5 px-4 ${
-                    i < TREND_OPTIONS.length - 1 ? 'border-b border-gray-100 dark:border-tabby-700' : ''
-                  }`}>
-                  <Feather name="bar-chart-2" size={18} color={isDark ? '#E8C39E' : '#374151'} style={{ opacity: 0.7 }} />
-                  <Text className="flex-1 font-nunito-medium text-gray-800 dark:text-white">{option.label}</Text>
-                  {trendPreference === option.value && (
-                    <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
-                  )}
-                </Pressable>
-              ))}
-            </View>
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
-              Automatic shows weekly bars until you have about two months of history, then switches
-              to the last 6 months.
-            </Text>
           </View>
         </SafeAreaView>
       </SafeAreaProvider>
