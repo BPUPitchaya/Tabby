@@ -106,10 +106,11 @@ export default {
       const result = await callGemini(input, schema);
       return Response.json({ result });
     } catch (err) {
-      return Response.json(
-        { error: err instanceof Error ? err.message : "Unknown error." },
-        { status: 500 }
-      );
+      // Log the real error server-side only -- it can carry internal detail
+      // (Gemini response shape, RPC/Postgres errors) that shouldn't reach
+      // the client.
+      console.error("ai-proxy error:", err);
+      return Response.json({ error: "AI request failed. Try again in a bit." }, { status: 500 });
     }
   }),
 };
