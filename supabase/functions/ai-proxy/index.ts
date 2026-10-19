@@ -80,8 +80,23 @@ async function callGemini(input: GeminiInput, schema: Record<string, unknown>): 
 }
 
 export default {
-  fetch: withSupabase({ auth: "user" }, async (req) => {
+  fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
     try {
+      // 40 calls/hour/user -- generous for normal use (a few receipt
+      // scans and quick-adds a day), but bounded so one runaway client
+      // can't burn through the shared GEMINI_API_KEY budget for everyone.
+      const { data: allowed, error: rateLimitError } = await ctx.supabaseAdmin.rpc(
+        "check_ai_proxy_rate_limit",
+        { p_user_id: ctx.userClaims!.id },
+      );
+      if (rateLimitError) throw rateLimitError;
+      if (!allowed) {
+        return Response.json(
+          { error: "Too many AI requests. Try again in a bit." },
+          { status: 429 },
+        );
+      }
+
       const { input, schema } = await req.json();
       const validInput = typeof input === "string" ? input.length > 0 : Array.isArray(input) && input.length > 0;
       if (!validInput || !schema) {
