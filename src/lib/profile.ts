@@ -112,6 +112,19 @@ export async function updatePassword(newPassword: string) {
   if (error) throw error;
 }
 
+// Calls the delete-account Edge Function (service-role, the client never
+// gets that key) -- see supabase/functions/delete-account/index.ts. Your
+// own data cascades away with your auth.users row; anything you did
+// inside a shared flat (created it, paid a shared expense, settled up)
+// survives for other members with its "who" pointer set to null instead.
+// The caller is responsible for signing out locally afterward -- the
+// server-side session is gone, but local storage still has to be cleared.
+export async function deleteAccount(): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('delete-account');
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+}
+
 export type IncomeCycle = {
   /** Inclusive, 'YYYY-MM-DD'. */
   startDate: string;

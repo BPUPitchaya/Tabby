@@ -91,6 +91,57 @@ describe('computeBalancesFromData', () => {
     const fromB = computeBalancesFromData(FLAT_ID, B, splits, [], members);
     expect(fromB).toEqual([{ userId: A, displayName: 'Alice', netAmount: 0 }]);
   });
+
+  // A deleted flatmate's profile is gone, but 0036's ON DELETE SET NULL
+  // means the split/expense/settlement ROWS survive with that pointer
+  // nulled out -- these cover the merged "Deleted User" bucket that
+  // results (see Balance's own comment for why it's merged rather than
+  // per-person).
+  describe('a flatmate who has since deleted their account', () => {
+    it('shows what you still owe a deleted payer as a "Deleted User" balance', () => {
+      const splits: SplitRow[] = [
+        { user_id: B, share_amount: 50, shared_expenses: { paid_by: null, flat_id: FLAT_ID } },
+      ];
+      const members = [member(B, 'Bob')];
+
+      const fromB = computeBalancesFromData(FLAT_ID, B, splits, [], members);
+      expect(fromB).toEqual([{ userId: null, displayName: 'Deleted User', netAmount: -50 }]);
+    });
+
+    it('shows what a deleted flatmate owed you as a "Deleted User" balance', () => {
+      const splits: SplitRow[] = [
+        { user_id: null, share_amount: 30, shared_expenses: { paid_by: A, flat_id: FLAT_ID } },
+      ];
+      const members = [member(A, 'Alice')];
+
+      const fromA = computeBalancesFromData(FLAT_ID, A, splits, [], members);
+      expect(fromA).toEqual([{ userId: null, displayName: 'Deleted User', netAmount: 30 }]);
+    });
+
+    it('omits the "Deleted User" bucket once a settlement zeroes it out', () => {
+      const splits: SplitRow[] = [
+        { user_id: B, share_amount: 50, shared_expenses: { paid_by: null, flat_id: FLAT_ID } },
+      ];
+      const settlements: SettlementRow[] = [{ from_user: B, to_user: null, amount: 50 }];
+      const members = [member(B, 'Bob')];
+
+      const fromB = computeBalancesFromData(FLAT_ID, B, splits, settlements, members);
+      expect(fromB).toEqual([]);
+    });
+
+    it("never attributes a deleted flatmate's history to a real member of the same name", () => {
+      // A still a real member, B deleted -- A's own balance must stay
+      // untouched by B's now-nulled rows.
+      const splits: SplitRow[] = [
+        { user_id: A, share_amount: 20, shared_expenses: { paid_by: A, flat_id: FLAT_ID } },
+        { user_id: null, share_amount: 20, shared_expenses: { paid_by: A, flat_id: FLAT_ID } },
+      ];
+      const members = [member(A, 'Alice')];
+
+      const fromA = computeBalancesFromData(FLAT_ID, A, splits, [], members);
+      expect(fromA).toEqual([{ userId: null, displayName: 'Deleted User', netAmount: 20 }]);
+    });
+  });
 });
 
 describe('computeFlatHealthFromData', () => {

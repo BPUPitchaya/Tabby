@@ -10,7 +10,11 @@ export type Flat = {
   id: string;
   name: string;
   invite_code: string;
-  created_by: string;
+  // Nullable since 0036_nullable_profile_refs_for_account_deletion.sql --
+  // the creator may have since deleted their account. Not displayed as a
+  // name anywhere (admin status is tracked separately via flat_members.role),
+  // so no UI fallback needed for this one.
+  created_by: string | null;
 };
 
 export type SharedExpense = {
@@ -18,12 +22,20 @@ export type SharedExpense = {
   amount: number;
   description: string | null;
   occurred_at: string;
-  paid_by: string;
+  // Nullable -- the payer may have since deleted their account. The row
+  // itself survives (ON DELETE SET NULL) so this expense still counts
+  // correctly in flat-wide totals/health; only "who" is gone.
+  paid_by: string | null;
   profiles: { display_name: string } | null;
 };
 
 export type Balance = {
-  userId: string;
+  // null is a synthetic bucket for one or more deleted flatmates, merged
+  // together -- once a profile is gone there's no id left to distinguish
+  // *which* deleted person a given split/settlement belonged to (see
+  // computeBalancesFromData). Never settle-able: there's no real account
+  // left to record a settlement against.
+  userId: string | null;
   displayName: string;
   // positive = they owe you, negative = you owe them, 0 = settled
   netAmount: number;
@@ -234,12 +246,14 @@ export async function recordSettlement(params: {
 }
 
 export type SplitRow = {
-  user_id: string;
+  // Nullable -- the person who owed this share may have since deleted
+  // their account.
+  user_id: string | null;
   share_amount: number;
-  shared_expenses: { paid_by: string; flat_id: string } | null;
+  shared_expenses: { paid_by: string | null; flat_id: string } | null;
 };
 
-export type SettlementRow = { from_user: string; to_user: string; amount: number };
+export type SettlementRow = { from_user: string | null; to_user: string | null; amount: number };
 
 /**
  * Pure calculation, no network calls -- extracted so it can be unit
@@ -257,6 +271,11 @@ export function computeBalancesFromData(
   members: FlatMember[]
 ): Balance[] {
   const net = new Map<string, number>();
+  // Everything involving a now-deleted flatmate merges into one bucket --
+  // once their profile is gone, a null paid_by/user_id/from_user/to_user
+  // could originally have been any of them, so there's no way to keep
+  // them separate. See the Balance type's own comment.
+  let deletedUserNet = 0;
 
   for (const split of splits) {
     const expense = split.shared_expenses;
@@ -264,28 +283,53 @@ export function computeBalancesFromData(
 
     if (split.user_id === currentUserId && expense.paid_by !== currentUserId) {
       // current user owes the payer their share
-      net.set(expense.paid_by, (net.get(expense.paid_by) ?? 0) - split.share_amount);
+      if (expense.paid_by === null) {
+        deletedUserNet -= split.share_amount;
+      } else {
+        net.set(expense.paid_by, (net.get(expense.paid_by) ?? 0) - split.share_amount);
+      }
     } else if (split.user_id !== currentUserId && expense.paid_by === currentUserId) {
       // the other member owes the current user their share
-      net.set(split.user_id, (net.get(split.user_id) ?? 0) + split.share_amount);
+      if (split.user_id === null) {
+        deletedUserNet += split.share_amount;
+      } else {
+        net.set(split.user_id, (net.get(split.user_id) ?? 0) + split.share_amount);
+      }
     }
   }
 
   for (const settlement of settlements) {
     if (settlement.from_user === currentUserId) {
-      net.set(settlement.to_user, (net.get(settlement.to_user) ?? 0) + settlement.amount);
+      if (settlement.to_user === null) {
+        deletedUserNet += settlement.amount;
+      } else {
+        net.set(settlement.to_user, (net.get(settlement.to_user) ?? 0) + settlement.amount);
+      }
     } else if (settlement.to_user === currentUserId) {
-      net.set(settlement.from_user, (net.get(settlement.from_user) ?? 0) - settlement.amount);
+      if (settlement.from_user === null) {
+        deletedUserNet -= settlement.amount;
+      } else {
+        net.set(settlement.from_user, (net.get(settlement.from_user) ?? 0) - settlement.amount);
+      }
     }
   }
 
-  return members
+  const balances: Balance[] = members
     .filter((m) => m.user_id !== currentUserId)
     .map((m) => ({
       userId: m.user_id,
       displayName: m.profiles?.display_name ?? 'Unknown',
       netAmount: Math.round((net.get(m.user_id) ?? 0) * 100) / 100,
     }));
+
+  // Only shown when nonzero -- a deleted flatmate who was already fully
+  // settled with leaves nothing to explain, same as any other member.
+  const roundedDeletedNet = Math.round(deletedUserNet * 100) / 100;
+  if (roundedDeletedNet !== 0) {
+    balances.push({ userId: null, displayName: 'Deleted User', netAmount: roundedDeletedNet });
+  }
+
+  return balances;
 }
 
 /**
@@ -322,9 +366,13 @@ export type FlatHealth = {
 };
 
 export type HealthSplitRow = {
-  user_id: string;
+  // Nullable, same reasoning as SplitRow above -- a deleted flatmate's
+  // old split row survives, just with this unset. pairKey() below just
+  // stringifies it ("null"), which is still a distinct, consistent key --
+  // the magnitude-only health score doesn't need a real identity here.
+  user_id: string | null;
   share_amount: number;
-  shared_expenses: { paid_by: string; flat_id: string; amount: number } | null;
+  shared_expenses: { paid_by: string | null; flat_id: string; amount: number } | null;
 };
 
 /**
@@ -345,7 +393,7 @@ export function computeFlatHealthFromData(
 ): FlatHealth {
   // directed[ower][owed] = how much "ower" owes "owed", before settlements
   const directed = new Map<string, number>();
-  const pairKey = (a: string, b: string) => `${a}|${b}`;
+  const pairKey = (a: string | null, b: string | null) => `${a}|${b}`;
 
   for (const split of splits) {
     const expense = split.shared_expenses;

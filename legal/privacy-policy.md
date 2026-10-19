@@ -26,7 +26,7 @@ Your data is stored in a managed Postgres database hosted by Supabase. Access to
 
 ## 4. Your rights
 
-You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. To request deletion of your entire account and all associated data, contact us at the email address below — we aim to process such requests within a reasonable timeframe. (A self-service "delete my account" option within the app itself is planned but not yet implemented.)
+You can access, edit, or delete any transaction, category, or shared expense you've created at any time within the app. You can delete your entire account and personal data yourself, at any time, from Profile → Delete Account — this is permanent and cannot be undone. If you shared expenses with others in a flat, that shared history stays visible to them (with your name replaced by "Deleted User") since their own records depend on it.
 
 ## 5. Compliance
 
@@ -42,4 +42,4 @@ If this policy changes meaningfully, we'll update the "last updated" date above.
 
 ## 8. Contact
 
-Questions about this policy or your data: [contact email to be added].
+Questions about this policy or your data: pitchayautai.dev@gmail.com.
