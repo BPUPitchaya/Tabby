@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, Switch, Text, useColorScheme, View } from 'react-native';
+import { Alert, Modal, Pressable, Switch, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { useFlatPreference } from '@/lib/flat-preference-context';
@@ -34,19 +34,40 @@ export function FlatSettingsModal({ visible, onClose }: { visible: boolean; onCl
     }
   };
 
+  const handleShowHelp = () => {
+    Alert.alert(
+      locked ? "Why can't I turn this off?" : 'About the Flat tab',
+      locked
+        ? "You're currently a member of a flat (owner or not -- it doesn't matter which), so the tab stays on. Turning it off while you're still in a flat would hide your own shared-expense history and balances from yourself. Leave the flat from the Flat tab first, and this toggle unlocks."
+        : "Turning this on adds a Flat tab for splitting household expenses with flatmates. It switches on automatically the moment you join or create a flat, even without touching this toggle.",
+      [{ text: 'Got it' }],
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide">
       <SafeAreaProvider>
         <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-tabby-700">
             <Text className="font-fredoka-semibold text-xl dark:text-white">Flat</Text>
-            <Pressable
-              onPress={onClose}
-              style={pressFeedback}
-              accessibilityRole="button"
-              accessibilityLabel="Close">
-              <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-4">
+              <Pressable
+                onPress={handleShowHelp}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Why is this locked?"
+                className="w-7 h-7 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center"
+              >
+                <Text className="font-nunito-bold text-xs text-gray-600 dark:text-tabby-200">?</Text>
+              </Pressable>
+              <Pressable
+                onPress={onClose}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Close">
+                <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View className="p-4 gap-2">
