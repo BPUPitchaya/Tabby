@@ -22,7 +22,14 @@ async function callGemini(input: GeminiInput, schema: Record<string, unknown>): 
     body: { input, schema },
   });
 
-  if (error) throw error;
+  if (error) {
+    // supabase.functions.invoke only throws a generic "non-2xx status
+    // code" message on failure -- the proxy's actual { error } body (e.g.
+    // the rate-limit message) lives on error.context, a Response object,
+    // and has to be read out explicitly or it's lost.
+    const body = await error.context?.json?.().catch(() => null);
+    throw new Error(body?.error ?? error.message);
+  }
   if (data?.error) throw new Error(data.error);
   return data.result;
 }
