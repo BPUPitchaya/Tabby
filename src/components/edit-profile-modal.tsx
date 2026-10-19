@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -8,7 +9,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -25,50 +25,62 @@ import {
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// A labeled field with its own Save button -- each section of this screen
-// saves independently (name / email / password), rather than one giant
-// form-wide submit, since they're unrelated pieces of data with very
-// different failure modes (email needs a confirmation click, password
-// needs its own validation, etc).
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View className="gap-2">
-      <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
-        {title}
-      </Text>
-      <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700 p-4 gap-3">
-        {children}
-      </View>
-    </View>
-  );
-}
-
-function FieldButton({
+// A field's own save/update button -- small and off to the side instead
+// of a full-width bar, and only lit up once there's actually something to
+// save. Four identical solid buttons sitting there with nothing to do was
+// the real problem with the old screen, not the saving-independently part
+// (each field keeps its own flow -- email needs a confirm click, password
+// needs its own validation -- that behavior is unchanged).
+function MiniButton({
   label,
-  disabled,
+  active,
   busy,
   onPress,
 }: {
   label: string;
-  disabled?: boolean;
+  active: boolean;
   busy?: boolean;
   onPress: () => void;
 }) {
-  const isDark = useColorScheme() === 'dark';
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled || busy}
+      disabled={!active || busy}
       style={pressFeedback}
-      className={`rounded-lg py-2.5 items-center ${disabled ? 'bg-gray-300 dark:bg-tabby-700' : 'bg-tabby-600 dark:bg-white'}`}
       accessibilityRole="button"
+      accessibilityLabel={label}
+      className={`rounded-xl px-3.5 py-2.5 items-center justify-center ${
+        active ? 'bg-tabby-600 dark:bg-white' : 'border border-gray-200 dark:border-tabby-700'
+      }`}
     >
       {busy ? (
-        <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
+        <ActivityIndicator size="small" color={active ? 'white' : '#9CA3AF'} />
       ) : (
-        <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">{label}</Text>
+        <Text
+          className={`font-nunito-bold text-xs ${
+            active ? 'text-white dark:text-tabby-900' : 'text-gray-300 dark:text-tabby-600'
+          }`}
+        >
+          {label}
+        </Text>
       )}
     </Pressable>
+  );
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="font-nunito-bold text-[11px] tracking-wide text-gray-400 dark:text-tabby-400 px-1">
+      {children}
+    </Text>
+  );
+}
+
+function Card({ children }: { children: ReactNode }) {
+  return (
+    <View className="bg-gray-50 dark:bg-tabby-800 rounded-2xl border border-gray-100 dark:border-tabby-700 p-4 gap-3.5">
+      {children}
+    </View>
   );
 }
 
@@ -81,7 +93,9 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
   const userId = session?.user.id;
 
   const [loading, setLoading] = useState(true);
+
   const [name, setName] = useState('');
+  const [savedName, setSavedName] = useState('');
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState<string | null>(null);
 
@@ -94,6 +108,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
   const [paymentDetails, setPaymentDetails] = useState('');
+  const [savedPaymentDetails, setSavedPaymentDetails] = useState('');
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
@@ -101,9 +116,11 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     if (!visible || !userId) return;
     setLoading(true);
     Promise.all([fetchProfile(userId), fetchMyPaymentDetails(userId)])
-      .then(([profile, paymentDetails]) => {
+      .then(([profile, payment]) => {
         setName(profile.display_name);
-        setPaymentDetails(paymentDetails ?? '');
+        setSavedName(profile.display_name);
+        setPaymentDetails(payment ?? '');
+        setSavedPaymentDetails(payment ?? '');
       })
       .finally(() => setLoading(false));
   }, [visible, userId]);
@@ -124,6 +141,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     setNameMessage(null);
     try {
       await updateDisplayName(userId, name.trim());
+      setSavedName(name.trim());
       setNameMessage('Saved.');
     } catch (err) {
       setNameMessage(err instanceof Error ? err.message : 'Failed to save name.');
@@ -176,6 +194,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
     setPaymentMessage(null);
     try {
       await updatePaymentDetails(userId, paymentDetails);
+      setSavedPaymentDetails(paymentDetails);
       setPaymentMessage('Saved.');
     } catch (err) {
       setPaymentMessage(err instanceof Error ? err.message : 'Failed to save.');
@@ -183,6 +202,9 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
       setPaymentBusy(false);
     }
   };
+
+  const nameDirty = name.trim().length > 0 && name.trim() !== savedName;
+  const paymentDirty = paymentDetails !== savedPaymentDetails;
 
   return (
     <Modal visible={visible} animationType="slide">
@@ -206,82 +228,142 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
             </View>
           ) : (
             <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-                <Section title="NAME">
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Display name"
-                    autoCapitalize="words"
-                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                  />
+              <ScrollView contentContainerStyle={{ padding: 16, gap: 22 }}>
+                {/* Same header chrome as the Profile screen itself, so this
+                    reads as a continuation of your identity, not a cold
+                    form dropped on top of it. */}
+                <View className="flex-row items-center gap-3.5 px-1">
+                  <View
+                    className="w-14 h-14 rounded-full items-center justify-center"
+                    style={{ backgroundColor: '#BEE3F8' }}
+                  >
+                    <Image source={require('@/assets/images/splash-icon.png')} style={{ width: 38, height: 38 }} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-fredoka-semibold text-lg dark:text-white">{savedName}</Text>
+                    <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-xs">
+                      {session?.user.email}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* NAME: lightweight, no box -- changes often, shouldn't
+                    carry the same weight as Security below. */}
+                <View className="gap-2">
+                  <SectionLabel>NAME</SectionLabel>
+                  <View className="flex-row items-center gap-2 px-1">
+                    <TextInput
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="Display name"
+                      autoCapitalize="words"
+                      className="flex-1 font-nunito border border-gray-200 dark:border-tabby-600 rounded-xl px-3.5 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
+                    />
+                    <MiniButton label="Save" active={nameDirty} busy={nameBusy} onPress={handleSaveName} />
+                  </View>
                   {nameMessage && (
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
                       {nameMessage}
                     </Text>
                   )}
-                  <FieldButton label="Save name" busy={nameBusy} onPress={handleSaveName} />
-                </Section>
+                </View>
 
-                <Section title="EMAIL">
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                    Current: {session?.user.email}
-                  </Text>
-                  <TextInput
-                    value={newEmail}
-                    onChangeText={setNewEmail}
-                    placeholder="New email address"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                  />
-                  {emailMessage && (
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                      {emailMessage}
-                    </Text>
-                  )}
-                  <FieldButton label="Update email" busy={emailBusy} onPress={handleUpdateEmail} />
-                </Section>
+                {/* SECURITY: email + password, both account-sensitive, both
+                    keep their own confirm flow -- one card instead of two
+                    identical boxes. */}
+                <View className="gap-2">
+                  <SectionLabel>SECURITY</SectionLabel>
+                  <Card>
+                    <View className="gap-1.5">
+                      <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-xs px-1">
+                        Current email: {session?.user.email}
+                      </Text>
+                      <View className="flex-row items-center gap-2">
+                        <TextInput
+                          value={newEmail}
+                          onChangeText={setNewEmail}
+                          placeholder="New email address"
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          className="flex-1 font-nunito border border-gray-200 dark:border-tabby-600 rounded-xl px-3.5 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
+                        />
+                        <MiniButton
+                          label="Update"
+                          active={newEmail.trim().length > 0}
+                          busy={emailBusy}
+                          onPress={handleUpdateEmail}
+                        />
+                      </View>
+                      {emailMessage && (
+                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
+                          {emailMessage}
+                        </Text>
+                      )}
+                    </View>
 
-                <Section title="PASSWORD">
-                  <TextInput
-                    value={newPassword}
-                    onChangeText={setNewPassword}
-                    placeholder="New password"
-                    secureTextEntry
-                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white"
-                  />
-                  {passwordMessage && (
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                      {passwordMessage}
-                    </Text>
-                  )}
-                  <FieldButton label="Update password" busy={passwordBusy} onPress={handleUpdatePassword} />
-                </Section>
+                    <View className="h-px bg-gray-100 dark:bg-tabby-700" />
 
-                <Section title="PAYMENT DETAILS">
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                    Included in a reminder so people know how to pay you back -- bank account number,
-                    reference, whatever you&apos;d normally give someone.
-                  </Text>
-                  <TextInput
-                    value={paymentDetails}
-                    onChangeText={setPaymentDetails}
-                    placeholder="e.g. 12-3456-7890123-00, ref: your name"
-                    multiline
-                    className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 bg-white dark:bg-tabby-900 dark:text-white min-h-[60px]"
-                  />
-                  {paymentMessage && (
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                      {paymentMessage}
+                    <View className="gap-1.5">
+                      <View className="flex-row items-center gap-2">
+                        <TextInput
+                          value={newPassword}
+                          onChangeText={setNewPassword}
+                          placeholder="New password"
+                          secureTextEntry
+                          className="flex-1 font-nunito border border-gray-200 dark:border-tabby-600 rounded-xl px-3.5 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
+                        />
+                        <MiniButton
+                          label="Update"
+                          active={newPassword.length > 0}
+                          busy={passwordBusy}
+                          onPress={handleUpdatePassword}
+                        />
+                      </View>
+                      {passwordMessage && (
+                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
+                          {passwordMessage}
+                        </Text>
+                      )}
+                    </View>
+                  </Card>
+                </View>
+
+                {/* PAYMENT DETAILS: optional, lower-stakes -- its own
+                    quieter card. */}
+                <View className="gap-2">
+                  <View className="flex-row items-baseline justify-between px-1">
+                    <SectionLabel>PAYMENT DETAILS</SectionLabel>
+                    <Text className="font-nunito-medium text-gray-300 dark:text-tabby-500 text-xs">
+                      Optional
                     </Text>
-                  )}
-                  <FieldButton
-                    label="Save payment details"
-                    busy={paymentBusy}
-                    onPress={handleSavePaymentDetails}
-                  />
-                </Section>
+                  </View>
+                  <Card>
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                      Included in a reminder so people know how to pay you back -- bank account number,
+                      reference, whatever you&apos;d normally give someone.
+                    </Text>
+                    <TextInput
+                      value={paymentDetails}
+                      onChangeText={setPaymentDetails}
+                      placeholder="e.g. 12-3456-7890123-00, ref: your name"
+                      multiline
+                      className="font-nunito border border-gray-200 dark:border-tabby-600 rounded-xl px-3.5 py-2.5 bg-white dark:bg-tabby-900 dark:text-white min-h-[60px]"
+                    />
+                    <View className="flex-row justify-end">
+                      <MiniButton
+                        label="Save"
+                        active={paymentDirty}
+                        busy={paymentBusy}
+                        onPress={handleSavePaymentDetails}
+                      />
+                    </View>
+                    {paymentMessage && (
+                      <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-1">
+                        {paymentMessage}
+                      </Text>
+                    )}
+                  </Card>
+                </View>
               </ScrollView>
             </KeyboardAvoidingView>
           )}
