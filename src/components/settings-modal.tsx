@@ -177,7 +177,7 @@ export function SettingsModal({ visible, onClose }: { visible: boolean; onClose:
                     onChange={handleSelectPeriod}
                   />
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                    Controls what Earned, Spent, and the home screen total count as &ldquo;now&rdquo; -- your
+                    Controls what Earned, Spent, and the home screen total count as &ldquo;now&rdquo;: your
                     pay cycle (set in Income Sources) or always the calendar month. Budget follows your pay
                     cycle either way.
                   </Text>

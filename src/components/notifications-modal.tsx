@@ -185,7 +185,7 @@ export function NotificationsModal({
         } else {
           Alert.alert(
             "Couldn't read a gross figure from that payslip",
-            'This source tracks net pay, which needs the gross amount to estimate tax from -- enter it manually instead.',
+            'This source tracks net pay, which needs the gross amount to estimate tax from. Enter it manually instead.',
           );
         }
         return;
@@ -465,7 +465,7 @@ export function NotificationsModal({
                           {netBreakdown && (
                             <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
                               Est. take-home ${netBreakdown.netPay.toFixed(2)} after tax (gross $
-                              {plainGrossAmount.toFixed(2)}) -- this is what gets logged.
+                              {plainGrossAmount.toFixed(2)}): this is what gets logged.
                             </Text>
                           )}
                           <View className="flex-row gap-2">
@@ -583,7 +583,7 @@ export function NotificationsModal({
                         className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 gap-2"
                       >
                         <Text className="font-nunito-medium dark:text-white">
-                          {share.bill_splits?.title ?? 'A bill'} -- you&apos;d owe $
+                          {share.bill_splits?.title ?? 'A bill'}: you&apos;d owe $
                           {share.amount_owed.toFixed(2)}
                         </Text>
                         <View className="flex-row gap-2">

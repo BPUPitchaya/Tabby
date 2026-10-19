@@ -444,7 +444,7 @@ export function SplitBillModal({
               <View className="p-4 gap-3">
                 <Text className="font-fredoka-semibold text-xl dark:text-white">Split created</Text>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                  Each person below owes you their share. Guests have no Tabby account yet -- share the amount
+                  Each person below owes you their share. Guests have no Tabby account yet, so share the amount
                   with them directly.
                 </Text>
 
@@ -576,7 +576,7 @@ export function SplitBillModal({
                   <View className="gap-1 pl-1">
                     {items.map((item, i) => (
                       <Text key={i} className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                        {item.description} -- ${item.amount.toFixed(2)}
+                        {item.description} · ${item.amount.toFixed(2)}
                       </Text>
                     ))}
                   </View>
@@ -916,7 +916,7 @@ export function SplitBillModal({
                       {items.map((item, i) => (
                         <View key={i} className="gap-1.5">
                           <Text className="font-nunito-semibold text-sm dark:text-white">
-                            {item.description} -- ${item.amount.toFixed(2)}
+                            {item.description} · ${item.amount.toFixed(2)}
                           </Text>
                           <View className="flex-row flex-wrap gap-1.5">
                             {participants.map((p) => {

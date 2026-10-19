@@ -142,7 +142,7 @@ export function TabbyBear({ mood, insight, size = 96 }: { mood: BearMood; insigh
           }}
         />
 
-        <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel="Tabby -- tap for this month's insight">
+        <Pressable onPress={handlePress} accessibilityRole="button" accessibilityLabel="Tabby, tap for this month's insight">
           <Animated.View style={wrapStyle}>
             <Svg width={size} height={size} viewBox="0 0 1024 1024">
               <Circle cx={290} cy={300} r={120} fill="#8B5A2B" />

@@ -108,7 +108,7 @@ export default function ProfileScreen() {
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete your account?',
-      'This permanently deletes your account and everything you logged -- transactions, bills, income sources, flat and split history. This cannot be undone.',
+      'This permanently deletes your account and everything you logged: transactions, bills, income sources, flat and split history. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

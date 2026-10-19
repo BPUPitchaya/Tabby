@@ -281,7 +281,7 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                 {visibleYouOwe.length === 0 ? (
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                     {tab === 'active'
-                      ? 'Nothing outstanding -- nice.'
+                      ? 'Nothing outstanding, nice.'
                       : "You haven't paid anything back yet."}
                   </Text>
                 ) : (
@@ -327,7 +327,7 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                               <TextInput
                                 value={noteDrafts[share.id] ?? ''}
                                 onChangeText={(text) => setNoteDrafts((d) => ({ ...d, [share.id]: text }))}
-                                placeholder='Add a reference (optional) -- bank ref, "paid via cash", etc.'
+                                placeholder='Add a reference (optional): bank ref, "paid via cash", etc.'
                                 className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white bg-white dark:bg-tabby-900"
                               />
                               <View className="flex-row gap-2">
@@ -402,7 +402,7 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
                               {share.payeeConfirmedAt
                                 ? 'Waiting for them to confirm'
                                 : overdue
-                                  ? 'Overdue -- tap to remind'
+                                  ? 'Overdue, tap to remind'
                                   : STATUS_LABEL[share.status]}
                             </Text>
                             {share.note && (

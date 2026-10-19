@@ -38,7 +38,7 @@ export function FlatSettingsModal({ visible, onClose }: { visible: boolean; onCl
     Alert.alert(
       locked ? "Why can't I turn this off?" : 'About the Flat tab',
       locked
-        ? "You're currently a member of a flat (owner or not -- it doesn't matter which), so the tab stays on. Turning it off while you're still in a flat would hide your own shared-expense history and balances from yourself. Leave the flat from the Flat tab first, and this toggle unlocks."
+        ? "You're currently a member of a flat (owner or not, it doesn't matter which), so the tab stays on. Turning it off while you're still in a flat would hide your own shared-expense history and balances from yourself. Leave the flat from the Flat tab first, and this toggle unlocks."
         : "Turning this on adds a Flat tab for splitting household expenses with flatmates. It switches on automatically the moment you join or create a flat, even without touching this toggle.",
       [{ text: 'Got it' }],
     );
