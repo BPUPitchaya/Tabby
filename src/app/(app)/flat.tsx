@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -45,6 +46,60 @@ import {
 // Shared press-feedback style: a quick opacity dip on tap, applied via the
 // style prop (not className) since it needs the live `pressed` state.
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
+
+// Matches Profile's own small tracked-caps group label -- same visual
+// language across reworked screens instead of each inventing its own.
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text className="font-nunito-bold text-[11px] tracking-wide px-1 text-gray-400 dark:text-tabby-400">
+      {children}
+    </Text>
+  );
+}
+
+// A small, consistent set of initial-badges so "who" reads at a glance in
+// the Balances/Recent-expenses lists and the split-with picker, instead of
+// bare names. Color is a stable hash of the person's id/name, not random,
+// so the same person always gets the same badge across the screen.
+const AVATAR_STYLES = [
+  { bg: 'bg-sage-100 dark:bg-sage-900/40', text: 'text-sage-700 dark:text-sage-300' },
+  { bg: 'bg-tabby-sky dark:bg-tabby-700', text: 'text-tabby-900 dark:text-tabby-100' },
+  { bg: 'bg-tabby-100 dark:bg-tabby-700', text: 'text-tabby-700 dark:text-tabby-200' },
+  { bg: 'bg-rust-50 dark:bg-rust-900/40', text: 'text-rust-600 dark:text-rust-300' },
+];
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function Avatar({
+  name,
+  colorKey,
+  unknown = false,
+  size = 38,
+}: {
+  name: string;
+  colorKey: string;
+  unknown?: boolean;
+  size?: number;
+}) {
+  const style = unknown
+    ? { bg: 'bg-gray-200 dark:bg-white/10', text: 'text-gray-400 dark:text-tabby-400' }
+    : AVATAR_STYLES[hashString(colorKey) % AVATAR_STYLES.length];
+  const initial = unknown ? '?' : (name.trim().charAt(0).toUpperCase() || '?');
+  return (
+    <View
+      className={`rounded-full items-center justify-center ${style.bg}`}
+      style={{ width: size, height: size }}
+    >
+      <Text className={`font-nunito-extrabold ${style.text}`} style={{ fontSize: size * 0.37 }}>
+        {initial}
+      </Text>
+    </View>
+  );
+}
 
 function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   const { session } = useAuth();
@@ -469,22 +524,22 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                 onPress={() => setShowSettings((v) => !v)}
                 style={pressFeedback}
                 accessibilityRole="button"
-                accessibilityLabel="Flat settings"
+                accessibilityLabel={showSettings ? 'Close flat settings' : 'Flat settings'}
+                className="w-[34px] h-[34px] rounded-full bg-tabby-100 dark:bg-tabby-700 items-center justify-center"
               >
-                <Text className="font-nunito-semibold text-tabby-600 dark:text-white text-sm">
-                  {showSettings ? 'Close' : 'Settings'}
-                </Text>
+                <Feather name={showSettings ? 'x' : 'settings'} size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
               </Pressable>
             </View>
 
             <Pressable
               onPress={handleShareInvite}
               style={pressFeedback}
-              className="bg-gray-800 dark:bg-tabby-700 rounded-lg py-2.5 items-center"
+              className="bg-tabby-700 rounded-2xl py-3.5 flex-row items-center justify-center gap-2"
               accessibilityRole="button"
               accessibilityLabel="Share invite"
             >
-              <Text className="font-nunito-semibold text-white">Share Invite</Text>
+              <Feather name="share" size={16} color="#FFFFFF" />
+              <Text className="font-nunito-bold text-white">Share Invite</Text>
             </Pressable>
 
             {showSettings && (
@@ -622,114 +677,143 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             )}
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg dark:text-white">
-                {editingExpenseId ? 'Edit shared expense' : 'Add shared expense'}
-              </Text>
-
-              <View className="flex-row gap-2">
-                <TextInput
-                  value={quickAddText}
-                  onChangeText={setQuickAddText}
-                  placeholder='Try "rent 500, power 120"'
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 dark:text-white"
-                />
-                <Pressable
-                  onPress={handleQuickAdd}
-                  disabled={aiBusy}
-                  style={pressFeedback}
-                  className="bg-gray-800 dark:bg-tabby-700 rounded-lg px-4 items-center justify-center"
-                  accessibilityRole="button"
-                  accessibilityLabel="Add with AI"
-                >
-                  {aiBusy ? (
-                    <ActivityIndicator color="white" size="small" />
-                  ) : (
-                    <Text className="font-nunito-semibold text-white text-sm">Add with AI</Text>
-                  )}
-                </Pressable>
-              </View>
-
-              <View className="flex-row gap-2">
-                <TextInput
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="Amount"
-                  keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-1 dark:text-white"
-                />
-                <TextInput
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Description"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 flex-[2] dark:text-white"
-                />
-              </View>
-              <Text className="font-nunito-semibold text-sm dark:text-white">Split with</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {members.map((m) => {
-                  const selected = selectedMemberIds.includes(m.user_id);
-                  return (
+              <SectionLabel>{editingExpenseId ? 'EDIT SHARED EXPENSE' : 'ADD SHARED EXPENSE'}</SectionLabel>
+              <View className="bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl p-4 gap-3">
+                <View className="gap-1">
+                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                    Quick add
+                  </Text>
+                  <View className="flex-row gap-2">
+                    <TextInput
+                      value={quickAddText}
+                      onChangeText={setQuickAddText}
+                      placeholder='Try "rent 500, power 120"'
+                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 flex-1 dark:text-white"
+                    />
                     <Pressable
-                      key={m.user_id}
-                      onPress={() => toggleMember(m.user_id)}
+                      onPress={handleQuickAdd}
+                      disabled={aiBusy}
                       style={pressFeedback}
-                      className={`px-3 py-1.5 rounded-full border ${
-                        selected
-                          ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
-                          : 'border-gray-300 dark:border-tabby-600'
-                      }`}
+                      className="bg-tabby-900 dark:bg-tabby-700 rounded-xl px-4 flex-row items-center justify-center gap-1.5"
+                      accessibilityRole="button"
+                      accessibilityLabel="Add with AI"
                     >
-                      <Text
-                        className={`font-nunito-medium ${
-                          selected
-                            ? 'text-white dark:text-tabby-900 text-sm'
-                            : 'text-gray-700 dark:text-tabby-200 text-sm'
-                        }`}
-                      >
-                        {m.profiles?.display_name ?? 'Unknown'}
-                        {m.user_id === userId ? ' (you)' : ''}
-                      </Text>
+                      {aiBusy ? (
+                        <ActivityIndicator color="white" size="small" />
+                      ) : (
+                        <>
+                          <Feather name="zap" size={13} color="#F3E2CD" />
+                          <Text className="font-nunito-bold text-tabby-100 text-sm">AI</Text>
+                        </>
+                      )}
                     </Pressable>
-                  );
-                })}
-              </View>
-              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                Splits equally across {selectedMemberIds.length} selected member
-                {selectedMemberIds.length === 1 ? '' : 's'}.
-              </Text>
-              <View className="flex-row gap-2">
-                <Pressable
-                  onPress={handleAddExpense}
-                  disabled={submitting}
-                  style={pressFeedback}
-                  className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-2.5 items-center"
-                  accessibilityRole="button"
-                >
-                  {submitting ? (
-                    <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
-                  ) : (
-                    <Text className="font-nunito-semibold text-white dark:text-tabby-900">
-                      {editingExpenseId ? 'Save Changes' : 'Add Expense'}
+                  </View>
+                </View>
+
+                <View className="h-px bg-gray-200 dark:bg-tabby-700" />
+
+                <View className="flex-row gap-2">
+                  <View className="gap-1" style={{ width: 104 }}>
+                    <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                      Amount
                     </Text>
-                  )}
-                </Pressable>
-                {editingExpenseId && (
+                    <TextInput
+                      value={amount}
+                      onChangeText={setAmount}
+                      placeholder="$0.00"
+                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                      keyboardType="decimal-pad"
+                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
+                    />
+                  </View>
+                  <View className="gap-1 flex-1">
+                    <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                      Description
+                    </Text>
+                    <TextInput
+                      value={description}
+                      onChangeText={setDescription}
+                      placeholder="Groceries"
+                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
+                    />
+                  </View>
+                </View>
+
+                <View className="gap-1.5">
+                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                    Split with
+                  </Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    {members.map((m) => {
+                      const selected = selectedMemberIds.includes(m.user_id);
+                      const name = m.profiles?.display_name ?? 'Unknown';
+                      return (
+                        <Pressable
+                          key={m.user_id}
+                          onPress={() => toggleMember(m.user_id)}
+                          style={pressFeedback}
+                          className={`flex-row items-center gap-1.5 pl-1 pr-3 py-1 rounded-full border ${
+                            selected
+                              ? 'bg-tabby-900 dark:bg-white border-tabby-900 dark:border-white'
+                              : 'bg-white dark:bg-tabby-900 border-gray-200 dark:border-tabby-600'
+                          }`}
+                        >
+                          <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={26} />
+                          <Text
+                            className={`font-nunito-medium text-sm ${
+                              selected ? 'text-white dark:text-tabby-900' : 'text-gray-700 dark:text-tabby-200'
+                            }`}
+                          >
+                            {name}
+                            {m.user_id === userId ? ' (you)' : ''}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-[11px] px-0.5">
+                    Splits equally across {selectedMemberIds.length} selected member
+                    {selectedMemberIds.length === 1 ? '' : 's'}.
+                  </Text>
+                </View>
+
+                {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
+
+                <View className="flex-row gap-2">
                   <Pressable
-                    onPress={resetExpenseForm}
+                    onPress={handleAddExpense}
+                    disabled={submitting}
                     style={pressFeedback}
-                    className="px-4 py-2.5 items-center justify-center"
+                    className="flex-1 bg-tabby-600 dark:bg-white rounded-xl py-3 items-center"
                     accessibilityRole="button"
-                    accessibilityLabel="Cancel edit"
                   >
-                    <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
+                    {submitting ? (
+                      <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
+                    ) : (
+                      <Text className="font-nunito-bold text-white dark:text-tabby-900">
+                        {editingExpenseId ? 'Save Changes' : 'Add Expense'}
+                      </Text>
+                    )}
                   </Pressable>
-                )}
+                  {editingExpenseId && (
+                    <Pressable
+                      onPress={resetExpenseForm}
+                      style={pressFeedback}
+                      className="px-4 py-3 items-center justify-center"
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel edit"
+                    >
+                      <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
-              {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
             </View>
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg dark:text-white">Balances</Text>
+              <SectionLabel>BALANCES</SectionLabel>
               {balances.length === 0 && (
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300">
                   Invite flatmates to start splitting bills.
@@ -737,8 +821,9 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               )}
               {balances.map((b) => (
                 <Animated.View key={b.userId} entering={FadeIn.duration(200)}>
-                  <View className="flex-row items-center justify-between bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl px-4 py-3">
-                    <View>
+                  <View className="flex-row items-center gap-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl px-4 py-3">
+                    <Avatar name={b.displayName} colorKey={b.userId ?? 'deleted'} unknown={b.userId === null} />
+                    <View className="flex-1">
                       <Text className="font-nunito-semibold dark:text-white">{b.displayName}</Text>
                       <Text
                         className={`font-nunito text-sm ${
@@ -772,7 +857,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             </View>
 
             <View className="gap-2">
-              <Text className="font-fredoka-semibold text-lg dark:text-white">Recent shared expenses</Text>
+              <SectionLabel>RECENT SHARED EXPENSES</SectionLabel>
               {expenses.length === 0 && (
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300">No shared expenses yet.</Text>
               )}
@@ -786,12 +871,17 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                       style={pressFeedback}
                       accessibilityRole="button"
                       accessibilityLabel={canEdit ? `Edit shared expense ${e.description ?? ''}` : undefined}
-                      className={`flex-row items-center justify-between rounded-2xl px-4 py-3 ${
+                      className={`flex-row items-center gap-3 rounded-2xl px-4 py-3 ${
                         editingExpenseId === e.id
                           ? 'bg-tabby-50 dark:bg-tabby-800 border border-tabby-300 dark:border-tabby-600'
                           : 'bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700'
                       }`}
                     >
+                      <Avatar
+                        name={e.profiles?.display_name ?? 'Deleted User'}
+                        colorKey={e.paid_by ?? 'deleted'}
+                        unknown={!e.profiles?.display_name}
+                      />
                       <View className="flex-1">
                         <Text className="font-nunito-semibold dark:text-white">
                           {e.description || 'Shared expense'}
