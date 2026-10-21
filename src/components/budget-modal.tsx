@@ -37,6 +37,32 @@ import { fetchCategories } from '@/lib/transactions';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
+// Same deterministic per-category tint as category-budgets-modal.tsx's pie
+// (private there too, so duplicated rather than exported just for this) --
+// used for the mini segmented-bar preview below, so a category's color
+// matches what the full Category Budgets screen shows for it.
+const CATEGORY_PALETTE_LIGHT_BG = ['#D7E4CE', '#F3D9C2', '#D6DFF2', '#E9D9EC', '#CFEAE9', '#F0E3C2'];
+const CATEGORY_PALETTE_DARK_BG = ['#5B6B4F', '#B8794A', '#5E6E8C', '#8A6E93', '#4F8A8B', '#A68A4F'];
+function categoryTintIndex(categoryId: string, paletteLength: number): number {
+  let hash = 0;
+  for (let i = 0; i < categoryId.length; i++) hash = (hash * 31 + categoryId.charCodeAt(i)) >>> 0;
+  return hash % paletteLength;
+}
+function resolveCategoryColors(categoryIds: string[], isDark: boolean): Map<string, string> {
+  const palette = isDark ? CATEGORY_PALETTE_DARK_BG : CATEGORY_PALETTE_LIGHT_BG;
+  const used = new Set<number>();
+  const result = new Map<string, string>();
+  for (const id of categoryIds) {
+    let index = categoryTintIndex(id, palette.length);
+    for (let attempts = 0; used.has(index) && attempts < palette.length; attempts++) {
+      index = (index + 1) % palette.length;
+    }
+    used.add(index);
+    result.set(id, palette[index]);
+  }
+  return result;
+}
+
 // Gated on income already being set: a budget rides the same pay cycle
 // income defines (frequency + payday), so there's nothing to attach it to
 // otherwise. Rather than let the user set a budget with no cycle (which
@@ -245,89 +271,89 @@ export function BudgetModal({
                   OVERALL BUDGET
                 </Text>
                 <View className="bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl p-3.5 gap-3">
-                  {progress?.isDerivedFromCategories && (
-                    <View className="flex-row items-start gap-2">
-                      <Feather
-                        name="check-circle"
-                        size={15}
-                        color={isDark ? '#86BD63' : '#4C7535'}
-                        style={{ marginTop: 1 }}
-                      />
-                      <View className="flex-1 gap-2">
-                        <View className="gap-0.5">
-                          <Text className="font-nunito-bold text-sm text-sage-700 dark:text-sage-400">
-                            Using category budgets: ${progress.budgetAmount.toFixed(2)}
-                          </Text>
-                          <Text className="font-nunito text-xs text-sage-700 dark:text-sage-400">
-                            Home shows this total. The field below is saved but unused while any category has
-                            a cap.
+                  {progress?.isDerivedFromCategories ? (
+                    <>
+                      <View className="flex-row items-center justify-between gap-2">
+                        <View className="flex-row items-center gap-1.5 flex-1">
+                          <Feather name="lock" size={13} color={isDark ? '#6B4420' : '#9ca3af'} />
+                          <Text
+                            className="font-nunito text-xs text-gray-500 dark:text-tabby-300"
+                            numberOfLines={1}
+                          >
+                            Switched to category budgets
                           </Text>
                         </View>
                         <Pressable
                           onPress={handleUseOverallInstead}
                           disabled={busy}
                           style={pressFeedback}
-                          className="self-start bg-white/60 dark:bg-white/10 rounded-lg px-3 py-1.5"
                           accessibilityRole="button"
                         >
-                          <Text className="font-nunito-bold text-xs dark:text-white">
-                            Use overall budget instead
+                          <Text className="font-nunito-bold text-xs text-tabby-600 dark:text-tabby-200">
+                            Switch back
                           </Text>
                         </Pressable>
                       </View>
-                    </View>
-                  )}
+                      <TextInput
+                        value={amount}
+                        editable={false}
+                        aria-label="Overall budget amount, inactive while category budgets are set"
+                        className="font-nunito border border-gray-200 dark:border-tabby-700 rounded-lg px-3 py-2.5 bg-gray-100 dark:bg-tabby-900 text-gray-400 dark:text-tabby-500"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+                        How much of your income you intend to spend each pay cycle. Can be less than what you
+                        earn &mdash; the rest is just never counted as &ldquo;spent so far.&rdquo;
+                      </Text>
 
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                    How much of your income you intend to spend each pay cycle. Can be less than what you earn
-                    &mdash; the rest is just never counted as &ldquo;spent so far.&rdquo;
-                  </Text>
+                      <TextInput
+                        value={amount}
+                        onChangeText={setAmount}
+                        placeholder="Budget per pay"
+                        keyboardType="decimal-pad"
+                        aria-label="Budget per pay"
+                        className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
+                      />
 
-                  <TextInput
-                    value={amount}
-                    onChangeText={setAmount}
-                    placeholder="Budget per pay"
-                    keyboardType="decimal-pad"
-                    className={`font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white ${
-                      progress?.isDerivedFromCategories ? 'opacity-50' : ''
-                    }`}
-                  />
+                      {message && (
+                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{message}</Text>
+                      )}
 
-                  {message && (
-                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">{message}</Text>
-                  )}
-
-                  <View className="flex-row gap-2">
-                    <View className="flex-1">
-                      <Pressable
-                        onPress={handleSave}
-                        disabled={busy}
-                        style={pressFeedback}
-                        className="bg-tabby-600 dark:bg-white rounded-lg py-2.5 items-center"
-                        accessibilityRole="button"
-                      >
-                        {busy ? (
-                          <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
-                        ) : (
-                          <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">
-                            Save budget
-                          </Text>
+                      <View className="flex-row gap-2">
+                        <View className="flex-1">
+                          <Pressable
+                            onPress={handleSave}
+                            disabled={busy}
+                            style={pressFeedback}
+                            className="bg-tabby-600 dark:bg-white rounded-lg py-2.5 items-center"
+                            accessibilityRole="button"
+                          >
+                            {busy ? (
+                              <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
+                            ) : (
+                              <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-sm">
+                                Save budget
+                              </Text>
+                            )}
+                          </Pressable>
+                        </View>
+                        {amount !== '' && (
+                          <Pressable
+                            onPress={handleClear}
+                            disabled={busy}
+                            style={pressFeedback}
+                            className="px-4 py-2.5 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
+                            accessibilityRole="button"
+                            accessibilityLabel="Remove budget"
+                          >
+                            <Text className="font-nunito-semibold text-red-500 text-sm">Clear</Text>
+                          </Pressable>
                         )}
-                      </Pressable>
-                    </View>
-                    {amount !== '' && (
-                      <Pressable
-                        onPress={handleClear}
-                        disabled={busy}
-                        style={pressFeedback}
-                        className="px-4 py-2.5 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
-                        accessibilityRole="button"
-                        accessibilityLabel="Remove budget"
-                      >
-                        <Text className="font-nunito-semibold text-red-500 text-sm">Clear</Text>
-                      </Pressable>
-                    )}
-                  </View>
+                      </View>
+                    </>
+                  )}
                 </View>
               </View>
 
@@ -335,66 +361,74 @@ export function BudgetModal({
                 <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300 text-xs tracking-wide px-1">
                   BUDGET BY CATEGORY
                 </Text>
-                <Pressable
-                  onPress={() => setShowCategoryBudgets(true)}
-                  style={pressFeedback}
-                  className="flex-row items-center gap-3 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
-                  accessibilityRole="button"
-                  accessibilityLabel="Category budgets"
-                >
-                  <View className="w-10 h-10 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
-                    <Feather name="pie-chart" size={17} color={isDark ? '#E8C39E' : '#4b5563'} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="font-nunito-medium dark:text-white">Budget by category</Text>
-                    <Text
-                      className={`text-xs ${
-                        categoryProgress.length > 0
-                          ? 'font-nunito-medium text-sage-700 dark:text-sage-400'
-                          : 'font-nunito text-gray-500 dark:text-tabby-300'
-                      }`}
-                    >
-                      {categoryProgress.length > 0
-                        ? `$${categoryProgress.reduce((s, c) => s + c.budgetAmount, 0).toFixed(2)} across ${categoryProgress.length} categor${categoryProgress.length === 1 ? 'y' : 'ies'}`
-                        : 'Optional'}
-                    </Text>
-                  </View>
-                  <Feather name="chevron-right" size={18} color={isDark ? '#6B4420' : '#d1d5db'} />
-                </Pressable>
+                <View className="gap-3 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5">
+                  <Pressable
+                    onPress={() => setShowCategoryBudgets(true)}
+                    style={pressFeedback}
+                    className="flex-row items-center gap-3"
+                    accessibilityRole="button"
+                    accessibilityLabel="Category budgets"
+                  >
+                    <View className="w-10 h-10 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
+                      <Feather name="pie-chart" size={17} color={isDark ? '#E8C39E' : '#4b5563'} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-nunito-medium dark:text-white">Budget by category</Text>
+                      <Text
+                        className={`text-xs ${
+                          categoryProgress.length > 0
+                            ? 'font-nunito-medium text-sage-700 dark:text-sage-400'
+                            : 'font-nunito text-gray-500 dark:text-tabby-300'
+                        }`}
+                      >
+                        {categoryProgress.length > 0
+                          ? `$${categoryProgress.reduce((s, c) => s + c.budgetAmount, 0).toFixed(2)} across ${categoryProgress.length} categor${categoryProgress.length === 1 ? 'y' : 'ies'}`
+                          : 'Optional'}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={18} color={isDark ? '#6B4420' : '#d1d5db'} />
+                  </Pressable>
 
-                {categoryProgress.length > 0 && (
-                  <View className="gap-1 px-1">
-                    {categoryProgress.map((c) => {
-                      const catPct = c.budgetAmount > 0 ? Math.min(100, (c.spent / c.budgetAmount) * 100) : 0;
-                      const catOver = c.spent >= c.budgetAmount;
-                      return (
-                        <Pressable
-                          key={c.categoryId}
-                          onPress={() => setViewingCategory(c)}
-                          style={pressFeedback}
-                          accessibilityRole="button"
-                          accessibilityLabel={`See transactions for ${c.name}`}
-                          className="flex-row items-center justify-between py-1.5"
-                        >
-                          <Text className="font-nunito text-sm text-gray-600 dark:text-tabby-200">
-                            {c.name}
-                          </Text>
-                          <View className="flex-row items-center gap-2">
-                            <View className="w-20 h-1 bg-gray-100 dark:bg-tabby-700 rounded-full overflow-hidden">
-                              <View
-                                className={`h-full rounded-full ${catOver ? 'bg-rust-500 dark:bg-rust-400' : 'bg-sage-500 dark:bg-sage-400'}`}
-                                style={{ width: `${catPct}%` }}
-                              />
-                            </View>
-                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300 w-20 text-right">
-                              ${c.spent.toFixed(0)} / ${c.budgetAmount.toFixed(0)}
-                            </Text>
-                          </View>
-                        </Pressable>
+                  {categoryProgress.length > 0 &&
+                    (() => {
+                      const colorByCategoryId = resolveCategoryColors(
+                        categoryProgress.map((c) => c.categoryId),
+                        isDark,
                       );
-                    })}
-                  </View>
-                )}
+                      return (
+                        <>
+                          <View className="flex-row w-full h-2 rounded-full overflow-hidden">
+                            {categoryProgress.map((c) => (
+                              <View
+                                key={c.categoryId}
+                                style={{ flex: c.budgetAmount, backgroundColor: colorByCategoryId.get(c.categoryId) }}
+                              />
+                            ))}
+                          </View>
+                          <View className="flex-row flex-wrap gap-3">
+                            {categoryProgress.map((c) => (
+                              <Pressable
+                                key={c.categoryId}
+                                onPress={() => setViewingCategory(c)}
+                                style={pressFeedback}
+                                accessibilityRole="button"
+                                accessibilityLabel={`See transactions for ${c.name}`}
+                                className="flex-row items-center gap-1.5"
+                              >
+                                <View
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: colorByCategoryId.get(c.categoryId) }}
+                                />
+                                <Text className="font-nunito text-xs text-gray-600 dark:text-tabby-200">
+                                  {c.name}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </>
+                      );
+                    })()}
+                </View>
               </View>
             </ScrollView>
           )}
