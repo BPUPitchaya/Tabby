@@ -4,6 +4,8 @@
 // doesn't handle embedded newlines inside quoted fields), which is an
 // accepted limitation for typical bank CSV exports.
 
+import type { Transaction } from '@/lib/transactions';
+
 export function parseCSVRows(text: string): string[][] {
   const lines = text
     .replace(/\r\n/g, '\n')
@@ -104,4 +106,26 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
       return { amount, description, occurredAt, isIncome, categoryId: null };
     })
     .filter((t) => !isNaN(t.amount) && t.amount > 0);
+}
+
+function escapeCSVField(field: string): string {
+  return /[",\n]/.test(field) ? `"${field.replace(/"/g, '""')}"` : field;
+}
+
+// The export direction -- a user's own transaction history (full, no
+// filtering) as a CSV they can keep for their own records or hand to
+// whoever does their taxes. Plain feature columns only; the income-source
+// payslip breakdown (gross/tax/ACC/etc.) stays out of this, same as it
+// stays out of every other transaction list in the app.
+export function transactionsToCSV(transactions: Transaction[]): string {
+  const header = ['Date', 'Description', 'Merchant', 'Category', 'Type', 'Amount'];
+  const rows = transactions.map((tx) => [
+    tx.occurred_at,
+    tx.description ?? '',
+    tx.merchant ?? '',
+    tx.categories?.name ?? '',
+    tx.is_income ? 'Income' : 'Expense',
+    tx.amount.toFixed(2),
+  ]);
+  return [header, ...rows].map((row) => row.map(escapeCSVField).join(',')).join('\n');
 }

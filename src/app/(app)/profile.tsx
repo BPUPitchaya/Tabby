@@ -15,6 +15,7 @@ import { MoneyOwingModal } from '@/components/money-owing-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
+import { exportTransactionsCSV } from '@/lib/data-export';
 import { deleteAccount } from '@/lib/profile';
 
 // A row inside a joined list -- no border/radius of its own, a divider
@@ -91,7 +92,20 @@ export default function ProfileScreen() {
   const [showBudget, setShowBudget] = useState(false);
   const [showIncomeSources, setShowIncomeSources] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
   const isDark = useColorScheme() === 'dark';
+
+  const handleExportData = async () => {
+    if (!session?.user.id || exportingData) return;
+    setExportingData(true);
+    try {
+      await exportTransactionsCSV(session.user.id);
+    } catch (err) {
+      Alert.alert("Couldn't export", err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setExportingData(false);
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert('Sign out?', undefined, [
@@ -213,6 +227,12 @@ export default function ProfileScreen() {
               icon="user"
               label="Edit Profile"
               onPress={() => setShowEditProfile(true)}
+              isDark={isDark}
+            />
+            <ListRow
+              icon="download"
+              label={exportingData ? 'Exporting...' : 'Export Data'}
+              onPress={handleExportData}
               isDark={isDark}
             />
             <ListRow
