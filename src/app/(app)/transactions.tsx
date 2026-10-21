@@ -18,7 +18,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -297,6 +297,12 @@ export default function TransactionsScreen() {
   // sentence, AI extracts one or more expenses from it.
   const [quickAddText, setQuickAddText] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
+  // Separate from aiBusy (shared with the manual-form auto-categorize and
+  // CSV flows elsewhere) so this status line only ever shows for the
+  // composer's own calls (quick-add text, receipt/statement scan) -- the
+  // Gemini round trip here runs 3-10s+ with real variance, and a bare
+  // spinner reads as "stuck" past a couple seconds without a reason why.
+  const [composerThinking, setComposerThinking] = useState(false);
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -305,6 +311,12 @@ export default function TransactionsScreen() {
   const [showSplitModal, setShowSplitModal] = useState(false);
   const [splitDraft, setSplitDraft] = useState<ParsedBillSplit | null>(null);
   const [aiImporting, setAiImporting] = useState(false);
+  // Which preview row is expanded for editing, and whether that row's
+  // category picker is open -- only one row/picker open at a time, closed
+  // whenever the preview list itself is replaced or dismissed.
+  const [expandedAiIndex, setExpandedAiIndex] = useState<number | null>(null);
+  const [aiCategoryPickerOpen, setAiCategoryPickerOpen] = useState(false);
+  const [aiCategorySearch, setAiCategorySearch] = useState('');
 
   // Activity (date-grouped) vs By Category (totals grid) -- search overlays
   // either tab rather than being a third tab, since it's a transient
@@ -439,6 +451,7 @@ export default function TransactionsScreen() {
   const handleQuickAdd = async () => {
     if (!quickAddText.trim()) return;
     setAiBusy(true);
+    setComposerThinking(true);
     setError(null);
     try {
       // Cheap local pre-filter before spending a second AI call -- only
@@ -464,8 +477,12 @@ export default function TransactionsScreen() {
         return;
       }
       setAiPreview(parsed);
+      setExpandedAiIndex(null);
+      setAiCategoryPickerOpen(false);
+      setAiCategorySearch('');
     } finally {
       setAiBusy(false);
+      setComposerThinking(false);
     }
   };
 
@@ -515,6 +532,9 @@ export default function TransactionsScreen() {
       const next = prev.filter((_, i) => i !== index);
       return next.length > 0 ? next : null;
     });
+    setExpandedAiIndex((prev) => (prev === index ? null : prev && prev > index ? prev - 1 : prev));
+    setAiCategoryPickerOpen(false);
+    setAiCategorySearch('');
   };
 
   const handlePickCSV = async () => {
@@ -578,6 +598,7 @@ export default function TransactionsScreen() {
 
   const runScan = async (scanned: { base64Data: string; mimeType: string }) => {
     setAiBusy(true);
+    setComposerThinking(true);
     try {
       const parsed = await parseFinancialDocument(scanned.base64Data, scanned.mimeType, categories);
       if (!parsed) {
@@ -586,10 +607,14 @@ export default function TransactionsScreen() {
       }
       await recordScan(hashBase64(scanned.base64Data));
       setAiPreview(parsed);
+      setExpandedAiIndex(null);
+      setAiCategoryPickerOpen(false);
+      setAiCategorySearch('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to read that file.');
     } finally {
       setAiBusy(false);
+      setComposerThinking(false);
     }
   };
 
@@ -1090,6 +1115,19 @@ export default function TransactionsScreen() {
               />
             )}
 
+            {composerThinking && (
+              <Animated.View
+                entering={FadeIn.duration(150)}
+                exiting={FadeOut.duration(150)}
+                className="flex-row items-center gap-2 px-4 py-2 border-t border-gray-100 dark:border-tabby-700 bg-tabby-50 dark:bg-tabby-800"
+              >
+                <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                  Reading that -- usually just a few seconds
+                </Text>
+              </Animated.View>
+            )}
+
             {/* Chat-style composer, pinned to the bottom of the screen. */}
             <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
               <Pressable
@@ -1548,117 +1586,270 @@ export default function TransactionsScreen() {
                 keyExtractor={(_, i) => String(i)}
                 style={{ flex: 1 }}
                 contentContainerStyle={{ gap: 10 }}
-                renderItem={({ item, index }) => (
-                  <View className="gap-2 py-3 border-b border-gray-100 dark:border-tabby-700">
-                    <View className="flex-row items-center gap-2">
-                      <TextInput
-                        value={item.description}
-                        onChangeText={(text) => updateAiPreviewItem(index, { description: text })}
-                        placeholder="Description"
-                        className="font-nunito flex-1 border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
-                      />
-                      <View className="flex-row items-center border border-gray-300 dark:border-tabby-600 rounded-lg px-2">
-                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">$</Text>
-                        <TextInput
-                          value={String(item.amount)}
-                          onChangeText={(text) =>
-                            updateAiPreviewItem(index, { amount: parseFloat(text) || 0 })
-                          }
-                          keyboardType="decimal-pad"
-                          className="font-nunito w-16 py-2 text-sm text-right dark:text-white"
-                        />
-                      </View>
+                renderItem={({ item, index }) => {
+                  const isExpanded = expandedAiIndex === index;
+                  const matchedCategory = categories.find(
+                    (c) => c.name === item.categoryName && c.type === (item.isIncome ? 'income' : 'expense'),
+                  );
+                  const tint = categoryTint(matchedCategory?.id ?? null, isDark);
+                  const filteredCategories = categories.filter(
+                    (c) =>
+                      c.type === (item.isIncome ? 'income' : 'expense') &&
+                      c.name.toLowerCase().includes(aiCategorySearch.toLowerCase()),
+                  );
+
+                  return (
+                    <View className="gap-1.5">
+                      {/* Collapsed row -- same look as the Activity list's
+                          TransactionRow, so the preview reads like the
+                          transactions it's about to become. Tap to edit
+                          instead of every field sitting open at once. */}
                       <Pressable
-                        onPress={() => removeAiPreviewItem(index)}
+                        onPress={() => {
+                          setExpandedAiIndex(isExpanded ? null : index);
+                          setAiCategoryPickerOpen(false);
+                          setAiCategorySearch('');
+                        }}
                         style={pressFeedback}
                         accessibilityRole="button"
-                        accessibilityLabel={`Remove ${item.description}`}
+                        accessibilityLabel={`Edit ${item.description || 'transaction'}`}
+                        className="flex-row items-center justify-between rounded-2xl px-4 py-3 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700"
                       >
-                        <Feather name="x" size={16} color="#9ca3af" />
-                      </Pressable>
-                    </View>
-
-                    {/* The AI's expense/income guess, same as everything
-                        else in this preview -- wrong often enough (any
-                        "got paid", "refund", "sold my...") that it needs
-                        to be correctable, not just displayed. */}
-                    <View className="flex-row bg-gray-100 dark:bg-tabby-700 rounded-lg p-1 self-start">
-                      <Pressable
-                        onPress={() => updateAiPreviewItem(index, { isIncome: false, categoryName: null })}
-                        style={pressFeedback}
-                        className={`rounded-md px-3 py-1 ${!item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
-                      >
-                        <Text
-                          className={`font-nunito-semibold text-xs ${
-                            !item.isIncome
-                              ? 'text-gray-900 dark:text-white'
-                              : 'text-gray-500 dark:text-tabby-300'
-                          }`}
-                        >
-                          Expense
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => updateAiPreviewItem(index, { isIncome: true, categoryName: null })}
-                        style={pressFeedback}
-                        className={`rounded-md px-3 py-1 ${item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
-                      >
-                        <Text
-                          className={`font-nunito-semibold text-xs ${
-                            item.isIncome
-                              ? 'text-green-700 dark:text-green-400'
-                              : 'text-gray-500 dark:text-tabby-300'
-                          }`}
-                        >
-                          Income
-                        </Text>
-                      </Pressable>
-                    </View>
-
-                    <View className="flex-row flex-wrap gap-1.5">
-                      {categories
-                        .filter((c) => c.type === (item.isIncome ? 'income' : 'expense'))
-                        .map((cat) => (
-                          <Pressable
-                            key={cat.id}
-                            onPress={() =>
-                              updateAiPreviewItem(index, {
-                                categoryName: item.categoryName === cat.name ? null : cat.name,
-                              })
-                            }
-                            style={pressFeedback}
-                            className={`px-2.5 py-1 rounded-full border ${
-                              item.categoryName === cat.name
-                                ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
-                                : 'border-gray-300 dark:border-tabby-600'
-                            }`}
+                        <View className="flex-row items-center flex-1 gap-3">
+                          <View
+                            className="w-9 h-9 rounded-full items-center justify-center"
+                            style={{ backgroundColor: item.isIncome ? (isDark ? '#1F3B2A' : '#DCFCE7') : tint.bg }}
                           >
-                            <Text
-                              className={`font-nunito-medium text-xs ${
-                                item.categoryName === cat.name
-                                  ? 'text-white dark:text-tabby-900'
-                                  : 'text-gray-600 dark:text-tabby-200'
-                              }`}
-                            >
-                              {cat.name}
+                            <CategoryIcon
+                              name={matchedCategory?.icon}
+                              size={16}
+                              color={item.isIncome ? '#15803d' : tint.fg}
+                            />
+                          </View>
+                          <View className="flex-1">
+                            <Text className="font-nunito-semibold dark:text-white" numberOfLines={1}>
+                              {item.description || 'Transaction'}
                             </Text>
+                            <Text
+                              className="font-nunito text-gray-500 dark:text-tabby-300 text-sm"
+                              numberOfLines={1}
+                            >
+                              {item.categoryName ?? 'Uncategorized'}
+                              {item.merchant ? ` · ${item.merchant}` : ''}
+                              {item.occurredAt !== todayISO
+                                ? ` · ${new Date(`${item.occurredAt}T00:00:00`).toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                  })}`
+                                : ''}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text
+                          className={`font-nunito-bold mr-2 ${
+                            item.isIncome ? 'text-green-700 dark:text-green-400' : 'dark:text-white'
+                          }`}
+                        >
+                          {item.isIncome ? '+' : '-'}${item.amount.toFixed(2)}
+                        </Text>
+                        <Pressable
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            removeAiPreviewItem(index);
+                          }}
+                          style={pressFeedback}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${item.description}`}
+                          className="mr-1"
+                        >
+                          <Feather name="x" size={16} color="#9ca3af" />
+                        </Pressable>
+                        <Feather
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color={isDark ? '#E8C39E' : '#9ca3af'}
+                        />
+                      </Pressable>
+
+                      {isExpanded && (
+                        <View className="gap-2 px-4 py-3 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700">
+                          <View className="flex-row items-center gap-2">
+                            <TextInput
+                              value={item.description}
+                              onChangeText={(text) => updateAiPreviewItem(index, { description: text })}
+                              placeholder="Description"
+                              className="font-nunito flex-1 border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
+                            />
+                            <View className="flex-row items-center border border-gray-300 dark:border-tabby-600 rounded-lg px-2">
+                              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">$</Text>
+                              <TextInput
+                                value={String(item.amount)}
+                                onChangeText={(text) =>
+                                  updateAiPreviewItem(index, { amount: parseFloat(text) || 0 })
+                                }
+                                keyboardType="decimal-pad"
+                                className="font-nunito w-16 py-2 text-sm text-right dark:text-white"
+                              />
+                            </View>
+                          </View>
+
+                          {/* The AI's expense/income guess, same as
+                              everything else in this preview -- wrong often
+                              enough (any "got paid", "refund", "sold
+                              my...") that it needs to be correctable, not
+                              just displayed. */}
+                          <View className="flex-row bg-gray-100 dark:bg-tabby-700 rounded-lg p-1 self-start">
+                            <Pressable
+                              onPress={() => {
+                                updateAiPreviewItem(index, { isIncome: false, categoryName: null });
+                                setAiCategoryPickerOpen(false);
+                                setAiCategorySearch('');
+                              }}
+                              style={pressFeedback}
+                              className={`rounded-md px-3 py-1 ${!item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
+                            >
+                              <Text
+                                className={`font-nunito-semibold text-xs ${
+                                  !item.isIncome
+                                    ? 'text-gray-900 dark:text-white'
+                                    : 'text-gray-500 dark:text-tabby-300'
+                                }`}
+                              >
+                                Expense
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => {
+                                updateAiPreviewItem(index, { isIncome: true, categoryName: null });
+                                setAiCategoryPickerOpen(false);
+                                setAiCategorySearch('');
+                              }}
+                              style={pressFeedback}
+                              className={`rounded-md px-3 py-1 ${item.isIncome ? 'bg-white dark:bg-tabby-900' : ''}`}
+                            >
+                              <Text
+                                className={`font-nunito-semibold text-xs ${
+                                  item.isIncome
+                                    ? 'text-green-700 dark:text-green-400'
+                                    : 'text-gray-500 dark:text-tabby-300'
+                                }`}
+                              >
+                                Income
+                              </Text>
+                            </Pressable>
+                          </View>
+
+                          <Pressable
+                            onPress={() => setAiCategoryPickerOpen((open) => !open)}
+                            style={pressFeedback}
+                            accessibilityRole="button"
+                            accessibilityLabel="Category"
+                            className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5"
+                          >
+                            <View className="flex-row items-center gap-2">
+                              {matchedCategory && (
+                                <CategoryIcon
+                                  name={matchedCategory.icon}
+                                  size={14}
+                                  color={isDark ? '#E8C39E' : '#4b5563'}
+                                />
+                              )}
+                              <Text className="font-nunito text-gray-800 dark:text-white text-sm">
+                                {item.categoryName ?? 'Uncategorized'}
+                              </Text>
+                            </View>
+                            <Feather
+                              name="chevron-down"
+                              size={16}
+                              color={isDark ? '#E8C39E' : '#9ca3af'}
+                            />
                           </Pressable>
-                        ))}
+
+                          {aiCategoryPickerOpen && (
+                            <View className="border border-gray-300 dark:border-tabby-600 rounded-lg p-2 gap-2">
+                              <TextInput
+                                value={aiCategorySearch}
+                                onChangeText={setAiCategorySearch}
+                                placeholder="Search categories"
+                                autoFocus
+                                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2 text-sm dark:text-white"
+                              />
+                              <View className="gap-0.5">
+                                {filteredCategories.length === 0 && (
+                                  <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300 px-1 py-2">
+                                    No categories match.
+                                  </Text>
+                                )}
+                                {filteredCategories.map((cat) => (
+                                  <Pressable
+                                    key={cat.id}
+                                    onPress={() => {
+                                      updateAiPreviewItem(index, {
+                                        categoryName: item.categoryName === cat.name ? null : cat.name,
+                                      });
+                                      setAiCategoryPickerOpen(false);
+                                      setAiCategorySearch('');
+                                    }}
+                                    style={pressFeedback}
+                                    className="flex-row items-center gap-2.5 px-2 py-2 rounded-lg"
+                                  >
+                                    <CategoryIcon
+                                      name={cat.icon}
+                                      size={15}
+                                      color={
+                                        cat.name === item.categoryName
+                                          ? isDark
+                                            ? '#E8C39E'
+                                            : '#8B5A2B'
+                                          : isDark
+                                            ? '#E8C39E'
+                                            : '#4b5563'
+                                      }
+                                    />
+                                    <Text
+                                      className={`font-nunito-medium text-sm flex-1 ${
+                                        cat.name === item.categoryName
+                                          ? 'text-tabby-600 dark:text-tabby-100'
+                                          : 'text-gray-700 dark:text-tabby-200'
+                                      }`}
+                                    >
+                                      {cat.name}
+                                    </Text>
+                                    {cat.name === item.categoryName && (
+                                      <Feather name="check" size={16} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                                    )}
+                                  </Pressable>
+                                ))}
+                              </View>
+                              <Pressable
+                                onPress={() => {
+                                  setAiCategoryPickerOpen(false);
+                                  setAiCategorySearch('');
+                                }}
+                                style={pressFeedback}
+                                accessibilityRole="button"
+                                accessibilityLabel="Done"
+                                className="self-end px-3 py-1.5"
+                              >
+                                <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
+                              </Pressable>
+                            </View>
+                          )}
+
+                          <Pressable
+                            onPress={() => setExpandedAiIndex(null)}
+                            style={pressFeedback}
+                            accessibilityRole="button"
+                            accessibilityLabel="Done editing"
+                            className="self-end px-3 py-1.5"
+                          >
+                            <Text className="font-nunito-semibold text-tabby-600 dark:text-white">Done</Text>
+                          </Pressable>
+                        </View>
+                      )}
                     </View>
-                    {(item.merchant || item.occurredAt !== todayISO) && (
-                      <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                        {item.merchant ? `at ${item.merchant}` : ''}
-                        {item.merchant && item.occurredAt !== todayISO ? ' · ' : ''}
-                        {item.occurredAt !== todayISO
-                          ? new Date(`${item.occurredAt}T00:00:00`).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                            })
-                          : ''}
-                      </Text>
-                    )}
-                  </View>
-                )}
+                  );
+                }}
               />
 
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
@@ -1698,7 +1889,12 @@ export default function TransactionsScreen() {
                   )}
                 </Pressable>
                 <Pressable
-                  onPress={() => setAiPreview(null)}
+                  onPress={() => {
+                    setAiPreview(null);
+                    setExpandedAiIndex(null);
+                    setAiCategoryPickerOpen(false);
+                    setAiCategorySearch('');
+                  }}
                   disabled={aiImporting}
                   style={pressFeedback}
                   className="px-4 py-3 items-center justify-center"
