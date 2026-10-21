@@ -82,29 +82,35 @@ async function callGemini(input: GeminiInput, schema: Record<string, unknown>): 
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
     try {
-      // 40 calls/hour/user -- generous for normal use (a few receipt
-      // scans and quick-adds a day), but bounded so one runaway client
-      // can't burn through the shared GEMINI_API_KEY budget for everyone.
-      const { data: allowed, error: rateLimitError } = await ctx.supabaseAdmin.rpc(
-        "check_ai_proxy_rate_limit",
-        { p_user_id: ctx.userClaims!.id },
-      );
-      if (rateLimitError) throw rateLimitError;
-      if (!allowed) {
-        return Response.json(
-          { error: "Too many AI requests. Try again in a bit." },
-          { status: 429 },
-        );
-      }
-
       const { input, schema } = await req.json();
       const validInput = typeof input === "string" ? input.length > 0 : Array.isArray(input) && input.length > 0;
       if (!validInput || !schema) {
         return Response.json({ error: "Missing or invalid input/schema." }, { status: 400 });
       }
 
-      const result = await callGemini(input, schema);
-      return Response.json({ result });
+      // 40 calls/hour/user -- generous for normal use (a few receipt
+      // scans and quick-adds a day), but bounded so one runaway client
+      // can't burn through the shared GEMINI_API_KEY budget for everyone.
+      //
+      // Run this alongside the Gemini call rather than gating it first --
+      // the RPC almost always allows the request, so blocking on it
+      // serially cost every normal call a full extra network round trip
+      // for a check that rarely says no. Only on the rare "actually over
+      // the cap" case is the Gemini call's result wasted.
+      const [rateLimitResult, geminiResult] = await Promise.allSettled([
+        ctx.supabaseAdmin.rpc("check_ai_proxy_rate_limit", { p_user_id: ctx.userClaims!.id }),
+        callGemini(input, schema),
+      ]);
+
+      if (rateLimitResult.status === "rejected") throw rateLimitResult.reason;
+      const { data: allowed, error: rateLimitError } = rateLimitResult.value;
+      if (rateLimitError) throw rateLimitError;
+      if (!allowed) {
+        return Response.json({ error: "Too many AI requests. Try again in a bit." }, { status: 429 });
+      }
+
+      if (geminiResult.status === "rejected") throw geminiResult.reason;
+      return Response.json({ result: geminiResult.value });
     } catch (err) {
       // Log the real error server-side only -- it can carry internal detail
       // (Gemini response shape, RPC/Postgres errors) that shouldn't reach
