@@ -434,3 +434,47 @@ export async function generateMonthlySummary(params: {
     return null;
   }
 }
+
+// One short reason per category, explaining an already-computed budget
+// suggestion -- the dollar amount itself is plain arithmetic (see
+// computeCategorySpendAverages in category-budgets.ts) and never comes
+// from this call. Money math shouldn't depend on a model's output; AI's
+// only job here is turning the pattern into a sentence a person would
+// actually read.
+export async function suggestBudgetRationales(
+  averages: { categoryId: string; name: string; monthlyAverage: number; monthsWithSpend: number }[],
+): Promise<Record<string, string> | null> {
+  if (averages.length === 0) return null;
+
+  try {
+    const result = (await callGemini(
+      `Here's a person's average monthly spend per category, from their recent transaction history: ${averages
+        .map(
+          (a) =>
+            `"${a.name}" averaged $${a.monthlyAverage.toFixed(2)}/month (had spend in ${a.monthsWithSpend} of the last 3 months)`,
+        )
+        .join('; ')}. For each one, write a short (under 10 words) plain-language reason for suggesting that as their budget cap -- reference the actual pattern (steady, occasional, only 1 month of data, etc.) instead of generic filler like "based on your spending". Do not use a dash or hyphen anywhere in the sentence; use a comma or "and"/"but" instead.`,
+      {
+        type: 'object',
+        properties: {
+          rationales: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                categoryId: { type: 'string', enum: averages.map((a) => a.categoryId) },
+                rationale: { type: 'string' },
+              },
+              required: ['categoryId', 'rationale'],
+            },
+          },
+        },
+        required: ['rationales'],
+      },
+    )) as { rationales: { categoryId: string; rationale: string }[] };
+
+    return Object.fromEntries(result.rationales.map((r) => [r.categoryId, r.rationale]));
+  } catch {
+    return null;
+  }
+}
