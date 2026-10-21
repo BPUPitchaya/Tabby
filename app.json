@@ -52,7 +52,8 @@
           "project": "tabby",
           "organization": "pitchaya-projets"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

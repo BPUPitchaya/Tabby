@@ -1,7 +1,29 @@
 // Same scenario manually verified earlier during the CSV import feature
 // build -- see commit "Add CSV import for personal transactions".
 
-import { parseCSVRows, parseTransactionsFromCSV } from './csv';
+import { parseCSVRows, parseTransactionsFromCSV, transactionsToCSV } from './csv';
+import type { Transaction } from './transactions';
+
+function tx(partial: Partial<Transaction>): Transaction {
+  return {
+    id: 't1',
+    amount: 0,
+    description: null,
+    merchant: null,
+    occurred_at: '2026-10-05',
+    category_id: null,
+    is_income: false,
+    categories: null,
+    income_source_id: null,
+    gross_amount: null,
+    income_tax: null,
+    acc_levy: null,
+    student_loan: null,
+    kiwisaver_amount: null,
+    hours_paid: null,
+    ...partial,
+  };
+}
 
 describe('parseCSVRows', () => {
   it('splits plain comma-separated rows', () => {
@@ -81,5 +103,31 @@ describe('parseTransactionsFromCSV', () => {
   it('skips rows with an unparseable amount', () => {
     const result = parseTransactionsFromCSV('Date,Amount\n05/10/2026,not-a-number');
     expect(result).toEqual([]);
+  });
+});
+
+describe('transactionsToCSV', () => {
+  it('writes a header row and one row per transaction', () => {
+    const csv = transactionsToCSV([
+      tx({
+        occurred_at: '2026-10-05',
+        description: 'Coffee',
+        merchant: 'The Good One',
+        categories: { id: 'c1', name: 'Dining Out', icon: null, type: 'expense' },
+        is_income: false,
+        amount: 5.5,
+      }),
+    ]);
+    expect(csv).toBe('Date,Description,Merchant,Category,Type,Amount\n2026-10-05,Coffee,The Good One,Dining Out,Expense,5.50');
+  });
+
+  it('labels an income row and falls back to blank for missing fields', () => {
+    const csv = transactionsToCSV([tx({ occurred_at: '2026-10-01', is_income: true, amount: 2500 })]);
+    expect(csv).toBe('Date,Description,Merchant,Category,Type,Amount\n2026-10-01,,,,Income,2500.00');
+  });
+
+  it('quotes a field that contains a comma', () => {
+    const csv = transactionsToCSV([tx({ description: 'Pak n Save, Wellington', amount: 84.2 })]);
+    expect(csv).toContain('"Pak n Save, Wellington"');
   });
 });
