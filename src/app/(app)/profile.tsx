@@ -11,12 +11,14 @@ import { FriendsModal } from '@/components/friends-modal';
 import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { MoneyOwingModal } from '@/components/money-owing-modal';
+import { SavingsGoalsModal } from '@/components/savings-goals-modal';
 import { SettingsModal } from '@/components/settings-modal';
 import { TabbyMascot } from '@/components/tabby-mascot';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
 import { exportTransactionsCSV } from '@/lib/data-export';
 import { deleteAccount, fetchProfile, type AnimalKey } from '@/lib/profile';
+import { fetchGoalsWithProgress } from '@/lib/savings-goals';
 
 // A row inside a joined list -- no border/radius of its own, a divider
 // between rows instead, so the group reads as one list rather than a
@@ -33,6 +35,7 @@ function ListRow({
   isLast = false,
   isDark,
   muted = false,
+  badge,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
@@ -40,6 +43,7 @@ function ListRow({
   isLast?: boolean;
   isDark: boolean;
   muted?: boolean;
+  badge?: string;
 }) {
   return (
     <Pressable
@@ -57,6 +61,11 @@ function ListRow({
             <Feather name={icon} size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
           </View>
           <Text className="flex-1 font-nunito-semibold text-gray-800 dark:text-white">{label}</Text>
+          {badge && (
+            <View className="bg-sage-100 dark:bg-sage-900/50 rounded-full px-2.5 py-1 mr-1">
+              <Text className="font-nunito-bold text-[11px] text-sage-700 dark:text-sage-400">{badge}</Text>
+            </View>
+          )}
         </>
       )}
       <Feather
@@ -90,11 +99,13 @@ export default function ProfileScreen() {
   const [showMoneyOwing, setShowMoneyOwing] = useState(false);
   const [showBills, setShowBills] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
+  const [showSavingsGoals, setShowSavingsGoals] = useState(false);
   const [showIncomeSources, setShowIncomeSources] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exportingData, setExportingData] = useState(false);
   const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [activeGoalCount, setActiveGoalCount] = useState(0);
   const isDark = useColorScheme() === 'dark';
 
   const userId = session?.user.id;
@@ -105,6 +116,13 @@ export default function ProfileScreen() {
       setDisplayName(profile.display_name);
     });
   }, [userId, showEditProfile]);
+
+  useEffect(() => {
+    if (!userId) return;
+    fetchGoalsWithProgress(userId).then((goals) => {
+      setActiveGoalCount(goals.filter((g) => g.saved < g.targetAmount).length);
+    });
+  }, [userId, showSavingsGoals]);
 
   const handleExportData = async () => {
     if (!session?.user.id || exportingData) return;
@@ -206,6 +224,13 @@ export default function ProfileScreen() {
               isDark={isDark}
             />
             <ListRow icon="pie-chart" label="Budget" onPress={() => setShowBudget(true)} isDark={isDark} />
+            <ListRow
+              icon="target"
+              label="Savings Goals"
+              onPress={() => setShowSavingsGoals(true)}
+              isDark={isDark}
+              badge={activeGoalCount > 0 ? `${activeGoalCount} active` : undefined}
+            />
             <ListRow icon="calendar" label="Bills" onPress={() => setShowBills(true)} isDark={isDark} />
             <ListRow
               icon="dollar-sign"
@@ -350,6 +375,9 @@ export default function ProfileScreen() {
         }}
       />
       <IncomeSourcesModal visible={showIncomeSources} onClose={() => setShowIncomeSources(false)} />
+      {userId && (
+        <SavingsGoalsModal visible={showSavingsGoals} onClose={() => setShowSavingsGoals(false)} userId={userId} />
+      )}
     </SafeAreaView>
   );
 }
