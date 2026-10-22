@@ -360,6 +360,7 @@ export default function HomeScreen() {
   );
   const [incomeSourceBusyId, setIncomeSourceBusyId] = useState<string | null>(null);
   const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -374,6 +375,7 @@ export default function HomeScreen() {
         fetchProfile(userId),
       ]);
       setAvatarAnimal(profile.avatar_animal);
+      setDisplayName(profile.display_name);
       setTrendPreference(trendPref);
       const primary = getPrimaryIncomeSource(incomeSources);
       // getIncomeSourceCycle only needs frequency/payday, which the primary
@@ -649,7 +651,7 @@ export default function HomeScreen() {
             <View>
               <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">{greeting}</Text>
               <Text className="font-fredoka-semibold text-2xl dark:text-white">
-                {session?.user.email?.split('@')[0]}
+                {displayName ?? session?.user.email?.split('@')[0]}
               </Text>
             </View>
           </View>
