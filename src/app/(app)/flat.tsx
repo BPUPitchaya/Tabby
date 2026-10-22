@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { logFlatTabView } from '@/lib/analytics';
@@ -21,7 +21,7 @@ import { ChoresModal } from '@/components/chores-modal';
 import { FlatHelpModal } from '@/components/flat-help-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
-import { fetchChores, type Chore } from '@/lib/chores';
+import { fetchChores, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
 import {
   addMemberByEmail,
   addSharedExpense,
@@ -216,12 +216,14 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showChores, setShowChores] = useState(false);
+  const [showAddExpense, setShowAddExpense] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
 
   const isAdmin = members.find((m) => m.user_id === userId)?.role === 'admin';
+  const pendingChoreCount = chores.filter((c) => !isChoreDoneThisCycle(c)).length;
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -310,12 +312,23 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     setSelectedMemberIds(members.map((m) => m.user_id));
   };
 
+  const handleOpenAddExpense = () => {
+    resetExpenseForm();
+    setShowAddExpense(true);
+  };
+
+  const handleCloseAddExpense = () => {
+    resetExpenseForm();
+    setShowAddExpense(false);
+  };
+
   const handleStartEditExpense = async (e: SharedExpense) => {
     if (e.paid_by !== userId) return; // only the payer can edit/delete it
     setEditingExpenseId(e.id);
     setAmount(String(e.amount));
     setDescription(e.description ?? '');
     setError(null);
+    setShowAddExpense(true);
     try {
       const splitUserIds = await fetchExpenseSplitUserIds(e.id);
       setSelectedMemberIds(splitUserIds);
@@ -358,6 +371,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
         });
       }
       resetExpenseForm();
+      setShowAddExpense(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save shared expense.');
@@ -378,7 +392,10 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           onPress: async () => {
             try {
               await deleteSharedExpense(e.id);
-              if (editingExpenseId === e.id) resetExpenseForm();
+              if (editingExpenseId === e.id) {
+                resetExpenseForm();
+                setShowAddExpense(false);
+              }
               await load();
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to delete shared expense.');
@@ -550,64 +567,6 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               </View>
             </View>
 
-            {/* Admin status was previously only ever visible to the admin
-                themselves (isAdmin below gates their own controls) -- this
-                is the one place anyone in the flat can see who it is. */}
-            <View className="flex-row flex-wrap gap-2">
-              {members.map((m) => {
-                const name = m.profiles?.display_name ?? 'Unknown';
-                return (
-                  <View
-                    key={m.user_id}
-                    className="flex-row items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900"
-                  >
-                    <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={22} />
-                    <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
-                      {name}
-                      {m.user_id === userId ? ' (you)' : ''}
-                    </Text>
-                    {m.role === 'admin' && (
-                      <View className="px-1.5 py-0.5 rounded-full bg-tabby-100 dark:bg-tabby-700">
-                        <Text className="font-nunito-bold text-[10px] tracking-wide text-tabby-700 dark:text-tabby-100">
-                          ADMIN
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-
-            <Pressable
-              onPress={handleShareInvite}
-              style={pressFeedback}
-              className="bg-tabby-700 rounded-2xl py-3.5 flex-row items-center justify-center gap-2"
-              accessibilityRole="button"
-              accessibilityLabel="Share invite"
-            >
-              <Feather name="share" size={16} color="#FFFFFF" />
-              <Text className="font-nunito-bold text-white">Share Invite</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setShowChores(true)}
-              style={pressFeedback}
-              className="flex-row items-center gap-3 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
-              accessibilityRole="button"
-              accessibilityLabel="Chores"
-            >
-              <View className="w-10 h-10 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
-                <Feather name="check-square" size={17} color={isDark ? '#E8C39E' : '#4b5563'} />
-              </View>
-              <View className="flex-1">
-                <Text className="font-nunito-medium dark:text-white">Chores</Text>
-                <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                  {chores.length > 0 ? `${chores.length} chore${chores.length === 1 ? '' : 's'}` : 'Optional'}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={isDark ? '#6B4420' : '#d1d5db'} />
-            </Pressable>
-
             {showSettings && (
               <View className="bg-gray-50 dark:bg-tabby-800 rounded-xl p-4 gap-3">
                 <View className="gap-2">
@@ -694,13 +653,14 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
               </View>
             )}
 
+            {/* Flat Pulse: health score and members used to be two
+                unrelated pieces (a members-chip row, then a separate
+                health card further down) -- one hero now, since they're
+                both "how is this flat doing" at a glance. Admin badges
+                stay visible to everyone, same as before. */}
             {health && (
-              // A circular score badge paired with text, rather than a
-              // same-shape rounded box like every other card on this
-              // screen -- the Health Score is the one number flatmates
-              // actually check this screen for, so it gets its own shape.
               <View
-                className={`rounded-3xl p-5 flex-row items-center gap-4 ${
+                className={`rounded-3xl p-[18px] gap-3.5 ${
                   health.score >= 90
                     ? 'bg-green-50 dark:bg-green-950'
                     : health.score >= 70
@@ -710,172 +670,133 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                         : 'bg-red-50 dark:bg-red-950'
                 }`}
               >
-                <View
-                  className={`w-20 h-20 rounded-full items-center justify-center ${
-                    health.score >= 90
-                      ? 'bg-green-600'
-                      : health.score >= 70
-                        ? 'bg-tabby-600 dark:bg-white'
-                        : health.score >= 50
-                          ? 'bg-yellow-500'
-                          : 'bg-red-500'
-                  }`}
-                >
-                  <Text
-                    className={`font-nunito-extrabold text-2xl ${
-                      health.score >= 70 && health.score < 90
-                        ? 'text-white dark:text-tabby-900'
-                        : 'text-white'
+                <View className="flex-row items-center gap-3.5">
+                  <View
+                    className={`w-[68px] h-[68px] rounded-full items-center justify-center ${
+                      health.score >= 90
+                        ? 'bg-green-600'
+                        : health.score >= 70
+                          ? 'bg-tabby-600 dark:bg-white'
+                          : health.score >= 50
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
                     }`}
                   >
-                    {health.score}
-                  </Text>
+                    <Text
+                      className={`font-fredoka-semibold text-2xl ${
+                        health.score >= 70 && health.score < 90 ? 'text-white dark:text-tabby-900' : 'text-white'
+                      }`}
+                    >
+                      {health.score}
+                    </Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">Flat Health</Text>
+                    <Text className="font-fredoka-semibold text-lg dark:text-white">{health.label}</Text>
+                    <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-[11px] mt-0.5">
+                      ${health.totalOutstanding.toFixed(2)} unsettled of ${health.totalSpend.toFixed(2)} total
+                      shared spend
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">Flat Health</Text>
-                  <Text className="font-nunito-bold text-xl dark:text-white">{health.label}</Text>
-                  <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs mt-1">
-                    ${health.totalOutstanding.toFixed(2)} unsettled of ${health.totalSpend.toFixed(2)} total
-                    shared spend
-                  </Text>
+
+                <View className="h-px bg-black/5 dark:bg-white/10" />
+
+                <View className="flex-row items-center justify-between gap-2">
+                  <View className="flex-row flex-wrap flex-1 gap-1.5">
+                    {members.map((m) => {
+                      const name = m.profiles?.display_name ?? 'Unknown';
+                      return (
+                        <View
+                          key={m.user_id}
+                          className="flex-row items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900"
+                        >
+                          <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={22} />
+                          <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
+                            {name}
+                            {m.user_id === userId ? ' (you)' : ''}
+                          </Text>
+                          {m.role === 'admin' && (
+                            <View className="px-1.5 py-0.5 rounded-full bg-tabby-100 dark:bg-tabby-700">
+                              <Text className="font-nunito-bold text-[10px] tracking-wide text-tabby-700 dark:text-tabby-100">
+                                ADMIN
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <Pressable
+                    onPress={handleShareInvite}
+                    style={pressFeedback}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share invite"
+                    className="flex-row items-center gap-1.5 py-1"
+                  >
+                    <Feather name="share" size={13} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                    <Text className="font-nunito-bold text-sm text-tabby-700 dark:text-tabby-100">Invite</Text>
+                  </Pressable>
                 </View>
               </View>
             )}
 
-            <View className="gap-2">
-              <SectionLabel>{editingExpenseId ? 'EDIT SHARED EXPENSE' : 'ADD SHARED EXPENSE'}</SectionLabel>
-              <View className="bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 rounded-2xl p-4 gap-3">
-                <View className="gap-1">
-                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
-                    Quick add
-                  </Text>
-                  <View className="flex-row gap-2">
-                    <TextInput
-                      value={quickAddText}
-                      onChangeText={setQuickAddText}
-                      placeholder='Try "rent 500, power 120"'
-                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
-                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 flex-1 dark:text-white"
-                    />
-                    <Pressable
-                      onPress={handleQuickAdd}
-                      disabled={aiBusy}
-                      style={pressFeedback}
-                      className="bg-tabby-900 dark:bg-tabby-700 rounded-xl px-4 flex-row items-center justify-center gap-1.5"
-                      accessibilityRole="button"
-                      accessibilityLabel="Add with AI"
-                    >
-                      {aiBusy ? (
-                        <ActivityIndicator color="white" size="small" />
-                      ) : (
-                        <>
-                          <Feather name="zap" size={13} color="#F3E2CD" />
-                          <Text className="font-nunito-bold text-tabby-100 text-sm">AI</Text>
-                        </>
-                      )}
-                    </Pressable>
+            {/* The two pillars of flat living -- money fairness and chore
+                fairness -- as parallel tiles instead of money being a
+                giant always-open form and chores a visually unrelated
+                card. Tapping either opens its own focused screen. */}
+            <View className="flex-row gap-2.5">
+              <Pressable
+                onPress={handleOpenAddExpense}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Split an expense"
+                className="flex-1 gap-2 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="w-9 h-9 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
+                    <Feather name="dollar-sign" size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
                   </View>
+                  <Feather name="chevron-right" size={14} color={isDark ? '#6B4420' : '#d1d5db'} />
                 </View>
+                <Text className="font-nunito-medium text-sm dark:text-white">Split an Expense</Text>
+                <Text
+                  className={`font-nunito-bold text-xs ${
+                    health && health.totalOutstanding > 0
+                      ? 'text-rust-600 dark:text-rust-400'
+                      : 'text-sage-700 dark:text-sage-400'
+                  }`}
+                >
+                  {health && health.totalOutstanding > 0 ? `$${health.totalOutstanding.toFixed(2)} unsettled` : 'All settled'}
+                </Text>
+              </Pressable>
 
-                <View className="h-px bg-gray-200 dark:bg-tabby-700" />
-
-                <View className="flex-row gap-2">
-                  <View className="gap-1" style={{ width: 104 }}>
-                    <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
-                      Amount
-                    </Text>
-                    <TextInput
-                      value={amount}
-                      onChangeText={setAmount}
-                      placeholder="$0.00"
-                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
-                      keyboardType="decimal-pad"
-                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
-                    />
+              <Pressable
+                onPress={() => setShowChores(true)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Chores"
+                className="flex-1 gap-2 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="w-9 h-9 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
+                    <Feather name="check-square" size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
                   </View>
-                  <View className="gap-1 flex-1">
-                    <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
-                      Description
-                    </Text>
-                    <TextInput
-                      value={description}
-                      onChangeText={setDescription}
-                      placeholder="Groceries"
-                      placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
-                      className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
-                    />
-                  </View>
+                  <Feather name="chevron-right" size={14} color={isDark ? '#6B4420' : '#d1d5db'} />
                 </View>
-
-                <View className="gap-1.5">
-                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
-                    Split with
-                  </Text>
-                  <View className="flex-row flex-wrap gap-2">
-                    {members.map((m) => {
-                      const selected = selectedMemberIds.includes(m.user_id);
-                      const name = m.profiles?.display_name ?? 'Unknown';
-                      return (
-                        <Pressable
-                          key={m.user_id}
-                          onPress={() => toggleMember(m.user_id)}
-                          style={pressFeedback}
-                          className={`flex-row items-center gap-1.5 pl-1 pr-3 py-1 rounded-full border ${
-                            selected
-                              ? 'bg-tabby-900 dark:bg-white border-tabby-900 dark:border-white'
-                              : 'bg-white dark:bg-tabby-900 border-gray-200 dark:border-tabby-600'
-                          }`}
-                        >
-                          <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={26} />
-                          <Text
-                            className={`font-nunito-medium text-sm ${
-                              selected ? 'text-white dark:text-tabby-900' : 'text-gray-700 dark:text-tabby-200'
-                            }`}
-                          >
-                            {name}
-                            {m.user_id === userId ? ' (you)' : ''}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                  <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-[11px] px-0.5">
-                    Splits equally across {selectedMemberIds.length} selected member
-                    {selectedMemberIds.length === 1 ? '' : 's'}.
-                  </Text>
-                </View>
-
-                {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
-
-                <View className="flex-row gap-2">
-                  <Pressable
-                    onPress={handleAddExpense}
-                    disabled={submitting}
-                    style={pressFeedback}
-                    className="flex-1 bg-tabby-600 dark:bg-white rounded-xl py-3 items-center"
-                    accessibilityRole="button"
-                  >
-                    {submitting ? (
-                      <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
-                    ) : (
-                      <Text className="font-nunito-bold text-white dark:text-tabby-900">
-                        {editingExpenseId ? 'Save Changes' : 'Add Expense'}
-                      </Text>
-                    )}
-                  </Pressable>
-                  {editingExpenseId && (
-                    <Pressable
-                      onPress={resetExpenseForm}
-                      style={pressFeedback}
-                      className="px-4 py-3 items-center justify-center"
-                      accessibilityRole="button"
-                      accessibilityLabel="Cancel edit"
-                    >
-                      <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </View>
+                <Text className="font-nunito-medium text-sm dark:text-white">Chores</Text>
+                <Text
+                  className={`font-nunito-bold text-xs ${
+                    pendingChoreCount > 0 ? 'text-rust-600 dark:text-rust-400' : 'text-sage-700 dark:text-sage-400'
+                  }`}
+                >
+                  {chores.length === 0
+                    ? 'Optional'
+                    : pendingChoreCount > 0
+                      ? `${pendingChoreCount} pending`
+                      : 'All done'}
+                </Text>
+              </Pressable>
             </View>
 
             <View className="gap-2">
@@ -923,7 +844,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             </View>
 
             <View className="gap-2">
-              <SectionLabel>RECENT SHARED EXPENSES</SectionLabel>
+              <SectionLabel>RECENT ACTIVITY</SectionLabel>
               {expenses.length === 0 && (
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300">No shared expenses yet.</Text>
               )}
@@ -1033,6 +954,165 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Split an Expense -- the form that used to permanently occupy the
+          Overview (quick-add AI, manual fields, split-with picker) now
+          lives here, reached via the pillar tile, open on demand instead
+          of always rendered. Same handlers/state as before, just moved
+          into its own screen. */}
+      <Modal visible={showAddExpense} animationType="slide" onRequestClose={handleCloseAddExpense}>
+        <SafeAreaProvider>
+          <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
+            <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-tabby-700">
+              <Pressable
+                onPress={handleCloseAddExpense}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Back to flat overview"
+              >
+                <Feather name="chevron-left" size={20} color={isDark ? '#E8C39E' : '#374151'} />
+              </Pressable>
+              <Text className="font-fredoka-semibold text-lg dark:text-white">
+                {editingExpenseId ? 'Edit Shared Expense' : 'Split an Expense'}
+              </Text>
+              <View style={{ width: 20 }} />
+            </View>
+
+            <View className="p-4 gap-3">
+              <View className="gap-1">
+                <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                  Quick add
+                </Text>
+                <View className="flex-row gap-2">
+                  <TextInput
+                    value={quickAddText}
+                    onChangeText={setQuickAddText}
+                    placeholder='Try "rent 500, power 120"'
+                    placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                    className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 flex-1 dark:text-white"
+                  />
+                  <Pressable
+                    onPress={handleQuickAdd}
+                    disabled={aiBusy}
+                    style={pressFeedback}
+                    className="bg-tabby-900 dark:bg-tabby-700 rounded-xl px-4 flex-row items-center justify-center gap-1.5"
+                    accessibilityRole="button"
+                    accessibilityLabel="Add with AI"
+                  >
+                    {aiBusy ? (
+                      <ActivityIndicator color="white" size="small" />
+                    ) : (
+                      <>
+                        <Feather name="zap" size={13} color="#F3E2CD" />
+                        <Text className="font-nunito-bold text-tabby-100 text-sm">AI</Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+
+              <View className="h-px bg-gray-200 dark:bg-tabby-700" />
+
+              <View className="flex-row gap-2">
+                <View className="gap-1" style={{ width: 104 }}>
+                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                    Amount
+                  </Text>
+                  <TextInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    placeholder="$0.00"
+                    placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                    keyboardType="decimal-pad"
+                    className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
+                  />
+                </View>
+                <View className="gap-1 flex-1">
+                  <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                    Description
+                  </Text>
+                  <TextInput
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Groceries"
+                    placeholderTextColor={isDark ? '#8A7560' : '#B0B8C1'}
+                    className="font-nunito border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900 rounded-xl px-3.5 py-3 dark:text-white"
+                  />
+                </View>
+              </View>
+
+              <View className="gap-1.5">
+                <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 px-0.5">
+                  Split with
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {members.map((m) => {
+                    const selected = selectedMemberIds.includes(m.user_id);
+                    const name = m.profiles?.display_name ?? 'Unknown';
+                    return (
+                      <Pressable
+                        key={m.user_id}
+                        onPress={() => toggleMember(m.user_id)}
+                        style={pressFeedback}
+                        className={`flex-row items-center gap-1.5 pl-1 pr-3 py-1 rounded-full border ${
+                          selected
+                            ? 'bg-tabby-900 dark:bg-white border-tabby-900 dark:border-white'
+                            : 'bg-white dark:bg-tabby-900 border-gray-200 dark:border-tabby-600'
+                        }`}
+                      >
+                        <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={26} />
+                        <Text
+                          className={`font-nunito-medium text-sm ${
+                            selected ? 'text-white dark:text-tabby-900' : 'text-gray-700 dark:text-tabby-200'
+                          }`}
+                        >
+                          {name}
+                          {m.user_id === userId ? ' (you)' : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-[11px] px-0.5">
+                  Splits equally across {selectedMemberIds.length} selected member
+                  {selectedMemberIds.length === 1 ? '' : 's'}.
+                </Text>
+              </View>
+
+              {error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm">{error}</Text>}
+
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={handleAddExpense}
+                  disabled={submitting}
+                  style={pressFeedback}
+                  className="flex-1 bg-tabby-600 dark:bg-white rounded-xl py-3 items-center"
+                  accessibilityRole="button"
+                >
+                  {submitting ? (
+                    <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
+                  ) : (
+                    <Text className="font-nunito-bold text-white dark:text-tabby-900">
+                      {editingExpenseId ? 'Save Changes' : 'Add Expense'}
+                    </Text>
+                  )}
+                </Pressable>
+                {editingExpenseId && (
+                  <Pressable
+                    onPress={resetExpenseForm}
+                    style={pressFeedback}
+                    className="px-4 py-3 items-center justify-center"
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel edit"
+                  >
+                    <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
 
       <FlatHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
