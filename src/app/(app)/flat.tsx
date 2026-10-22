@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { logFlatTabView } from '@/lib/analytics';
+import { FlatHelpModal } from '@/components/flat-help-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -211,6 +212,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
   const [aiImporting, setAiImporting] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -520,15 +522,54 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
                   {members.length} member{members.length === 1 ? '' : 's'}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setShowSettings((v) => !v)}
-                style={pressFeedback}
-                accessibilityRole="button"
-                accessibilityLabel={showSettings ? 'Close flat settings' : 'Flat settings'}
-                className="w-[34px] h-[34px] rounded-full bg-tabby-100 dark:bg-tabby-700 items-center justify-center"
-              >
-                <Feather name={showSettings ? 'x' : 'settings'} size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
-              </Pressable>
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  onPress={() => setShowHelp(true)}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel="About this screen"
+                  className="w-[34px] h-[34px] rounded-full bg-tabby-100 dark:bg-tabby-700 items-center justify-center"
+                >
+                  <Text className="font-nunito-bold text-base text-gray-600 dark:text-tabby-200">?</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setShowSettings((v) => !v)}
+                  style={pressFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel={showSettings ? 'Close flat settings' : 'Flat settings'}
+                  className="w-[34px] h-[34px] rounded-full bg-tabby-100 dark:bg-tabby-700 items-center justify-center"
+                >
+                  <Feather name={showSettings ? 'x' : 'settings'} size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Admin status was previously only ever visible to the admin
+                themselves (isAdmin below gates their own controls) -- this
+                is the one place anyone in the flat can see who it is. */}
+            <View className="flex-row flex-wrap gap-2">
+              {members.map((m) => {
+                const name = m.profiles?.display_name ?? 'Unknown';
+                return (
+                  <View
+                    key={m.user_id}
+                    className="flex-row items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full border border-gray-200 dark:border-tabby-600 bg-white dark:bg-tabby-900"
+                  >
+                    <Avatar name={name} colorKey={m.user_id} unknown={!m.profiles?.display_name} size={22} />
+                    <Text className="font-nunito-medium text-sm text-gray-700 dark:text-tabby-200">
+                      {name}
+                      {m.user_id === userId ? ' (you)' : ''}
+                    </Text>
+                    {m.role === 'admin' && (
+                      <View className="px-1.5 py-0.5 rounded-full bg-tabby-100 dark:bg-tabby-700">
+                        <Text className="font-nunito-bold text-[10px] tracking-wide text-tabby-700 dark:text-tabby-100">
+                          ADMIN
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
 
             <Pressable
@@ -968,6 +1009,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           </View>
         </View>
       </Modal>
+
+      <FlatHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
     </SafeAreaView>
   );
 }
