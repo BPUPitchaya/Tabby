@@ -361,6 +361,7 @@ export default function HomeScreen() {
   const [incomeSourceBusyId, setIncomeSourceBusyId] = useState<string | null>(null);
   const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [mascotCardIndex, setMascotCardIndex] = useState(0);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -627,6 +628,33 @@ export default function HomeScreen() {
       : null;
   const periodLabel = periodFrequency ? PERIOD_NOUNS[periodFrequency] : 'month';
 
+  // What tapping Tabby cycles through -- every line here is plain text
+  // built from numbers already loaded on this screen, no AI call per tap
+  // (the one AI-written line, `insight`, is generated once per visit and
+  // just takes its turn in the rotation). Filtered to whatever actually
+  // has data, so a brand-new account still gets a real line instead of a
+  // dead tap.
+  const overspendPrediction = incomeProgress ? getOverspendPrediction(incomeProgress) : null;
+  const topCategory = data?.categoryTotals[0] ?? null;
+  const mascotCards = [
+    insight,
+    pct !== null && incomeProgress
+      ? pct >= 100
+        ? `You're $${(incomeProgress.spent - incomeProgress.budgetAmount).toFixed(2)} over your $${incomeProgress.budgetAmount.toFixed(2)} budget this cycle.`
+        : `You've used ${pct}% of your $${incomeProgress.budgetAmount.toFixed(2)} budget this cycle.`
+      : null,
+    topCategory && topCategory.total > 0
+      ? `${topCategory.name} is your biggest spend this ${periodLabel} so far, at $${topCategory.total.toFixed(2)}.`
+      : null,
+    overspendPrediction
+      ? `At this pace, you're projected to spend $${overspendPrediction.projectedTotal.toFixed(2)} by cycle end, $${overspendPrediction.overBy.toFixed(2)} over budget.`
+      : null,
+  ].filter((card): card is string => card !== null);
+  const mascotCard =
+    mascotCards.length > 0
+      ? mascotCards[mascotCardIndex % mascotCards.length]
+      : 'No spending logged yet. Add a transaction and I’ll start tracking how you’re trending.';
+
   return (
     <SafeAreaView className="flex-1 bg-tabby-50 dark:bg-tabby-900">
       <ScrollView
@@ -707,7 +735,12 @@ export default function HomeScreen() {
             {(data?.periodNet ?? 0) < 0 ? '-' : '+'}${Math.abs(data?.periodNet ?? 0).toFixed(2)}
           </Text>
           <View className="mt-2">
-            <TabbyMascot animal={avatarAnimal} mood={moodFromPct(pct)} insight={insight} />
+            <TabbyMascot
+              animal={avatarAnimal}
+              mood={moodFromPct(pct)}
+              insight={mascotCard}
+              onTap={() => setMascotCardIndex((i) => (i + 1) % Math.max(mascotCards.length, 1))}
+            />
           </View>
         </View>
 

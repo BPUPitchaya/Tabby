@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -311,15 +311,22 @@ export function TabbyMascot({
   insight,
   size = 96,
   showLabel = true,
+  onTap,
 }: {
   animal: AnimalKey;
   mood: MascotMood;
   insight: string | null;
   size?: number;
   showLabel?: boolean;
+  // Called on every tap, before this render's `insight` is shown -- lets
+  // the caller advance to a different line for the NEXT tap (see Home's
+  // mascotCardIndex) without this component needing to know anything
+  // about where the text comes from.
+  onTap?: () => void;
 }) {
   const style = MOOD_STYLES[mood];
   const [showBubble, setShowBubble] = useState(false);
+  const bubbleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const breathe = useSharedValue(1);
   const tapScale = useSharedValue(1);
@@ -344,10 +351,10 @@ export function TabbyMascot({
   }, [breathe, blink]);
 
   useEffect(() => {
-    if (!showBubble) return;
-    const timer = setTimeout(() => setShowBubble(false), 4200);
-    return () => clearTimeout(timer);
-  }, [showBubble]);
+    return () => {
+      if (bubbleTimer.current) clearTimeout(bubbleTimer.current);
+    };
+  }, []);
 
   const wrapStyle = useAnimatedStyle(() => ({
     transform: [{ scale: breathe.value * tapScale.value }],
@@ -361,7 +368,14 @@ export function TabbyMascot({
       withTiming(1.1, { duration: 160 }),
       withTiming(1, { duration: 150 })
     );
-    if (insight) setShowBubble((v) => !v);
+    onTap?.();
+    if (insight) {
+      // Always (re)show with a fresh timer, rather than toggling -- a
+      // repeat tap should show a new line, not close the bubble.
+      setShowBubble(true);
+      if (bubbleTimer.current) clearTimeout(bubbleTimer.current);
+      bubbleTimer.current = setTimeout(() => setShowBubble(false), 4200);
+    }
   };
 
   return (
