@@ -590,3 +590,28 @@ export async function classifyFinancialQuestion(
     return null;
   }
 }
+
+// First of a planned set of EDIT commands ("change my budget to $500") --
+// unlike every other AI function in this file, a wrong answer here isn't
+// just unhelpful, it's a wrong value actually saved. So this only ever
+// extracts the new number; the caller (transactions.tsx) always shows an
+// old-value -> new-value confirmation and writes nothing until the user
+// taps Confirm. Scoped to the overall budget amount only for now.
+export async function parseBudgetEditCommand(text: string): Promise<{ amount: number } | null> {
+  if (!text.trim()) return null;
+
+  try {
+    const result = (await callGemini(
+      `The user typed this to their personal finance app: "${text}". They\u2019re asking to change their overall budget to a specific new dollar amount. Extract that new amount. If this text isn\u2019t actually asking to set a budget to a specific number -- no number given, or it\u2019s asking something else entirely -- return -1.`,
+      {
+        type: 'object',
+        properties: { amount: { type: 'number' } },
+        required: ['amount'],
+      },
+    )) as { amount: number };
+
+    return result.amount > 0 ? { amount: result.amount } : null;
+  } catch {
+    return null;
+  }
+}
