@@ -94,12 +94,16 @@ export default function ProfileScreen() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exportingData, setExportingData] = useState(false);
   const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const isDark = useColorScheme() === 'dark';
 
   const userId = session?.user.id;
   useEffect(() => {
     if (!userId) return;
-    fetchProfile(userId).then((profile) => setAvatarAnimal(profile.avatar_animal));
+    fetchProfile(userId).then((profile) => {
+      setAvatarAnimal(profile.avatar_animal);
+      setDisplayName(profile.display_name);
+    });
   }, [userId, showEditProfile]);
 
   const handleExportData = async () => {
@@ -182,7 +186,7 @@ export default function ProfileScreen() {
           </View>
           <View className="flex-1">
             <Text className="font-fredoka-semibold text-xl dark:text-white">
-              {session?.user.email?.split('@')[0]}
+              {displayName ?? session?.user.email?.split('@')[0]}
             </Text>
             <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
               {session?.user.email}
