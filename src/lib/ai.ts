@@ -358,6 +358,56 @@ export async function parsePaidHours(text: string): Promise<number | null> {
   }
 }
 
+export type ParsedSpendingQuery = {
+  categoryId: string | null;
+  keyword: string | null;
+  startDate: string | null; // YYYY-MM-DD
+  endDate: string | null; // YYYY-MM-DD
+};
+
+// Turns a typed question ("how much did I spend on coffee last month")
+// into the same {category, keyword, date range} shape the Transactions
+// search already filters by -- the AI's only job is figuring out INTENT,
+// never the dollar total itself. The actual sum still comes from a plain
+// reduce over the already-fetched transactions once these filters are
+// applied (transactions.tsx), same "computed math, not AI math" rule as
+// the budget suggestions.
+export async function parseSpendingQuery(
+  query: string,
+  categories: { id: string; name: string }[],
+): Promise<ParsedSpendingQuery | null> {
+  if (!query.trim()) return null;
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = (await callGemini(
+      `Today's date is ${today}. A user is searching their own transaction history and typed: "${query}". Figure out three things. 1) and 2) are EITHER a keyword OR a category, never both -- pick whichever actually matches what was asked, since combining them wrongly either hides a real match (if the specific thing named isn't literally in that transaction's text) or, worse, reports a dollar figure for something that was never actually confirmed (if a category's real transactions turn out not to be what was asked about at all -- better to honestly find nothing than to misreport an unrelated charge as an answer). If a specific item, food, brand, or merchant is named (e.g. "coffee", "Uber", "Pak'nSave"), that is almost always the right read -- return it as keyword and leave categoryName as "None", even if it loosely suggests a category, UNLESS the named thing is the category's own name or a very close synonym of it (e.g. "groceries" naming the "Groceries" category itself), in which case return that category instead and leave keyword "None". If the query only names a general category with nothing more specific (e.g. "how much on dining out"), return that category and leave keyword "None". categoryName must be one of this exact list, or "None": ${categories.map((c) => c.name).join(', ')}. 3) A date range implied by the query, resolved relative to today's date above: "last month" means the previous whole calendar month, "this month" means the 1st of this month through today, "this week"/"last 7 days" means the 7 days up to and including today, "in September" means that whole month, a specific day means just that day. Give startDate and endDate as YYYY-MM-DD, or both "None" if no date range is implied at all -- never assume a range just because none was mentioned.`,
+      {
+        type: 'object',
+        properties: {
+          categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+          keyword: { type: 'string' },
+          startDate: { type: 'string', description: 'YYYY-MM-DD or "None"' },
+          endDate: { type: 'string', description: 'YYYY-MM-DD or "None"' },
+        },
+        required: ['categoryName', 'keyword', 'startDate', 'endDate'],
+      },
+    )) as { categoryName: string; keyword: string; startDate: string; endDate: string };
+
+    return {
+      categoryId:
+        result.categoryName && result.categoryName !== 'None'
+          ? categories.find((c) => c.name === result.categoryName)?.id ?? null
+          : null,
+      keyword: result.keyword === 'None' || !result.keyword.trim() ? null : result.keyword,
+      startDate: result.startDate === 'None' ? null : result.startDate,
+      endDate: result.endDate === 'None' ? null : result.endDate,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type ParsedPayslip = {
   grossPay: number | null;
   netPay: number | null;
@@ -474,6 +524,68 @@ export async function suggestBudgetRationales(
     )) as { rationales: { categoryId: string; rationale: string }[] };
 
     return Object.fromEntries(result.rationales.map((r) => [r.categoryId, r.rationale]));
+  } catch {
+    return null;
+  }
+}
+
+export type FinancialQuestionTopic = 'spending' | 'budget' | 'bills' | 'flat' | 'income' | 'none';
+
+export type ClassifiedFinancialQuestion = {
+  topic: FinancialQuestionTopic;
+  categoryId: string | null;
+  keyword: string | null;
+  startDate: string | null; // YYYY-MM-DD
+  endDate: string | null; // YYYY-MM-DD
+};
+
+// Broader sibling of parseSpendingQuery, for the quick-add composer's
+// "chat about your finances" questions -- covers budget/bills/flat/income
+// topics too, not just transaction search. Still only ever classifies
+// INTENT; transactions.tsx computes every actual figure from real data for
+// whichever topic comes back, same "computed math, not AI math" rule as
+// everywhere else in this file. Kept separate from parseSpendingQuery
+// (rather than widening it) so the already-verified search feature's
+// behavior can't regress by touching this.
+export async function classifyFinancialQuestion(
+  query: string,
+  categories: { id: string; name: string }[],
+): Promise<ClassifiedFinancialQuestion | null> {
+  if (!query.trim()) return null;
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = (await callGemini(
+      `Today's date is ${today}. A user typed this question about their own personal finances: "${query}". First, classify which ONE of these it's actually asking about: "spending" (how much was spent or earned on something, or in some time period -- e.g. "how much on coffee last month", "how much did I earn in September"); "budget" (whether they're over/under/within their set budget, or how much of it is left -- e.g. "am I over budget", "how much budget do I have left"); "bills" (a recurring bill's due date or amount -- e.g. "when is rent due", "how much is my power bill", "what bills do I have coming up"); "flat" (money owed between flatmates -- e.g. "how much do I owe", "who owes me money", "am I all settled up"); "income" (their pay rate, hours, or next payday -- e.g. "when do I get paid next", "how much do I get paid"); or "none" if it's not actually a question about any of these. Then, if the topic is "spending": figure out a category (from this exact list: ${categories.map((c) => c.name).join(', ')}, else "None") OR a keyword (a specific item/merchant mentioned, else "None") -- never both at once for the same thing, since combining them can wrongly hide or misattribute a real match -- and a date range (startDate/endDate as YYYY-MM-DD, resolved relative to today, e.g. "last month" is the previous whole calendar month; both "None" if no range is implied). If the topic is "bills" and a specific bill is named (e.g. "rent", "power", "internet"), give that name as keyword, else "None" -- categoryName/startDate/endDate stay "None" for this topic. For every other topic (budget, flat, income, none), categoryName/keyword/startDate/endDate are always "None".`,
+      {
+        type: 'object',
+        properties: {
+          topic: { type: 'string', enum: ['spending', 'budget', 'bills', 'flat', 'income', 'none'] },
+          categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+          keyword: { type: 'string' },
+          startDate: { type: 'string', description: 'YYYY-MM-DD or "None"' },
+          endDate: { type: 'string', description: 'YYYY-MM-DD or "None"' },
+        },
+        required: ['topic', 'categoryName', 'keyword', 'startDate', 'endDate'],
+      },
+    )) as {
+      topic: FinancialQuestionTopic;
+      categoryName: string;
+      keyword: string;
+      startDate: string;
+      endDate: string;
+    };
+
+    return {
+      topic: result.topic,
+      categoryId:
+        result.categoryName && result.categoryName !== 'None'
+          ? categories.find((c) => c.name === result.categoryName)?.id ?? null
+          : null,
+      keyword: result.keyword === 'None' || !result.keyword.trim() ? null : result.keyword,
+      startDate: result.startDate === 'None' ? null : result.startDate,
+      endDate: result.endDate === 'None' ? null : result.endDate,
+    };
   } catch {
     return null;
   }

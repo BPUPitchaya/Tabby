@@ -24,10 +24,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   categorizeTransaction,
   categorizeTransactionsBatch,
+  classifyFinancialQuestion,
   parseBillSplit,
   parseFinancialDocument,
   parseNaturalLanguageExpenses,
+  parseSpendingQuery,
   suggestCategoryIcon,
+  type ClassifiedFinancialQuestion,
   type ParsedBillSplit,
   type ParsedExpense,
 } from '@/lib/ai';
@@ -35,8 +38,16 @@ import { CategoryIcon, CUSTOM_CATEGORY_ICONS, guessCategoryIcon } from '@/compon
 import { IncomeTransactionDetailModal } from '@/components/income-transaction-detail-modal';
 import { TransactionDetailModal } from '@/components/transaction-detail-modal';
 import { useAuth } from '@/lib/auth-context';
+import { fetchBills, formatDueLabel, getRelevantBillDate } from '@/lib/bills';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
+import { computeBalances, fetchMyFlat } from '@/lib/flats';
+import {
+  fetchIncomeSources,
+  getIncomeSourceProgress,
+  getNextIncomeSourcePaydayDate,
+  getPrimaryIncomeSource,
+} from '@/lib/income-sources';
 import { hashBase64, recordScan, wasRecentlyScanned } from '@/lib/receipt-dedup';
 import { SplitBillModal } from '@/components/split-bill-modal';
 import {
@@ -76,11 +87,142 @@ const SEGMENT_SHADOW = {
 // call instead of asking Gemini to classify every message up front.
 const SPLIT_HINT = /\bsplit\b|\beach\b|\bowes?\b|\bbetween\b|\bdivide/i;
 
+// Same cheap-local-pre-filter idea, for whether a quick-add message is
+// actually a QUESTION about personal finances -- spending, budget, bills,
+// flat balances, or income -- rather than a transaction to log. Checked
+// first, before the split-hint -- a question should never get mistaken
+// for either a split or a plain expense statement.
+const FINANCIAL_QUESTION_HINT =
+  /^(how (much|many)|what did|did (i|we)|when (did|do|is)|am i|is my|are we|who owes|do i owe|does .* owe)\b|\?\s*$/i;
+
 // Local calendar date, not UTC -- Date#toISOString() converts to UTC first,
 // which can shift the date by a day in timezones behind/ahead of it (same
 // footgun the toISODate helper in lib/profile.ts exists to avoid).
 function toLocalISODate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Shared by the search screen's filters and the quick-add composer's
+// spending-question answers -- both narrow the same transaction list by
+// the same {category, keyword, date range} shape (lib/ai.ts's
+// ParsedSpendingQuery), so the matching logic lives in one place.
+function filterTransactionsByQuery(
+  txs: Transaction[],
+  query: { categoryId: string | null; keyword: string | null; startDate: string | null; endDate: string | null },
+): Transaction[] {
+  const needle = query.keyword?.trim().toLowerCase() ?? '';
+  return txs.filter((tx) => {
+    if (query.categoryId && tx.category_id !== query.categoryId) return false;
+    if (query.startDate && tx.occurred_at < query.startDate) return false;
+    if (query.endDate && tx.occurred_at > query.endDate) return false;
+    if (!needle) return true;
+    const haystack = `${tx.description ?? ''} ${tx.merchant ?? ''} ${tx.categories?.name ?? ''}`.toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+// One answer builder per financial topic classifyFinancialQuestion can
+// return -- each pulls whatever real data that topic needs and computes
+// a single plain-language fact from it. Never an AI-invented figure: the
+// AI's only job was picking the topic (and, for spending, the filter);
+// every number here comes straight from the database.
+async function buildFinancialAnswer(
+  classified: ClassifiedFinancialQuestion,
+  userId: string,
+  txs: Transaction[],
+  categories: Category[],
+): Promise<string> {
+  switch (classified.topic) {
+    case 'spending': {
+      const matches = filterTransactionsByQuery(txs, classified);
+      const expenseTotal = matches.filter((tx) => !tx.is_income).reduce((sum, tx) => sum + tx.amount, 0);
+      const incomeTotal = matches.filter((tx) => tx.is_income).reduce((sum, tx) => sum + tx.amount, 0);
+      const parts: string[] = [];
+      if (expenseTotal > 0) parts.push(`spent $${expenseTotal.toFixed(2)}`);
+      if (incomeTotal > 0) parts.push(`earned $${incomeTotal.toFixed(2)}`);
+      const scope = [
+        classified.categoryId ? categories.find((c) => c.id === classified.categoryId)?.name : null,
+        classified.keyword ? `"${classified.keyword}"` : null,
+        classified.startDate && classified.endDate ? `${classified.startDate} to ${classified.endDate}` : null,
+      ]
+        .filter(Boolean)
+        .join(' \u00b7 ');
+      return parts.length === 0
+        ? `No matching transactions found${scope ? ` (${scope})` : ''}.`
+        : `You ${parts.join(' and ')}, across ${matches.length} transaction${matches.length === 1 ? '' : 's'}${scope ? ` (${scope})` : ''}.`;
+    }
+
+    case 'budget': {
+      const progress = await getIncomeSourceProgress(userId);
+      if (!progress) return "You haven't set a budget yet \u00b7 add one from Profile > Budget.";
+      const pct = progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : 0;
+      const over = progress.spent > progress.budgetAmount;
+      return over
+        ? `You're $${(progress.spent - progress.budgetAmount).toFixed(2)} over your $${progress.budgetAmount.toFixed(2)} budget this cycle (spent $${progress.spent.toFixed(2)}).`
+        : `You've spent $${progress.spent.toFixed(2)} of your $${progress.budgetAmount.toFixed(2)} budget this cycle (${pct}% used, $${(progress.budgetAmount - progress.spent).toFixed(2)} left).`;
+    }
+
+    case 'bills': {
+      const bills = await fetchBills(userId);
+      if (bills.length === 0) return "You don't have any bills set up yet \u00b7 add one from Profile > Bills.";
+      const needle = classified.keyword?.trim().toLowerCase() ?? '';
+      const relevant = bills
+        .filter((b) => !needle || b.name.toLowerCase().includes(needle))
+        .map((b) => ({ bill: b, date: getRelevantBillDate(b) }))
+        .filter((r): r is { bill: (typeof bills)[number]; date: string } => r.date !== null)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 3);
+      if (relevant.length === 0) {
+        return needle ? `No bill matching "${classified.keyword}" found.` : 'No upcoming bills.';
+      }
+      return (
+        relevant
+          .map(({ bill, date }) => `${bill.name}: ${formatDueLabel(date)}${bill.amount ? ` ($${bill.amount.toFixed(2)})` : ''}`)
+          .join('; ') + '.'
+      );
+    }
+
+    case 'flat': {
+      const flat = await fetchMyFlat(userId);
+      if (!flat) return "You're not part of a flat yet.";
+      const balances = await computeBalances(flat.id, userId);
+      const owedToYou = balances.filter((b) => b.netAmount > 0);
+      const youOwe = balances.filter((b) => b.netAmount < 0);
+      if (owedToYou.length === 0 && youOwe.length === 0) return "You're all settled up with your flat.";
+      const parts: string[] = [];
+      parts.push(
+        owedToYou.length > 0
+          ? owedToYou.map((b) => `${b.displayName} owes you $${b.netAmount.toFixed(2)}`).join(', ')
+          : 'Nobody owes you anything',
+      );
+      parts.push(
+        youOwe.length > 0
+          ? youOwe.map((b) => `you owe ${b.displayName} $${Math.abs(b.netAmount).toFixed(2)}`).join(', ')
+          : "you don't owe anyone",
+      );
+      return `${parts.join('; but ')}.`;
+    }
+
+    case 'income': {
+      const sources = await fetchIncomeSources(userId);
+      const primary = getPrimaryIncomeSource(sources);
+      if (!primary) return "You haven't set up an income source yet \u00b7 add one from Profile > Income Sources.";
+      const nextPayday = getNextIncomeSourcePaydayDate(primary);
+      const rate =
+        primary.mode === 'fixed'
+          ? primary.amount !== null
+            ? `$${primary.amount.toFixed(2)} per pay`
+            : null
+          : primary.hourlyRate !== null
+            ? `$${primary.hourlyRate.toFixed(2)}/hr`
+            : null;
+      return `Your next payday is ${nextPayday ?? 'not set'}${rate ? ` (${rate})` : ''}.`;
+    }
+
+    case 'none':
+    default:
+      return "Couldn't match that to spending, budget, bills, flat, or income \u00b7 try rephrasing.";
+  }
 }
 
 // Deterministic per-category icon tint, hashed from the category id so the
@@ -303,6 +445,11 @@ export default function TransactionsScreen() {
   // Gemini round trip here runs 3-10s+ with real variance, and a bare
   // spinner reads as "stuck" past a couple seconds without a reason why.
   const [composerThinking, setComposerThinking] = useState(false);
+  // A plain-language answer to a spending question typed into the
+  // composer ("how much did I spend on coffee last month") -- shown in
+  // the same slot composerThinking occupies while busy, cleared the next
+  // time the composer is used for anything else.
+  const [aiAnswer, setAiAnswer] = useState<string | null>(null);
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -326,6 +473,12 @@ export default function TransactionsScreen() {
   const [searchText, setSearchText] = useState('');
   const [searchCategoryId, setSearchCategoryId] = useState<string | null>(null);
   const [searchRange, setSearchRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  // Set only by a submitted AI question whose answer implies a specific
+  // window ("last month", "in September") -- overrides the preset pills
+  // above, which only ever express an open-ended "since X" range. Cleared
+  // by picking a preset manually, so the two controls never fight.
+  const [aiDateRange, setAiDateRange] = useState<{ start: string; end: string } | null>(null);
+  const [askingAI, setAskingAI] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -453,7 +606,33 @@ export default function TransactionsScreen() {
     setAiBusy(true);
     setComposerThinking(true);
     setError(null);
+    setAiAnswer(null);
     try {
+      // A question about personal finances ("how much did I spend on
+      // coffee last month", "am I over budget", "when is rent due", "who
+      // owes me money", "when do I get paid next") isn't a transaction to
+      // log -- answer it directly instead of running it through the
+      // expense extractor, which would correctly find nothing to add and
+      // show a misleading "AI unavailable" message for what's actually a
+      // successful AI call.
+      if (FINANCIAL_QUESTION_HINT.test(quickAddText.trim())) {
+        const classified = await classifyFinancialQuestion(quickAddText, categories);
+        if (!classified) {
+          setError("Couldn't understand that question. Try rephrasing, or use the search icon above.");
+          return;
+        }
+        if (classified.topic !== 'none') {
+          if (!userId) return;
+          const answer = await buildFinancialAnswer(classified, userId, transactions, categories);
+          setAiAnswer(answer);
+          setQuickAddText('');
+          return;
+        }
+        // Classified as not actually one of the known topics -- fall
+        // through below and try parsing it as an ordinary expense instead,
+        // in case the hint just caught an oddly-phrased statement.
+      }
+
       // Cheap local pre-filter before spending a second AI call -- only
       // texts that plausibly describe a group split (keyword hit + any
       // number, not necessarily a "$") go through parseBillSplit at all,
@@ -777,29 +956,61 @@ export default function TransactionsScreen() {
 
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
-    const needle = searchText.trim().toLowerCase();
-    const rangeStart =
-      searchRange === 'today'
+    const rangeStart = aiDateRange
+      ? aiDateRange.start
+      : searchRange === 'today'
         ? todayISO
         : searchRange === 'week'
           ? toLocalISODate(new Date(Date.now() - 6 * 86_400_000))
           : searchRange === 'month'
             ? toLocalISODate(new Date(Date.now() - 29 * 86_400_000))
             : null;
+    const rangeEnd = aiDateRange ? aiDateRange.end : null;
 
-    return transactions.filter((tx) => {
-      if (searchCategoryId && tx.category_id !== searchCategoryId) return false;
-      if (rangeStart && tx.occurred_at < rangeStart) return false;
-      if (!needle) return true;
-      const haystack =
-        `${tx.description ?? ''} ${tx.merchant ?? ''} ${tx.categories?.name ?? ''}`.toLowerCase();
-      return haystack.includes(needle);
+    return filterTransactionsByQuery(transactions, {
+      categoryId: searchCategoryId,
+      keyword: searchText.trim() || null,
+      startDate: rangeStart,
+      endDate: rangeEnd,
     });
-  }, [transactions, searchActive, searchText, searchCategoryId, searchRange]);
+  }, [transactions, searchActive, searchText, searchCategoryId, searchRange, aiDateRange]);
+
+  // Expense/income totals for whatever's currently filtered -- answers
+  // "how much did I spend on X" directly instead of making the user add
+  // up a results list by hand. Plain sums over already-filtered rows,
+  // never an AI-generated figure.
+  const searchExpenseTotal = useMemo(
+    () => searchResults.filter((tx) => !tx.is_income).reduce((sum, tx) => sum + tx.amount, 0),
+    [searchResults],
+  );
+  const searchIncomeTotal = useMemo(
+    () => searchResults.filter((tx) => tx.is_income).reduce((sum, tx) => sum + tx.amount, 0),
+    [searchResults],
+  );
+
+  const handleAskAI = async () => {
+    const query = searchText.trim();
+    if (!query || askingAI) return;
+    setAskingAI(true);
+    try {
+      const parsed = await parseSpendingQuery(query, categories);
+      if (!parsed) return; // fall back to the plain substring search already running
+      setSearchCategoryId(parsed.categoryId);
+      setSearchText(parsed.keyword ?? '');
+      if (parsed.startDate && parsed.endDate) {
+        setAiDateRange({ start: parsed.startDate, end: parsed.endDate });
+      } else {
+        setAiDateRange(null);
+      }
+    } finally {
+      setAskingAI(false);
+    }
+  };
 
   const openSearch = (categoryId: string | null) => {
     setSearchCategoryId(categoryId);
     setSearchText('');
+    setAiDateRange(null);
     setSearchRange('all');
     setSearchActive(true);
   };
@@ -850,10 +1061,13 @@ export default function TransactionsScreen() {
                 <TextInput
                   value={searchText}
                   onChangeText={setSearchText}
-                  placeholder="Search transactions"
+                  onSubmitEditing={handleAskAI}
+                  returnKeyType="search"
+                  placeholder="Search, or ask a question"
                   autoFocus
                   className="font-nunito flex-1 text-sm dark:text-white"
                 />
+                {askingAI && <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />}
               </View>
               <Pressable
                 onPress={() => setSearchActive(false)}
@@ -927,17 +1141,20 @@ export default function TransactionsScreen() {
                 ).map(([value, label]) => (
                   <Pressable
                     key={value}
-                    onPress={() => setSearchRange(value)}
+                    onPress={() => {
+                      setSearchRange(value);
+                      setAiDateRange(null);
+                    }}
                     style={pressFeedback}
                     className={`px-3 py-1.5 rounded-full border ${
-                      searchRange === value
+                      !aiDateRange && searchRange === value
                         ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
                         : 'border-gray-300 dark:border-tabby-600'
                     }`}
                   >
                     <Text
                       className={`font-nunito-medium text-sm ${
-                        searchRange === value
+                        !aiDateRange && searchRange === value
                           ? 'text-white dark:text-tabby-900'
                           : 'text-gray-600 dark:text-tabby-200'
                       }`}
@@ -946,12 +1163,29 @@ export default function TransactionsScreen() {
                     </Text>
                   </Pressable>
                 ))}
+                {aiDateRange && (
+                  <View className="px-3 py-1.5 rounded-full bg-tabby-600 dark:bg-white flex-row items-center gap-1.5">
+                    <Feather name="zap" size={11} color={isDark ? '#2B1810' : 'white'} />
+                    <Text className="font-nunito-medium text-sm text-white dark:text-tabby-900">
+                      {aiDateRange.start} to {aiDateRange.end}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs px-4 pb-2">
-              {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
-            </Text>
+            <View className="px-4 pb-2 gap-0.5">
+              <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
+                {searchResults.length} result{searchResults.length === 1 ? '' : 's'}
+              </Text>
+              {(searchExpenseTotal > 0 || searchIncomeTotal > 0) && (
+                <Text className="font-nunito-semibold text-sm text-gray-700 dark:text-tabby-100">
+                  {searchExpenseTotal > 0 && `Spent $${searchExpenseTotal.toFixed(2)}`}
+                  {searchExpenseTotal > 0 && searchIncomeTotal > 0 && ' · '}
+                  {searchIncomeTotal > 0 && `Earned $${searchIncomeTotal.toFixed(2)}`}
+                </Text>
+              )}
+            </View>
 
             <FlatList
               data={searchResults}
@@ -1128,6 +1362,22 @@ export default function TransactionsScreen() {
               </Animated.View>
             )}
 
+            {!composerThinking && aiAnswer && (
+              <Animated.View
+                entering={FadeIn.duration(150)}
+                exiting={FadeOut.duration(150)}
+                className="flex-row items-start gap-2 px-4 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-sage-50 dark:bg-sage-900/40"
+              >
+                <Feather
+                  name="message-circle"
+                  size={14}
+                  color={isDark ? '#86BD63' : '#4C7535'}
+                  style={{ marginTop: 1 }}
+                />
+                <Text className="font-nunito text-xs text-sage-800 dark:text-sage-300 flex-1">{aiAnswer}</Text>
+              </Animated.View>
+            )}
+
             {/* Chat-style composer, pinned to the bottom of the screen. */}
             <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
               <Pressable
@@ -1142,8 +1392,11 @@ export default function TransactionsScreen() {
               </Pressable>
               <TextInput
                 value={quickAddText}
-                onChangeText={setQuickAddText}
-                placeholder='Try "coffee $8.50, lunch $12.50"'
+                onChangeText={(text) => {
+                  setQuickAddText(text);
+                  if (aiAnswer) setAiAnswer(null);
+                }}
+                placeholder='Try "coffee $8.50" or "how much on coffee last month?"'
                 multiline
                 className="font-nunito flex-1 bg-gray-100 dark:bg-tabby-700 rounded-2xl px-4 py-2.5 max-h-28 text-base dark:text-white"
               />
