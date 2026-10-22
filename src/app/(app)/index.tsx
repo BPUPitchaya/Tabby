@@ -32,7 +32,7 @@ import { BudgetModal } from '@/components/budget-modal';
 import { CategoryIcon } from '@/components/category-icon';
 import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { NotificationsModal } from '@/components/notifications-modal';
-import { moodFromPct, TabbyBear } from '@/components/tabby-bear';
+import { moodFromPct, TabbyMascot } from '@/components/tabby-mascot';
 import { useAuth } from '@/lib/auth-context';
 import {
   cancelBillFollowUp,
@@ -79,7 +79,13 @@ import {
   type IncomeSourceProgress,
 } from '@/lib/income-sources';
 import { loadTrendPeriodPreference, type TrendPeriodPreference } from '@/lib/trend-period-preference';
-import { fetchMyPaymentDetails, getOverspendPrediction, type IncomeFrequency } from '@/lib/profile';
+import {
+  fetchMyPaymentDetails,
+  fetchProfile,
+  getOverspendPrediction,
+  type AnimalKey,
+  type IncomeFrequency,
+} from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : undefined);
 
@@ -353,6 +359,7 @@ export default function HomeScreen() {
     [],
   );
   const [incomeSourceBusyId, setIncomeSourceBusyId] = useState<string | null>(null);
+  const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -360,11 +367,13 @@ export default function HomeScreen() {
       setError(null);
       setInsight(null);
 
-      const [periodPreference, trendPref, incomeSources] = await Promise.all([
+      const [periodPreference, trendPref, incomeSources, profile] = await Promise.all([
         loadDashboardPeriodPreference(),
         loadTrendPeriodPreference(),
         fetchIncomeSources(userId),
+        fetchProfile(userId),
       ]);
+      setAvatarAnimal(profile.avatar_animal);
       setTrendPreference(trendPref);
       const primary = getPrimaryIncomeSource(incomeSources);
       // getIncomeSourceCycle only needs frequency/payday, which the primary
@@ -696,7 +705,7 @@ export default function HomeScreen() {
             {(data?.periodNet ?? 0) < 0 ? '-' : '+'}${Math.abs(data?.periodNet ?? 0).toFixed(2)}
           </Text>
           <View className="mt-2">
-            <TabbyBear mood={moodFromPct(pct)} insight={insight} />
+            <TabbyMascot animal={avatarAnimal} mood={moodFromPct(pct)} insight={insight} />
           </View>
         </View>
 

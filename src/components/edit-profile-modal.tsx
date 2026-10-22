@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -13,14 +12,18 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { ANIMAL_VARIANTS, MascotFace, TabbyMascot } from '@/components/tabby-mascot';
 import { useAuth } from '@/lib/auth-context';
 import {
+  ANIMAL_KEYS,
   fetchMyPaymentDetails,
   fetchProfile,
+  updateAvatarAnimal,
   updateDisplayName,
   updateEmail,
   updatePassword,
   updatePaymentDetails,
+  type AnimalKey,
 } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -112,6 +115,9 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
 
+  const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
   useEffect(() => {
     if (!visible || !userId) return;
     setLoading(true);
@@ -119,11 +125,27 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
       .then(([profile, payment]) => {
         setName(profile.display_name);
         setSavedName(profile.display_name);
+        setAvatarAnimal(profile.avatar_animal);
         setPaymentDetails(payment ?? '');
         setSavedPaymentDetails(payment ?? '');
       })
       .finally(() => setLoading(false));
   }, [visible, userId]);
+
+  const handlePickAnimal = async (animal: AnimalKey) => {
+    if (!userId || animal === avatarAnimal || avatarBusy) return;
+    setAvatarBusy(true);
+    try {
+      await updateAvatarAnimal(userId, animal);
+      setAvatarAnimal(animal);
+    } catch {
+      // Silent -- picking an avatar is low-stakes, and the grid staying on
+      // the old selection already shows the tap didn't take, no banner
+      // needed for something this minor.
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
 
   const handleClose = () => {
     setNewEmail('');
@@ -234,16 +256,45 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                     form dropped on top of it. */}
                 <View className="flex-row items-center gap-3.5 px-1">
                   <View
-                    className="w-14 h-14 rounded-full items-center justify-center"
+                    className="w-14 h-14 rounded-full items-center justify-center overflow-hidden"
                     style={{ backgroundColor: '#BEE3F8' }}
                   >
-                    <Image source={require('@/assets/images/splash-icon.png')} style={{ width: 38, height: 38 }} />
+                    <TabbyMascot animal={avatarAnimal} mood="good" insight={null} size={38} showLabel={false} />
                   </View>
                   <View className="flex-1">
                     <Text className="font-fredoka-semibold text-lg dark:text-white">{savedName}</Text>
                     <Text className="font-nunito text-gray-400 dark:text-tabby-400 text-xs">
                       {session?.user.email}
                     </Text>
+                  </View>
+                </View>
+
+                {/* AVATAR: tap an animal to switch immediately -- no
+                    separate Save button, since there's nothing to type or
+                    get wrong, just a choice. */}
+                <View className="gap-2">
+                  <SectionLabel>AVATAR</SectionLabel>
+                  <View className="flex-row flex-wrap gap-2.5 px-1">
+                    {ANIMAL_KEYS.map((key) => {
+                      const selected = key === avatarAnimal;
+                      return (
+                        <Pressable
+                          key={key}
+                          onPress={() => handlePickAnimal(key)}
+                          disabled={avatarBusy}
+                          style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Use ${ANIMAL_VARIANTS[key].label} as your avatar`}
+                          className={`w-14 h-14 rounded-full items-center justify-center overflow-hidden border-2 ${
+                            selected ? 'border-tabby-600 dark:border-white' : 'border-transparent'
+                          }`}
+                        >
+                          <View className="w-full h-full items-center justify-center" style={{ backgroundColor: '#BEE3F8' }}>
+                            <MascotFace animal={key} mood="good" size={34} />
+                          </View>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
 
