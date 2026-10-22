@@ -2,15 +2,47 @@ import { supabase } from '@/lib/supabase';
 
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'monthly';
 
+// Which animal mascot represents this user -- shown on the Profile header
+// and the Home hero box (see tabby-mascot.tsx). Kept here, not in the
+// component file, so the lib layer owns the data shape and the UI
+// component imports it, not the other way around.
+export type AnimalKey =
+  | 'bear'
+  | 'cat'
+  | 'dog'
+  | 'fox'
+  | 'rabbit'
+  | 'panda'
+  | 'koala'
+  | 'tiger'
+  | 'raccoon'
+  | 'hamster'
+  | 'otter';
+
+export const ANIMAL_KEYS: AnimalKey[] = [
+  'bear',
+  'cat',
+  'dog',
+  'fox',
+  'rabbit',
+  'panda',
+  'koala',
+  'tiger',
+  'raccoon',
+  'hamster',
+  'otter',
+];
+
 export type Profile = {
   id: string;
   display_name: string;
+  avatar_animal: AnimalKey;
 };
 
 export async function fetchProfile(userId: string): Promise<Profile> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name')
+    .select('id, display_name, avatar_animal')
     .eq('id', userId)
     .single();
 
@@ -20,6 +52,11 @@ export async function fetchProfile(userId: string): Promise<Profile> {
 
 export async function updateDisplayName(userId: string, displayName: string) {
   const { error } = await supabase.from('profiles').update({ display_name: displayName }).eq('id', userId);
+  if (error) throw error;
+}
+
+export async function updateAvatarAnimal(userId: string, animal: AnimalKey) {
+  const { error } = await supabase.from('profiles').update({ avatar_animal: animal }).eq('id', userId);
   if (error) throw error;
 }
 

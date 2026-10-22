@@ -1,6 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,10 +12,11 @@ import { IncomeSourcesModal } from '@/components/income-sources-modal';
 import { LegalModal } from '@/components/legal-modal';
 import { MoneyOwingModal } from '@/components/money-owing-modal';
 import { SettingsModal } from '@/components/settings-modal';
+import { TabbyMascot } from '@/components/tabby-mascot';
 import { PRIVACY_POLICY, TERMS_OF_SERVICE, type LegalDoc } from '@/constants/legal';
 import { useAuth } from '@/lib/auth-context';
 import { exportTransactionsCSV } from '@/lib/data-export';
-import { deleteAccount } from '@/lib/profile';
+import { deleteAccount, fetchProfile, type AnimalKey } from '@/lib/profile';
 
 // A row inside a joined list -- no border/radius of its own, a divider
 // between rows instead, so the group reads as one list rather than a
@@ -93,7 +93,14 @@ export default function ProfileScreen() {
   const [showIncomeSources, setShowIncomeSources] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [exportingData, setExportingData] = useState(false);
+  const [avatarAnimal, setAvatarAnimal] = useState<AnimalKey>('bear');
   const isDark = useColorScheme() === 'dark';
+
+  const userId = session?.user.id;
+  useEffect(() => {
+    if (!userId) return;
+    fetchProfile(userId).then((profile) => setAvatarAnimal(profile.avatar_animal));
+  }, [userId, showEditProfile]);
 
   const handleExportData = async () => {
     if (!session?.user.id || exportingData) return;
@@ -168,10 +175,10 @@ export default function ProfileScreen() {
             the auth screen. */}
         <View className="flex-row items-center gap-4">
           <View
-            className="w-16 h-16 rounded-full items-center justify-center"
+            className="w-16 h-16 rounded-full items-center justify-center overflow-hidden"
             style={{ backgroundColor: '#BEE3F8' }}
           >
-            <Image source={require('@/assets/images/splash-icon.png')} style={{ width: 44, height: 44 }} />
+            <TabbyMascot animal={avatarAnimal} mood="good" insight={null} size={40} showLabel={false} />
           </View>
           <View className="flex-1">
             <Text className="font-fredoka-semibold text-xl dark:text-white">
