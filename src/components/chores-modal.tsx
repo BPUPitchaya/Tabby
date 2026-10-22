@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { cancelChoreReminder } from '@/lib/chore-notifications';
 import {
   confirmChore,
   undoChoreConfirmation,
@@ -189,6 +190,7 @@ export function ChoresModal({
     setBusy(true);
     try {
       await deleteChore(chore.id);
+      await cancelChoreReminder(chore.id).catch(() => {});
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete chore.');

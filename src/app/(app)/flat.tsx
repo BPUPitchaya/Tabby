@@ -21,7 +21,8 @@ import { ChoresModal } from '@/components/chores-modal';
 import { FlatHelpModal } from '@/components/flat-help-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
-import { fetchChores, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
+import { cancelChoreReminder, requestChoreNotificationPermission, scheduleChoreReminder } from '@/lib/chore-notifications';
+import { currentAssigneeId, fetchChores, getChoreCycle, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
 import {
   addMemberByEmail,
   addSharedExpense,
@@ -241,6 +242,29 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
       setBalances(balanceList);
       setChores(choreList);
       setHealth(healthResult);
+
+      // Keep each chore's on-device reminder in sync with whose turn it
+      // actually is right now -- chores are flat-scoped, not user-scoped
+      // like bills, so this device only ever schedules for chores
+      // CURRENTLY assigned to this user, and cancels for every other one
+      // (done, not due yet, or no longer this user's turn after a
+      // rotation/edit). Best-effort: a denied permission or scheduling
+      // hiccup shouldn't block loading the rest of the screen.
+      try {
+        const granted = await requestChoreNotificationPermission();
+        for (const chore of choreList) {
+          const isMine = currentAssigneeId(chore) === userId;
+          const done = isChoreDoneThisCycle(chore);
+          const cycle = getChoreCycle(chore);
+          if (granted && isMine && !done && cycle) {
+            await scheduleChoreReminder(chore.id, chore.name, cycle.startDate).catch(() => {});
+          } else {
+            await cancelChoreReminder(chore.id).catch(() => {});
+          }
+        }
+      } catch {
+        // reminders just won't fire -- not worth blocking the load over
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load flat data.');
     }
