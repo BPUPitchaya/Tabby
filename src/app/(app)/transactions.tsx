@@ -24,9 +24,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   categorizeTransaction,
   categorizeTransactionsBatch,
+  classifyEditCommand,
   classifyFinancialQuestion,
   parseBillSplit,
-  parseBudgetEditCommand,
   parseFinancialDocument,
   parseNaturalLanguageExpenses,
   parseSpendingQuery,
@@ -39,11 +39,11 @@ import { CategoryIcon, CUSTOM_CATEGORY_ICONS, guessCategoryIcon } from '@/compon
 import { IncomeTransactionDetailModal } from '@/components/income-transaction-detail-modal';
 import { TransactionDetailModal } from '@/components/transaction-detail-modal';
 import { useAuth } from '@/lib/auth-context';
-import { fetchBills, formatDueLabel, getRelevantBillDate } from '@/lib/bills';
+import { fetchBills, formatDueLabel, getRelevantBillDate, updateBill } from '@/lib/bills';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
-import { fetchAverageMonthlyIncome } from '@/lib/category-budgets';
-import { computeBalances, fetchMyFlat } from '@/lib/flats';
+import { fetchAverageMonthlyIncome, fetchCategoryBudgets, setCategoryBudget } from '@/lib/category-budgets';
+import { computeBalances, fetchFlatMembers, fetchMyFlat, recordSettlement, renameFlat } from '@/lib/flats';
 import {
   fetchIncomeSources,
   getIncomeSourceProgress,
@@ -51,6 +51,7 @@ import {
   getPrimaryIncomeSource,
   updateSourceBudgetAmount,
 } from '@/lib/income-sources';
+import { fetchProfile, updateDisplayName } from '@/lib/profile';
 import { hashBase64, recordScan, wasRecentlyScanned } from '@/lib/receipt-dedup';
 import { SplitBillModal } from '@/components/split-bill-modal';
 import {
@@ -99,10 +100,12 @@ const FINANCIAL_QUESTION_HINT =
   /^(how (much|many)|what did|did (i|we)|when (did|do|is)|am i|is my|are we|who owes|do i owe|does .* owe)\b|\?\s*$/i;
 
 // Cheap local pre-filter for an EDIT command ("change my budget to
-// $500") -- checked before the question hint, since this isn't asking
-// anything, it's asking the app to change a value. Scoped to budget
-// amount edits only for now (see parseBudgetEditCommand).
-const BUDGET_EDIT_HINT = /\b(change|set|update)\b.*\bbudget\b|\bbudget\b.*\bto\b.*\$?\d/i;
+// $500", "I paid Jo $20", "rename my flat to The Hideout") -- checked
+// before the question hint, since this isn't asking anything, it's
+// asking the app to change or record a value. See classifyEditCommand
+// for which actions this actually covers.
+const EDIT_COMMAND_HINT =
+  /\b(change|set|update|rename)\b.*\b(budget|name|bill|rent|flat)\b|\bi\s+paid\b|\bpaid\s+me\b|\bpaid\b.*\bback\b/i;
 
 // Local calendar date, not UTC -- Date#toISOString() converts to UTC first,
 // which can shift the date by a day in timezones behind/ahead of it (same
@@ -459,20 +462,21 @@ export default function TransactionsScreen() {
   // the same slot composerThinking occupies while busy, cleared the next
   // time the composer is used for anything else.
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  // An edit command ("change my budget to $500") parsed but not yet
-  // applied -- nothing is written until the user taps Confirm. Carries
-  // the income source id to update, so Confirm doesn't need to re-fetch
-  // it.
-  const [pendingBudgetEdit, setPendingBudgetEdit] = useState<{
-    sourceId: string;
-    oldAmount: number | null;
-    newAmount: number;
-    // Soft guardrail, same spirit as the budget-suggestion income cap --
-    // never blocks Confirm, just flags it so a typo ($5000 instead of
-    // $500) or an unrealistic figure doesn't slip through unnoticed.
-    averageIncome: number | null;
+  // An edit command ("change my budget to $500", "I paid Jo $20") parsed
+  // but not yet applied -- nothing is written until the user taps
+  // Confirm. `apply` is a closure holding whatever that specific action
+  // needs (an id, a flat id, two user ids, ...) so this one piece of
+  // state and its one render block cover every edit action, not just
+  // budget.
+  const [pendingEdit, setPendingEdit] = useState<{
+    title: string;
+    oldLabel: string;
+    newLabel: string;
+    warning: string | null;
+    successMessage: string;
+    apply: () => Promise<void>;
   } | null>(null);
-  const [applyingBudgetEdit, setApplyingBudgetEdit] = useState(false);
+  const [applyingEdit, setApplyingEdit] = useState(false);
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -630,35 +634,195 @@ export default function TransactionsScreen() {
     setComposerThinking(true);
     setError(null);
     setAiAnswer(null);
-    setPendingBudgetEdit(null);
+    setPendingEdit(null);
     try {
-      // An EDIT command ("change my budget to $500") -- never applied
-      // directly. Parses the new amount, then shows an old -> new
-      // confirmation; nothing is written until the user taps Confirm.
-      if (BUDGET_EDIT_HINT.test(quickAddText.trim())) {
+      // An EDIT command ("change my budget to $500", "set my groceries
+      // budget to $300", "change my name to Alex", "change my rent to
+      // $480", "rename my flat to The Hideout", "I paid Jo $20") -- never
+      // applied directly. Classifies which action and its parameters,
+      // then shows an old -> new confirmation; nothing is written until
+      // the user taps Confirm.
+      if (EDIT_COMMAND_HINT.test(quickAddText.trim())) {
         if (!userId) return;
-        const parsedEdit = await parseBudgetEditCommand(quickAddText);
-        if (!parsedEdit) {
-          setError("Couldn't understand that as a budget change. Try rephrasing, e.g. \"change my budget to $500\".");
-          return;
+        const flat = await fetchMyFlat(userId);
+        const members = flat ? await fetchFlatMembers(flat.id) : [];
+        const otherMembers = members.filter((m) => m.user_id !== userId);
+        const memberNames = otherMembers.map((m) => m.profiles?.display_name ?? 'Unknown');
+
+        const classified = await classifyEditCommand(quickAddText, categories, memberNames);
+        if (classified && classified.action !== 'none') {
+          switch (classified.action) {
+            case 'budget': {
+              if (classified.amount === null) {
+                setError("Couldn't tell the new amount. Try rephrasing, e.g. \"change my budget to $500\".");
+                return;
+              }
+              const newAmount = classified.amount;
+              const [sources, averageIncome] = await Promise.all([
+                fetchIncomeSources(userId),
+                fetchAverageMonthlyIncome(userId),
+              ]);
+              const primary = getPrimaryIncomeSource(sources);
+              if (!primary) {
+                setError('Add an income source first -- a budget rides its pay cycle.');
+                return;
+              }
+              setPendingEdit({
+                title: 'Change your budget?',
+                oldLabel: primary.budgetAmount !== null ? `$${primary.budgetAmount.toFixed(2)}` : 'No budget set',
+                newLabel: `$${newAmount.toFixed(2)}`,
+                warning:
+                  averageIncome > 0 && newAmount > averageIncome
+                    ? `That's more than your average income ($${averageIncome.toFixed(2)}/mo). You can still confirm it.`
+                    : null,
+                successMessage: `Budget updated to $${newAmount.toFixed(2)}.`,
+                apply: () => updateSourceBudgetAmount(primary.id, newAmount),
+              });
+              setQuickAddText('');
+              return;
+            }
+            case 'categoryBudget': {
+              if (classified.amount === null || !classified.categoryId) {
+                setError('Couldn\'t tell which category or amount. Try rephrasing, e.g. "set my groceries budget to $300".');
+                return;
+              }
+              const categoryId = classified.categoryId;
+              const newAmount = classified.amount;
+              const categoryName = categories.find((c) => c.id === categoryId)?.name ?? 'that category';
+              const existingBudgets = await fetchCategoryBudgets(userId);
+              const existing = existingBudgets.find((b) => b.categoryId === categoryId);
+              setPendingEdit({
+                title: `Change your ${categoryName} budget?`,
+                oldLabel: existing ? `$${existing.amount.toFixed(2)}` : 'No cap set',
+                newLabel: `$${newAmount.toFixed(2)}`,
+                warning: null,
+                successMessage: `${categoryName} budget updated to $${newAmount.toFixed(2)}.`,
+                apply: () => setCategoryBudget(userId, categoryId, newAmount),
+              });
+              setQuickAddText('');
+              return;
+            }
+            case 'displayName': {
+              if (!classified.name) {
+                setError("Couldn't tell what name to use. Try rephrasing, e.g. \"change my name to Alex\".");
+                return;
+              }
+              const newName = classified.name;
+              const profile = await fetchProfile(userId);
+              setPendingEdit({
+                title: 'Change your display name?',
+                oldLabel: profile.display_name,
+                newLabel: newName,
+                warning: null,
+                successMessage: `Name updated to ${newName}.`,
+                apply: () => updateDisplayName(userId, newName),
+              });
+              setQuickAddText('');
+              return;
+            }
+            case 'billAmount': {
+              if (classified.amount === null || !classified.name) {
+                setError('Couldn\'t tell which bill or amount. Try rephrasing, e.g. "change my rent to $480".');
+                return;
+              }
+              const newAmount = classified.amount;
+              const needle = classified.name.toLowerCase();
+              const bills = await fetchBills(userId);
+              const match = bills.find((b) => b.name.toLowerCase().includes(needle));
+              if (!match) {
+                setError(`Couldn't find a bill named "${classified.name}".`);
+                return;
+              }
+              setPendingEdit({
+                title: `Change your ${match.name} bill?`,
+                oldLabel: match.amount !== null ? `$${match.amount.toFixed(2)}` : 'Variable amount',
+                newLabel: `$${newAmount.toFixed(2)}`,
+                warning: null,
+                successMessage: `${match.name} updated to $${newAmount.toFixed(2)}.`,
+                apply: () =>
+                  updateBill(match.id, {
+                    name: match.name,
+                    categoryId: match.categoryId,
+                    isVariable: false,
+                    amount: newAmount,
+                    frequency: match.frequency,
+                    payWeekday: match.payWeekday,
+                    dayOfMonth: match.dayOfMonth,
+                  }),
+              });
+              setQuickAddText('');
+              return;
+            }
+            case 'flatRename': {
+              if (!classified.name) {
+                setError("Couldn't tell the new flat name. Try rephrasing, e.g. \"rename my flat to The Hideout\".");
+                return;
+              }
+              if (!flat) {
+                setError("You're not part of a flat yet.");
+                return;
+              }
+              // Renaming is admin-only at the RLS level (same gate
+              // flat.tsx's own rename control uses) -- the policy
+              // silently updates 0 rows rather than erroring for a
+              // non-admin, so this has to be checked up front or the
+              // confirm would report a false success.
+              if (members.find((m) => m.user_id === userId)?.role !== 'admin') {
+                setError('Only the flat admin can rename it.');
+                return;
+              }
+              const newName = classified.name;
+              setPendingEdit({
+                title: 'Rename your flat?',
+                oldLabel: flat.name,
+                newLabel: newName,
+                warning: null,
+                successMessage: `Flat renamed to ${newName}.`,
+                apply: () => renameFlat(flat.id, newName),
+              });
+              setQuickAddText('');
+              return;
+            }
+            case 'settlement': {
+              if (classified.amount === null || !classified.name || !classified.settlementDirection) {
+                setError('Couldn\'t tell who paid whom or how much. Try rephrasing, e.g. "I paid Jo $20".');
+                return;
+              }
+              if (!flat) {
+                setError("You're not part of a flat yet.");
+                return;
+              }
+              const otherMember = otherMembers.find(
+                (m) => (m.profiles?.display_name ?? '').toLowerCase() === classified.name!.toLowerCase(),
+              );
+              if (!otherMember) {
+                setError(`Couldn't find a flatmate named "${classified.name}".`);
+                return;
+              }
+              const newAmount = classified.amount;
+              const otherName = otherMember.profiles?.display_name ?? classified.name;
+              const fromUser = classified.settlementDirection === 'i_paid' ? userId : otherMember.user_id;
+              const toUser = classified.settlementDirection === 'i_paid' ? otherMember.user_id : userId;
+              setPendingEdit({
+                title:
+                  classified.settlementDirection === 'i_paid'
+                    ? `Record that you paid ${otherName}?`
+                    : `Record that ${otherName} paid you?`,
+                oldLabel: 'Not recorded',
+                newLabel: `$${newAmount.toFixed(2)}`,
+                warning: null,
+                successMessage: 'Recorded.',
+                apply: () => recordSettlement({ flatId: flat.id, fromUser, toUser, amount: newAmount }),
+              });
+              setQuickAddText('');
+              return;
+            }
+          }
         }
-        const [sources, averageIncome] = await Promise.all([
-          fetchIncomeSources(userId),
-          fetchAverageMonthlyIncome(userId),
-        ]);
-        const primary = getPrimaryIncomeSource(sources);
-        if (!primary) {
-          setError('Add an income source first -- a budget rides its pay cycle.');
-          return;
-        }
-        setPendingBudgetEdit({
-          sourceId: primary.id,
-          oldAmount: primary.budgetAmount,
-          newAmount: parsedEdit.amount,
-          averageIncome: averageIncome > 0 ? averageIncome : null,
-        });
-        setQuickAddText('');
-        return;
+        // Classified as 'none' (or the classify call failed) -- fall
+        // through below and try parsing it as an ordinary expense
+        // instead, in case the hint just caught an oddly-phrased
+        // statement.
       }
 
       // A question about personal finances ("how much did I spend on
@@ -718,17 +882,18 @@ export default function TransactionsScreen() {
     }
   };
 
-  const handleConfirmBudgetEdit = async () => {
-    if (!pendingBudgetEdit) return;
-    setApplyingBudgetEdit(true);
+  const handleConfirmEdit = async () => {
+    if (!pendingEdit) return;
+    setApplyingEdit(true);
+    setError(null);
     try {
-      await updateSourceBudgetAmount(pendingBudgetEdit.sourceId, pendingBudgetEdit.newAmount);
-      setAiAnswer(`Budget updated to $${pendingBudgetEdit.newAmount.toFixed(2)}.`);
-      setPendingBudgetEdit(null);
+      await pendingEdit.apply();
+      setAiAnswer(pendingEdit.successMessage);
+      setPendingEdit(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update budget.');
+      setError(err instanceof Error ? err.message : 'Failed to apply that change.');
     } finally {
-      setApplyingBudgetEdit(false);
+      setApplyingEdit(false);
     }
   };
 
@@ -1445,7 +1610,7 @@ export default function TransactionsScreen() {
               </Animated.View>
             )}
 
-            {pendingBudgetEdit && (
+            {pendingEdit && (
               <Animated.View
                 entering={FadeIn.duration(150)}
                 exiting={FadeOut.duration(150)}
@@ -1454,53 +1619,51 @@ export default function TransactionsScreen() {
                 <View className="flex-row items-center gap-2">
                   <Feather name="edit-3" size={14} color={isDark ? '#E8C39E' : '#8B5A2B'} />
                   <Text className="font-nunito-semibold text-sm text-tabby-700 dark:text-tabby-100">
-                    Change your budget?
+                    {pendingEdit.title}
                   </Text>
                 </View>
                 <View className="flex-row items-center gap-2 px-1">
                   <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300">
-                    {pendingBudgetEdit.oldAmount !== null ? `$${pendingBudgetEdit.oldAmount.toFixed(2)}` : 'No budget set'}
+                    {pendingEdit.oldLabel}
                   </Text>
                   <Feather name="arrow-right" size={14} color={isDark ? '#6B4420' : '#9ca3af'} />
                   <Text className="font-nunito-bold text-sm text-tabby-700 dark:text-white">
-                    ${pendingBudgetEdit.newAmount.toFixed(2)}
+                    {pendingEdit.newLabel}
                   </Text>
                 </View>
-                {pendingBudgetEdit.averageIncome !== null &&
-                  pendingBudgetEdit.newAmount > pendingBudgetEdit.averageIncome && (
-                    <View className="flex-row items-start gap-1.5 px-1">
-                      <Feather
-                        name="alert-triangle"
-                        size={12}
-                        color={isDark ? '#E1AC93' : '#8E3F2C'}
-                        style={{ marginTop: 1 }}
-                      />
-                      <Text className="font-nunito text-xs text-rust-700 dark:text-rust-300 flex-1">
-                        That&apos;s more than your average income (${pendingBudgetEdit.averageIncome.toFixed(2)}/mo).
-                        You can still confirm it.
-                      </Text>
-                    </View>
-                  )}
+                {pendingEdit.warning && (
+                  <View className="flex-row items-start gap-1.5 px-1">
+                    <Feather
+                      name="alert-triangle"
+                      size={12}
+                      color={isDark ? '#E1AC93' : '#8E3F2C'}
+                      style={{ marginTop: 1 }}
+                    />
+                    <Text className="font-nunito text-xs text-rust-700 dark:text-rust-300 flex-1">
+                      {pendingEdit.warning}
+                    </Text>
+                  </View>
+                )}
                 <View className="flex-row gap-2">
                   <Pressable
-                    onPress={() => setPendingBudgetEdit(null)}
-                    disabled={applyingBudgetEdit}
+                    onPress={() => setPendingEdit(null)}
+                    disabled={applyingEdit}
                     style={pressFeedback}
                     accessibilityRole="button"
-                    accessibilityLabel="Cancel budget change"
+                    accessibilityLabel="Cancel"
                     className="flex-1 py-2 items-center rounded-lg border border-gray-300 dark:border-tabby-600"
                   >
                     <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">Cancel</Text>
                   </Pressable>
                   <Pressable
-                    onPress={handleConfirmBudgetEdit}
-                    disabled={applyingBudgetEdit}
+                    onPress={handleConfirmEdit}
+                    disabled={applyingEdit}
                     style={pressFeedback}
                     accessibilityRole="button"
-                    accessibilityLabel="Confirm budget change"
+                    accessibilityLabel="Confirm"
                     className="flex-1 py-2 items-center rounded-lg bg-tabby-600 dark:bg-white"
                   >
-                    {applyingBudgetEdit ? (
+                    {applyingEdit ? (
                       <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
                     ) : (
                       <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">Confirm</Text>
@@ -1527,7 +1690,7 @@ export default function TransactionsScreen() {
                 onChangeText={(text) => {
                   setQuickAddText(text);
                   if (aiAnswer) setAiAnswer(null);
-                  if (pendingBudgetEdit) setPendingBudgetEdit(null);
+                  if (pendingEdit) setPendingEdit(null);
                 }}
                 placeholder='Try "coffee $8.50" or "how much on coffee last month?"'
                 multiline

@@ -591,26 +591,75 @@ export async function classifyFinancialQuestion(
   }
 }
 
-// First of a planned set of EDIT commands ("change my budget to $500") --
-// unlike every other AI function in this file, a wrong answer here isn't
-// just unhelpful, it's a wrong value actually saved. So this only ever
-// extracts the new number; the caller (transactions.tsx) always shows an
-// old-value -> new-value confirmation and writes nothing until the user
-// taps Confirm. Scoped to the overall budget amount only for now.
-export async function parseBudgetEditCommand(text: string): Promise<{ amount: number } | null> {
+export type EditActionType =
+  | 'none'
+  | 'budget'
+  | 'categoryBudget'
+  | 'displayName'
+  | 'billAmount'
+  | 'flatRename'
+  | 'settlement';
+
+export type ClassifiedEditCommand = {
+  action: EditActionType;
+  amount: number | null; // budget, categoryBudget, billAmount, settlement
+  categoryId: string | null; // categoryBudget only
+  name: string | null; // displayName (new name), billAmount (which bill), flatRename (new flat name), settlement (other person's name)
+  settlementDirection: 'i_paid' | 'they_paid' | null; // settlement only
+};
+
+// EDIT commands ("change my budget to $500", "I paid Jo $20") -- unlike
+// every other AI function in this file, a wrong answer here isn't just
+// unhelpful, it's a wrong value actually saved or a wrong balance
+// recorded between two people. So this only ever classifies WHICH action
+// and extracts its parameters; the caller (transactions.tsx) always shows
+// an old-value -> new-value confirmation and writes nothing until the
+// user taps Confirm. One classifier for every edit action (rather than a
+// parser per action) so a command can't get misrouted between, say,
+// "change my budget" (overall) and "change my groceries budget"
+// (category) -- both mention "budget", only the model can tell them apart.
+export async function classifyEditCommand(
+  text: string,
+  categories: { id: string; name: string }[],
+  flatMemberNames: string[],
+): Promise<ClassifiedEditCommand | null> {
   if (!text.trim()) return null;
 
   try {
     const result = (await callGemini(
-      `The user typed this to their personal finance app: "${text}". They\u2019re asking to change their overall budget to a specific new dollar amount. Extract that new amount. If this text isn\u2019t actually asking to set a budget to a specific number -- no number given, or it\u2019s asking something else entirely -- return -1.`,
+      `The user typed this to their personal finance app: "${text}". Classify which ONE action they're asking to take, then extract only the fields that action needs (leave every other field at its "none" value: amount -1, categoryName/name "None", settlementDirection "none"). Actions: "budget" (change their OVERALL budget to a new dollar amount, e.g. "change my budget to $500" -- needs amount); "categoryBudget" (change ONE SPECIFIC category's budget cap, e.g. "set my groceries budget to $300" -- needs both a category from this exact list: ${categories.map((c) => c.name).join(', ')}, and amount); "displayName" (change their display name, e.g. "change my name to Alex" -- needs name); "billAmount" (change a recurring bill's amount, e.g. "change my rent to $480" -- needs name = the bill's name, and amount); "flatRename" (rename their flat, e.g. "rename my flat to The Hideout" -- needs name = the new flat name); "settlement" (record having paid, or been paid back by, a flatmate -- e.g. "I paid Jo $20", "Jo paid me back $15" -- needs name = the other person (must be one of: ${flatMemberNames.length > 0 ? flatMemberNames.join(', ') : 'no flatmates available'}), amount, and settlementDirection: "i_paid" if the USER paid THEM, "they_paid" if THEY paid the user back); or "none" if this isn't actually asking to change or record any of these.`,
       {
         type: 'object',
-        properties: { amount: { type: 'number' } },
-        required: ['amount'],
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['none', 'budget', 'categoryBudget', 'displayName', 'billAmount', 'flatRename', 'settlement'],
+          },
+          amount: { type: 'number' },
+          categoryName: { type: 'string', enum: [...categories.map((c) => c.name), 'None'] },
+          name: { type: 'string' },
+          settlementDirection: { type: 'string', enum: ['i_paid', 'they_paid', 'none'] },
+        },
+        required: ['action', 'amount', 'categoryName', 'name', 'settlementDirection'],
       },
-    )) as { amount: number };
+    )) as {
+      action: EditActionType;
+      amount: number;
+      categoryName: string;
+      name: string;
+      settlementDirection: 'i_paid' | 'they_paid' | 'none';
+    };
 
-    return result.amount > 0 ? { amount: result.amount } : null;
+    return {
+      action: result.action,
+      amount: result.amount > 0 ? result.amount : null,
+      categoryId:
+        result.categoryName && result.categoryName !== 'None'
+          ? categories.find((c) => c.name === result.categoryName)?.id ?? null
+          : null,
+      name: result.name && result.name !== 'None' ? result.name : null,
+      settlementDirection: result.settlementDirection === 'none' ? null : result.settlementDirection,
+    };
   } catch {
     return null;
   }
