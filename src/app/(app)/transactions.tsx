@@ -26,6 +26,7 @@ import {
   categorizeTransactionsBatch,
   classifyFinancialQuestion,
   parseBillSplit,
+  parseBudgetEditCommand,
   parseFinancialDocument,
   parseNaturalLanguageExpenses,
   parseSpendingQuery,
@@ -41,12 +42,14 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchBills, formatDueLabel, getRelevantBillDate } from '@/lib/bills';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
 import { presentScanSheet } from '@/lib/document-scan';
+import { fetchAverageMonthlyIncome } from '@/lib/category-budgets';
 import { computeBalances, fetchMyFlat } from '@/lib/flats';
 import {
   fetchIncomeSources,
   getIncomeSourceProgress,
   getNextIncomeSourcePaydayDate,
   getPrimaryIncomeSource,
+  updateSourceBudgetAmount,
 } from '@/lib/income-sources';
 import { hashBase64, recordScan, wasRecentlyScanned } from '@/lib/receipt-dedup';
 import { SplitBillModal } from '@/components/split-bill-modal';
@@ -94,6 +97,12 @@ const SPLIT_HINT = /\bsplit\b|\beach\b|\bowes?\b|\bbetween\b|\bdivide/i;
 // for either a split or a plain expense statement.
 const FINANCIAL_QUESTION_HINT =
   /^(how (much|many)|what did|did (i|we)|when (did|do|is)|am i|is my|are we|who owes|do i owe|does .* owe)\b|\?\s*$/i;
+
+// Cheap local pre-filter for an EDIT command ("change my budget to
+// $500") -- checked before the question hint, since this isn't asking
+// anything, it's asking the app to change a value. Scoped to budget
+// amount edits only for now (see parseBudgetEditCommand).
+const BUDGET_EDIT_HINT = /\b(change|set|update)\b.*\bbudget\b|\bbudget\b.*\bto\b.*\$?\d/i;
 
 // Local calendar date, not UTC -- Date#toISOString() converts to UTC first,
 // which can shift the date by a day in timezones behind/ahead of it (same
@@ -450,6 +459,20 @@ export default function TransactionsScreen() {
   // the same slot composerThinking occupies while busy, cleared the next
   // time the composer is used for anything else.
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
+  // An edit command ("change my budget to $500") parsed but not yet
+  // applied -- nothing is written until the user taps Confirm. Carries
+  // the income source id to update, so Confirm doesn't need to re-fetch
+  // it.
+  const [pendingBudgetEdit, setPendingBudgetEdit] = useState<{
+    sourceId: string;
+    oldAmount: number | null;
+    newAmount: number;
+    // Soft guardrail, same spirit as the budget-suggestion income cap --
+    // never blocks Confirm, just flags it so a typo ($5000 instead of
+    // $500) or an unrealistic figure doesn't slip through unnoticed.
+    averageIncome: number | null;
+  } | null>(null);
+  const [applyingBudgetEdit, setApplyingBudgetEdit] = useState(false);
 
   const [csvPreview, setCsvPreview] = useState<ParsedCSVTransaction[] | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -607,7 +630,37 @@ export default function TransactionsScreen() {
     setComposerThinking(true);
     setError(null);
     setAiAnswer(null);
+    setPendingBudgetEdit(null);
     try {
+      // An EDIT command ("change my budget to $500") -- never applied
+      // directly. Parses the new amount, then shows an old -> new
+      // confirmation; nothing is written until the user taps Confirm.
+      if (BUDGET_EDIT_HINT.test(quickAddText.trim())) {
+        if (!userId) return;
+        const parsedEdit = await parseBudgetEditCommand(quickAddText);
+        if (!parsedEdit) {
+          setError("Couldn't understand that as a budget change. Try rephrasing, e.g. \"change my budget to $500\".");
+          return;
+        }
+        const [sources, averageIncome] = await Promise.all([
+          fetchIncomeSources(userId),
+          fetchAverageMonthlyIncome(userId),
+        ]);
+        const primary = getPrimaryIncomeSource(sources);
+        if (!primary) {
+          setError('Add an income source first -- a budget rides its pay cycle.');
+          return;
+        }
+        setPendingBudgetEdit({
+          sourceId: primary.id,
+          oldAmount: primary.budgetAmount,
+          newAmount: parsedEdit.amount,
+          averageIncome: averageIncome > 0 ? averageIncome : null,
+        });
+        setQuickAddText('');
+        return;
+      }
+
       // A question about personal finances ("how much did I spend on
       // coffee last month", "am I over budget", "when is rent due", "who
       // owes me money", "when do I get paid next") isn't a transaction to
@@ -662,6 +715,20 @@ export default function TransactionsScreen() {
     } finally {
       setAiBusy(false);
       setComposerThinking(false);
+    }
+  };
+
+  const handleConfirmBudgetEdit = async () => {
+    if (!pendingBudgetEdit) return;
+    setApplyingBudgetEdit(true);
+    try {
+      await updateSourceBudgetAmount(pendingBudgetEdit.sourceId, pendingBudgetEdit.newAmount);
+      setAiAnswer(`Budget updated to $${pendingBudgetEdit.newAmount.toFixed(2)}.`);
+      setPendingBudgetEdit(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update budget.');
+    } finally {
+      setApplyingBudgetEdit(false);
     }
   };
 
@@ -1378,6 +1445,71 @@ export default function TransactionsScreen() {
               </Animated.View>
             )}
 
+            {pendingBudgetEdit && (
+              <Animated.View
+                entering={FadeIn.duration(150)}
+                exiting={FadeOut.duration(150)}
+                className="px-4 py-3 border-t border-gray-100 dark:border-tabby-700 bg-tabby-50 dark:bg-tabby-800 gap-2.5"
+              >
+                <View className="flex-row items-center gap-2">
+                  <Feather name="edit-3" size={14} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                  <Text className="font-nunito-semibold text-sm text-tabby-700 dark:text-tabby-100">
+                    Change your budget?
+                  </Text>
+                </View>
+                <View className="flex-row items-center gap-2 px-1">
+                  <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300">
+                    {pendingBudgetEdit.oldAmount !== null ? `$${pendingBudgetEdit.oldAmount.toFixed(2)}` : 'No budget set'}
+                  </Text>
+                  <Feather name="arrow-right" size={14} color={isDark ? '#6B4420' : '#9ca3af'} />
+                  <Text className="font-nunito-bold text-sm text-tabby-700 dark:text-white">
+                    ${pendingBudgetEdit.newAmount.toFixed(2)}
+                  </Text>
+                </View>
+                {pendingBudgetEdit.averageIncome !== null &&
+                  pendingBudgetEdit.newAmount > pendingBudgetEdit.averageIncome && (
+                    <View className="flex-row items-start gap-1.5 px-1">
+                      <Feather
+                        name="alert-triangle"
+                        size={12}
+                        color={isDark ? '#E1AC93' : '#8E3F2C'}
+                        style={{ marginTop: 1 }}
+                      />
+                      <Text className="font-nunito text-xs text-rust-700 dark:text-rust-300 flex-1">
+                        That&apos;s more than your average income (${pendingBudgetEdit.averageIncome.toFixed(2)}/mo).
+                        You can still confirm it.
+                      </Text>
+                    </View>
+                  )}
+                <View className="flex-row gap-2">
+                  <Pressable
+                    onPress={() => setPendingBudgetEdit(null)}
+                    disabled={applyingBudgetEdit}
+                    style={pressFeedback}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel budget change"
+                    className="flex-1 py-2 items-center rounded-lg border border-gray-300 dark:border-tabby-600"
+                  >
+                    <Text className="font-nunito-semibold text-sm text-gray-600 dark:text-tabby-200">Cancel</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleConfirmBudgetEdit}
+                    disabled={applyingBudgetEdit}
+                    style={pressFeedback}
+                    accessibilityRole="button"
+                    accessibilityLabel="Confirm budget change"
+                    className="flex-1 py-2 items-center rounded-lg bg-tabby-600 dark:bg-white"
+                  >
+                    {applyingBudgetEdit ? (
+                      <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                    ) : (
+                      <Text className="font-nunito-semibold text-sm text-white dark:text-tabby-900">Confirm</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </Animated.View>
+            )}
+
             {/* Chat-style composer, pinned to the bottom of the screen. */}
             <View className="flex-row items-end gap-2 px-3 py-2.5 border-t border-gray-100 dark:border-tabby-700 bg-white dark:bg-tabby-900">
               <Pressable
@@ -1395,6 +1527,7 @@ export default function TransactionsScreen() {
                 onChangeText={(text) => {
                   setQuickAddText(text);
                   if (aiAnswer) setAiAnswer(null);
+                  if (pendingBudgetEdit) setPendingBudgetEdit(null);
                 }}
                 placeholder='Try "coffee $8.50" or "how much on coffee last month?"'
                 multiline
