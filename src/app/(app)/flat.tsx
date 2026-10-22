@@ -17,9 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 
 import { logFlatTabView } from '@/lib/analytics';
+import { ChoresModal } from '@/components/chores-modal';
 import { FlatHelpModal } from '@/components/flat-help-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
 import { useAuth } from '@/lib/auth-context';
+import { fetchChores, type Chore } from '@/lib/chores';
 import {
   addMemberByEmail,
   addSharedExpense,
@@ -213,6 +215,8 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showChores, setShowChores] = useState(false);
+  const [chores, setChores] = useState<Chore[]>([]);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -223,15 +227,17 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
     if (!userId) return;
     try {
       setError(null);
-      const [memberList, expenseList, balanceList, healthResult] = await Promise.all([
+      const [memberList, expenseList, balanceList, healthResult, choreList] = await Promise.all([
         fetchFlatMembers(flat.id),
         fetchSharedExpenses(flat.id),
         computeBalances(flat.id, userId),
         computeFlatHealth(flat.id),
+        fetchChores(flat.id),
       ]);
       setMembers(memberList);
       setExpenses(expenseList);
       setBalances(balanceList);
+      setChores(choreList);
       setHealth(healthResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load flat data.');
@@ -581,6 +587,25 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             >
               <Feather name="share" size={16} color="#FFFFFF" />
               <Text className="font-nunito-bold text-white">Share Invite</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setShowChores(true)}
+              style={pressFeedback}
+              className="flex-row items-center gap-3 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
+              accessibilityRole="button"
+              accessibilityLabel="Chores"
+            >
+              <View className="w-10 h-10 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
+                <Feather name="check-square" size={17} color={isDark ? '#E8C39E' : '#4b5563'} />
+              </View>
+              <View className="flex-1">
+                <Text className="font-nunito-medium dark:text-white">Chores</Text>
+                <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                  {chores.length > 0 ? `${chores.length} chore${chores.length === 1 ? '' : 's'}` : 'Optional'}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={isDark ? '#6B4420' : '#d1d5db'} />
             </Pressable>
 
             {showSettings && (
@@ -1011,6 +1036,18 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
       </Modal>
 
       <FlatHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
+
+      <ChoresModal
+        visible={showChores}
+        onClose={() => {
+          setShowChores(false);
+          load();
+        }}
+        flatId={flat.id}
+        members={members}
+        isAdmin={isAdmin}
+        currentUserId={userId ?? ''}
+      />
     </SafeAreaView>
   );
 }
