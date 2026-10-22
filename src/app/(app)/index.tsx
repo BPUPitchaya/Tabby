@@ -51,7 +51,9 @@ import {
   type Bill,
 } from '@/lib/bills';
 import { BillsModal } from '@/components/bills-modal';
+import { SavingsGoalsModal } from '@/components/savings-goals-modal';
 import { loadDashboardPeriodPreference } from '@/lib/dashboard-period-preference';
+import { daysUntilTarget, fetchGoalsWithProgress, type GoalWithProgress } from '@/lib/savings-goals';
 import {
   fetchDashboardData,
   findNotableCategorySwing,
@@ -355,6 +357,8 @@ export default function HomeScreen() {
   const [billBusyId, setBillBusyId] = useState<string | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [showBills, setShowBills] = useState(false);
+  const [goals, setGoals] = useState<GoalWithProgress[]>([]);
+  const [showSavingsGoals, setShowSavingsGoals] = useState(false);
   const [pendingIncomeSources, setPendingIncomeSources] = useState<(IncomeSource & { paydayDate: string })[]>(
     [],
   );
@@ -412,7 +416,7 @@ export default function HomeScreen() {
   const loadNotifications = useCallback(async () => {
     if (!userId) return;
     try {
-      const [incoming, shares, owedToMe, myReminders, paymentDetails, bills, incomeSources] = await Promise.all([
+      const [incoming, shares, owedToMe, myReminders, paymentDetails, bills, incomeSources, goals] = await Promise.all([
         fetchIncomingRequests(userId),
         fetchMyProposedShares(userId),
         fetchOwedToMe(userId),
@@ -420,6 +424,7 @@ export default function HomeScreen() {
         fetchMyPaymentDetails(userId),
         fetchBills(userId),
         fetchIncomeSources(userId),
+        fetchGoalsWithProgress(userId),
       ]);
       setIncomingRequests(incoming);
       setProposedShares(shares);
@@ -427,6 +432,7 @@ export default function HomeScreen() {
       setReminders(myReminders);
       setMyPaymentDetails(paymentDetails);
       setBills(bills);
+      setGoals(goals);
       setPendingBills(
         bills.flatMap((bill) => {
           const dueDate = getPendingBillDue(bill);
@@ -610,6 +616,20 @@ export default function HomeScreen() {
     .map((bill) => ({ bill, dueDate: getRelevantBillDate(bill) }))
     .filter((b): b is { bill: Bill; dueDate: string } => b.dueDate !== null)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .slice(0, 1);
+
+  // Same "single most relevant one" rule as billsPreview -- closest target
+  // date first (most urgent), goals with no target date pushed to the end.
+  const goalsPreview = goals
+    .filter((g) => g.saved < g.targetAmount)
+    .sort((a, b) => {
+      const da = daysUntilTarget(a.targetDate);
+      const db = daysUntilTarget(b.targetDate);
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
+    })
     .slice(0, 1);
 
   const maxCategory = Math.max(1, ...(data?.categoryTotals.map((c) => c.total) ?? [0]));
@@ -811,6 +831,49 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Same compact-preview pattern as Bills above -- the single most
+            relevant goal (closest target date), tappable to the full
+            Savings Goals screen. Hidden with no incomplete goals, same
+            reasoning as Bills' empty state. */}
+        {goalsPreview.length > 0 && (
+          <View className="border border-tabby-100 dark:border-tabby-700 rounded-2xl p-3.5 gap-2.5">
+            <View className="flex-row items-center justify-between">
+              <Text className="font-nunito-bold dark:text-white">Savings Goals</Text>
+              <Pressable
+                onPress={() => setShowSavingsGoals(true)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="View all savings goals"
+              >
+                <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300">
+                  View all{goals.length > 1 ? ` (${goals.length})` : ''}
+                </Text>
+              </Pressable>
+            </View>
+            {goalsPreview.map((goal) => {
+              const progress = Math.min(1, goal.saved / goal.targetAmount);
+              return (
+                <Pressable
+                  key={goal.id}
+                  onPress={() => setShowSavingsGoals(true)}
+                  style={pressFeedback}
+                  className="gap-1.5 px-2.5 py-2"
+                >
+                  <View className="flex-row items-center justify-between">
+                    <Text className="font-nunito-medium text-sm dark:text-white">{goal.name}</Text>
+                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
+                      ${(goal.targetAmount - goal.saved).toFixed(2)} to go
+                    </Text>
+                  </View>
+                  <View className="w-full h-2 bg-gray-200 dark:bg-tabby-700 rounded-full overflow-hidden">
+                    <View className="h-full rounded-full bg-sage-500" style={{ width: `${progress * 100}%` }} />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         <MoneyFlowRow
           earned={data?.periodIncome ?? 0}
           spent={data?.periodTotal ?? 0}
@@ -907,6 +970,16 @@ export default function HomeScreen() {
           loadNotifications();
         }}
       />
+      {userId && (
+        <SavingsGoalsModal
+          visible={showSavingsGoals}
+          onClose={() => {
+            setShowSavingsGoals(false);
+            loadNotifications();
+          }}
+          userId={userId}
+        />
+      )}
     </SafeAreaView>
   );
 }
