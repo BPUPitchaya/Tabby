@@ -19,7 +19,9 @@ import { useFocusEffect } from 'expo-router';
 import { logFlatTabView } from '@/lib/analytics';
 import { ChoresModal } from '@/components/chores-modal';
 import { FlatHelpModal } from '@/components/flat-help-modal';
+import { FlatSwitcherModal } from '@/components/flat-switcher-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
+import { loadActiveFlatId, saveActiveFlatId } from '@/lib/active-flat-preference';
 import { useAuth } from '@/lib/auth-context';
 import { cancelChoreReminder, requestChoreNotificationPermission, scheduleChoreReminder } from '@/lib/chore-notifications';
 import { currentAssigneeId, fetchChores, getChoreCycle, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
@@ -33,7 +35,7 @@ import {
   deleteSharedExpense,
   fetchExpenseSplitUserIds,
   fetchFlatMembers,
-  fetchMyFlat,
+  fetchMyFlats,
   fetchSharedExpenses,
   joinFlat,
   leaveFlat,
@@ -191,7 +193,20 @@ function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   );
 }
 
-function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) {
+function FlatView({
+  flat,
+  allFlats,
+  onFlatsChanged,
+  onSwitchFlat,
+}: {
+  flat: Flat;
+  allFlats: Flat[];
+  // Re-fetches the full flats list -- called after leaving, deleting,
+  // creating, or joining a flat, any of which can change which flat
+  // should be active.
+  onFlatsChanged: () => void;
+  onSwitchFlat: (flatId: string) => void;
+}) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const isDark = useColorScheme() === 'dark';
@@ -216,6 +231,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showFlatSwitcher, setShowFlatSwitcher] = useState(false);
   const [showChores, setShowChores] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
@@ -510,7 +526,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
           setSettingsBusy(true);
           try {
             await leaveFlat(flat.id, userId);
-            onLeftFlat();
+            onFlatsChanged();
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to leave flat.');
             setSettingsBusy(false);
@@ -533,7 +549,7 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
             setSettingsBusy(true);
             try {
               await deleteFlat(flat.id);
-              onLeftFlat();
+              onFlatsChanged();
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to delete flat.');
               setSettingsBusy(false);
@@ -561,14 +577,22 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
         ListHeaderComponent={
           <View className="px-4 pt-4 gap-5">
             <View className="flex-row items-start justify-between">
-              <View>
-                <Text className="font-nunito-bold text-2xl dark:text-white">{flat.name}</Text>
+              <Pressable
+                onPress={() => setShowFlatSwitcher(true)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Switch flat"
+              >
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="font-nunito-bold text-2xl dark:text-white">{flat.name}</Text>
+                  <Feather name="chevron-down" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
+                </View>
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
                   Invite code:{' '}
                   <Text className="font-mono font-semibold dark:text-white">{flat.invite_code}</Text> ·{' '}
                   {members.length} member{members.length === 1 ? '' : 's'}
                 </Text>
-              </View>
+              </Pressable>
               <View className="flex-row items-center gap-2">
                 <Pressable
                   onPress={() => setShowHelp(true)}
@@ -1141,6 +1165,22 @@ function FlatView({ flat, onLeftFlat }: { flat: Flat; onLeftFlat: () => void }) 
 
       <FlatHelpModal visible={showHelp} onClose={() => setShowHelp(false)} />
 
+      {userId && (
+        <FlatSwitcherModal
+          visible={showFlatSwitcher}
+          onClose={() => setShowFlatSwitcher(false)}
+          flats={allFlats}
+          activeFlatId={flat.id}
+          userId={userId}
+          onSwitch={onSwitchFlat}
+          onFlatsChanged={(newActiveFlatId) => {
+            onSwitchFlat(newActiveFlatId);
+            onFlatsChanged();
+            setShowFlatSwitcher(false);
+          }}
+        />
+      )}
+
       <ChoresModal
         visible={showChores}
         onClose={() => {
@@ -1160,13 +1200,21 @@ export default function FlatScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
 
-  const [flat, setFlat] = useState<Flat | null>(null);
+  const [flats, setFlats] = useState<Flat[]>([]);
+  const [activeFlatId, setActiveFlatId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const myFlat = await fetchMyFlat(userId);
-    setFlat(myFlat);
+    const [myFlats, storedActiveId] = await Promise.all([fetchMyFlats(userId), loadActiveFlatId()]);
+    setFlats(myFlats);
+    // The stored choice only still applies if that flat is still one of
+    // this user's -- otherwise (first run, or they left/lost it since)
+    // fall back to the oldest one they belong to.
+    const stillValid = storedActiveId !== null && myFlats.some((f) => f.id === storedActiveId);
+    const nextActiveId = stillValid ? storedActiveId : myFlats[0]?.id ?? null;
+    setActiveFlatId(nextActiveId);
+    if (nextActiveId && nextActiveId !== storedActiveId) saveActiveFlatId(nextActiveId);
   }, [userId]);
 
   useEffect(() => {
@@ -1179,9 +1227,14 @@ export default function FlatScreen() {
   // different signal from "opened it once by accident."
   useFocusEffect(
     useCallback(() => {
-      if (!loading && userId) logFlatTabView(userId, flat !== null);
-    }, [loading, userId, flat]),
+      if (!loading && userId) logFlatTabView(userId, flats.length > 0);
+    }, [loading, userId, flats.length]),
   );
+
+  const handleSwitchFlat = (flatId: string) => {
+    setActiveFlatId(flatId);
+    saveActiveFlatId(flatId);
+  };
 
   if (loading) {
     return (
@@ -1191,5 +1244,16 @@ export default function FlatScreen() {
     );
   }
 
-  return flat ? <FlatView flat={flat} onLeftFlat={load} /> : <NoFlatView onFlatReady={load} />;
+  const activeFlat = flats.find((f) => f.id === activeFlatId) ?? null;
+
+  return activeFlat ? (
+    <FlatView
+      flat={activeFlat}
+      allFlats={flats}
+      onFlatsChanged={load}
+      onSwitchFlat={handleSwitchFlat}
+    />
+  ) : (
+    <NoFlatView onFlatReady={load} />
+  );
 }
