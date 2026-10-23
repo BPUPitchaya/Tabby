@@ -24,6 +24,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # expo-env.d.ts is gitignored on purpose (Expo's own convention) --
+      # locally it's written as a side effect of `expo start`, but a
+      # fresh CI checkout never runs that, so tsc can't resolve Expo's
+      # ambient module types (e.g. the global.css side-effect import)
+      # without it. Content is fixed boilerplate, safe to write directly.
+      - name: Generate Expo types
+        run: |
+          printf '%s\n' '/// <reference types="expo/types" />' > expo-env.d.ts
+
       - name: Typecheck
         run: npx tsc --noEmit
 
