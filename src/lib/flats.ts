@@ -41,25 +41,27 @@ export type Balance = {
   netAmount: number;
 };
 
-export async function fetchMyFlat(userId: string): Promise<Flat | null> {
-  const { data: membership, error: membershipError } = await supabase
+// Every flat this user belongs to, oldest membership first -- a user can
+// belong to more than one (flat_members only has a unique (flat_id,
+// user_id), never a unique user_id), so this is the real source of
+// truth; fetchMyFlat below is just its first result, for call sites that
+// only ever need "a" flat (knownPeople matching, the has-a-flat check).
+export async function fetchMyFlats(userId: string): Promise<Flat[]> {
+  const { data, error } = await supabase
     .from('flat_members')
-    .select('flat_id')
+    .select('joined_at, flats(id, name, invite_code, created_by)')
     .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle();
+    .order('joined_at', { ascending: true });
 
-  if (membershipError) throw membershipError;
-  if (!membership) return null;
+  if (error) throw error;
+  return (data ?? [])
+    .map((row) => row.flats as unknown as Flat | null)
+    .filter((f): f is Flat => f !== null);
+}
 
-  const { data: flat, error: flatError } = await supabase
-    .from('flats')
-    .select('id, name, invite_code, created_by')
-    .eq('id', membership.flat_id)
-    .single();
-
-  if (flatError) throw flatError;
-  return flat as Flat;
+export async function fetchMyFlat(userId: string): Promise<Flat | null> {
+  const flats = await fetchMyFlats(userId);
+  return flats[0] ?? null;
 }
 
 export async function createFlat(userId: string, name: string): Promise<Flat> {
