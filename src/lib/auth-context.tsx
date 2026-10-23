@@ -13,6 +13,13 @@ type AuthContextValue = {
     displayName: string
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  // Emails a recovery link to tabby://reset-password -- that screen
+  // establishes a session from the link's tokens itself (see
+  // src/app/reset-password.tsx), so this just fires the email.
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  // Only meaningful once a session exists -- either a normal signed-in
+  // one, or the recovery session reset-password.tsx establishes.
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,8 +59,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const sendPasswordReset: AuthContextValue['sendPasswordReset'] = async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'tabby://reset-password',
+    });
+    return { error: error?.message ?? null };
+  };
+
+  const updatePassword: AuthContextValue['updatePassword'] = async (newPassword) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
+  };
+
   return (
-    <AuthContext.Provider value={{ session, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ session, loading, signIn, signUp, signOut, sendPasswordReset, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

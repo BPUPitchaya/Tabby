@@ -147,6 +147,7 @@ function TabLayout() {
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="join/[code]" />
                 <Stack.Screen name="add-friend/[code]" />
+                <Stack.Screen name="reset-password" />
                 <Stack.Screen name="(app)" />
               </Stack>
             </AuthProvider>
