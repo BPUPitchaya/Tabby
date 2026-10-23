@@ -1188,14 +1188,18 @@ export default function TransactionsScreen() {
 
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
+    // Date.now() below is intentional, not a memoization hazard -- this
+    // recomputes on its own explicit deps, never relies on the
+    // compiler's auto-memoization, and a relative range ("last 7 days")
+    // has to read the actual current time somewhere.
     const rangeStart = aiDateRange
       ? aiDateRange.start
       : searchRange === 'today'
         ? todayISO
         : searchRange === 'week'
-          ? toLocalISODate(new Date(Date.now() - 6 * 86_400_000))
+          ? toLocalISODate(new Date(Date.now() - 6 * 86_400_000)) // eslint-disable-line react-hooks/purity
           : searchRange === 'month'
-            ? toLocalISODate(new Date(Date.now() - 29 * 86_400_000))
+            ? toLocalISODate(new Date(Date.now() - 29 * 86_400_000)) // eslint-disable-line react-hooks/purity
             : null;
     const rangeEnd = aiDateRange ? aiDateRange.end : null;
 
