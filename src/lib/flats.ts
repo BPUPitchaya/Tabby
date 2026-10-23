@@ -81,21 +81,28 @@ export async function createFlat(userId: string, name: string): Promise<Flat> {
   return flat as Flat;
 }
 
-export async function joinFlat(userId: string, inviteCode: string): Promise<Flat> {
-  const { data, error: rpcError } = await supabase.rpc('find_flat_by_invite_code', {
-    code: inviteCode.trim(),
-  });
+// Looks a flat up by invite code without joining it -- lets a caller
+// (the join screen) show which flat a code points to, or check whether
+// the current user is already in it, before committing to the insert.
+export async function fetchFlatByInviteCode(inviteCode: string): Promise<Flat | null> {
+  const { data, error } = await supabase.rpc('find_flat_by_invite_code', { code: inviteCode.trim() });
+  if (error) throw error;
+  return (data?.[0] as Flat | undefined) ?? null;
+}
 
-  if (rpcError) throw rpcError;
-  const flat = data?.[0];
+export async function joinFlat(userId: string, inviteCode: string): Promise<Flat> {
+  const flat = await fetchFlatByInviteCode(inviteCode);
   if (!flat) throw new Error('No flat found with that invite code.');
 
   const { error: memberError } = await supabase
     .from('flat_members')
     .insert({ flat_id: flat.id, user_id: userId, role: 'member' });
 
-  if (memberError) throw memberError;
-  return flat as Flat;
+  if (memberError) {
+    if (memberError.code === '23505') throw new Error("You're already in this flat.");
+    throw memberError;
+  }
+  return flat;
 }
 
 export async function renameFlat(flatId: string, name: string) {
