@@ -34,7 +34,7 @@ import { addTransaction, fetchCategories, type Category } from '@/lib/transactio
 import { CategoryIcon } from '@/components/category-icon';
 import { presentScanSheet } from '@/lib/document-scan';
 import { fetchFlatMembers, fetchMyFlat, type FlatMember } from '@/lib/flats';
-import { fetchFriends, type Friend } from '@/lib/friendships';
+import { fetchFriends, fetchIncomingRequests, respondToFriendRequest, sendFriendRequest, type Friend, type FriendRequest } from '@/lib/friendships';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -117,10 +117,23 @@ export function SplitBillModal({
 
   const [flatMembers, setFlatMembers] = useState<FlatMember[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [guestName, setGuestName] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [addingByEmail, setAddingByEmail] = useState(false);
+  // Surfaced right after adding someone by email who isn't already a
+  // friend -- a one-tap way to fold them into the persistent friends list
+  // so the next split with them doesn't need their email typed in again.
+  // 'accept' instead of 'add' when they'd already sent *us* a request --
+  // sending a second one the normal way just errors as already-pending,
+  // so this surfaces the real action (accept theirs) instead.
+  const [friendPrompt, setFriendPrompt] = useState<
+    | { mode: 'add'; userId: string; email: string; label: string }
+    | { mode: 'accept'; friendshipId: string; label: string }
+    | null
+  >(null);
+  const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
 
   const [splitMode, setSplitMode] = useState<SplitMode>('equal');
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
@@ -143,6 +156,7 @@ export function SplitBillModal({
     setItems([]);
     setGuestName('');
     setEmailInput('');
+    setFriendPrompt(null);
     setCategoryId(null);
     setShowCategoryPicker(false);
     setCategorySearch('');
@@ -166,9 +180,11 @@ export function SplitBillModal({
         .then((members) => members.filter((m) => m.user_id !== userId))
         .catch(() => [] as FlatMember[]),
       fetchFriends(userId).catch(() => [] as Friend[]),
-    ]).then(([members, friendsList]) => {
+      fetchIncomingRequests(userId).catch(() => [] as FriendRequest[]),
+    ]).then(([members, friendsList, incoming]) => {
       setFlatMembers(members);
       setFriends(friendsList);
+      setIncomingRequests(incoming);
 
       if (!draft || draft.participants.length === 0) return;
 
@@ -262,16 +278,43 @@ export function SplitBillModal({
         setError("That's you.");
         return;
       }
+      const email = emailInput.trim();
       addParticipant({
         key: `user:${foundUserId}`,
         userId: foundUserId,
-        label: emailInput.trim(),
+        label: email,
       });
+      if (!friends.some((f) => f.userId === foundUserId)) {
+        const theirRequest = incomingRequests.find((r) => r.otherUserId === foundUserId);
+        setFriendPrompt(
+          theirRequest
+            ? { mode: 'accept', friendshipId: theirRequest.id, label: email }
+            : { mode: 'add', userId: foundUserId, email, label: email },
+        );
+      }
       setEmailInput('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to look up that email.');
     } finally {
       setAddingByEmail(false);
+    }
+  };
+
+  const handleAddFriendFromPrompt = async () => {
+    if (!friendPrompt) return;
+    setSendingFriendRequest(true);
+    try {
+      if (friendPrompt.mode === 'accept') {
+        await respondToFriendRequest(friendPrompt.friendshipId, true);
+        setIncomingRequests((prev) => prev.filter((r) => r.id !== friendPrompt.friendshipId));
+      } else if (userId) {
+        await sendFriendRequest(userId, friendPrompt.email);
+      }
+      setFriendPrompt(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send friend request.');
+    } finally {
+      setSendingFriendRequest(false);
     }
   };
 
@@ -810,6 +853,40 @@ export function SplitBillModal({
                     )}
                   </Pressable>
                 </View>
+
+                {friendPrompt && (
+                  <View className="flex-row items-center gap-2 rounded-lg px-3 py-2 bg-tabby-50 dark:bg-tabby-800 border border-tabby-200 dark:border-tabby-700">
+                    <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-200 flex-1">
+                      {friendPrompt.mode === 'accept'
+                        ? `${friendPrompt.label} already sent you a friend request.`
+                        : `Add ${friendPrompt.label} as a friend so you don't have to look them up again?`}
+                    </Text>
+                    <Pressable
+                      onPress={handleAddFriendFromPrompt}
+                      disabled={sendingFriendRequest}
+                      style={pressFeedback}
+                      accessibilityRole="button"
+                      accessibilityLabel={friendPrompt.mode === 'accept' ? `Accept ${friendPrompt.label}` : `Add ${friendPrompt.label} as a friend`}
+                      className="px-2.5 py-1 rounded-md bg-tabby-600 dark:bg-white"
+                    >
+                      {sendingFriendRequest ? (
+                        <ActivityIndicator size="small" color={isDark ? '#2B1810' : 'white'} />
+                      ) : (
+                        <Text className="font-nunito-semibold text-xs text-white dark:text-tabby-900">
+                          {friendPrompt.mode === 'accept' ? 'Accept' : 'Add'}
+                        </Text>
+                      )}
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setFriendPrompt(null)}
+                      style={pressFeedback}
+                      accessibilityRole="button"
+                      accessibilityLabel="Dismiss"
+                    >
+                      <Feather name="x" size={14} color={isDark ? '#E8C39E' : '#9ca3af'} />
+                    </Pressable>
+                  </View>
+                )}
 
                 <View className="flex-row gap-2">
                   <TextInput
