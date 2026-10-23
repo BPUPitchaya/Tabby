@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthScreen } from '@/components/auth-screen';
 import { useAuth } from '@/lib/auth-context';
-import { fetchMyFlat, joinFlat, type Flat } from '@/lib/flats';
+import { fetchFlatByInviteCode, fetchMyFlats, joinFlat, type Flat } from '@/lib/flats';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -25,15 +25,17 @@ export default function JoinScreen() {
 
   const userId = session?.user.id;
 
-  // If they're already in a flat, joining a second one isn't supported
-  // (the schema is one flat per user) -- surface that plainly instead of
-  // letting the insert fail with a raw constraint error.
+  // Belonging to other flats is fine (multi-flat is supported) -- the
+  // only thing worth checking ahead of time is whether this user is
+  // already a member of THIS specific flat, so re-tapping an old invite
+  // link shows a friendly "you're already in" instead of a raw
+  // constraint error from the insert.
   const checkExisting = useCallback(async () => {
-    if (!userId) return;
-    const flat = await fetchMyFlat(userId);
-    setExistingFlat(flat);
+    if (!userId || !code) return;
+    const [targetFlat, myFlats] = await Promise.all([fetchFlatByInviteCode(code), fetchMyFlats(userId)]);
+    setExistingFlat(targetFlat && myFlats.some((f) => f.id === targetFlat.id) ? targetFlat : null);
     setStatus('ready');
-  }, [userId]);
+  }, [userId, code]);
 
   useEffect(() => {
     if (userId) checkExisting();
@@ -91,10 +93,10 @@ export default function JoinScreen() {
     return (
       <SafeAreaView className="flex-1 bg-tabby-50 dark:bg-tabby-900 px-6 justify-center gap-6">
         <Text className="font-fredoka-semibold text-xl text-center dark:text-white">
-          You&apos;re already in a flat
+          You&apos;re already in this flat
         </Text>
         <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-center text-sm">
-          Leave &ldquo;{existingFlat.name}&rdquo; from the Flat tab first if you want to join a different one.
+          You&apos;re already a member of &ldquo;{existingFlat.name}&rdquo;.
         </Text>
         <Pressable
           onPress={() => router.replace('/flat')}
