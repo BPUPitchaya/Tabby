@@ -27,7 +27,12 @@ import { loadActiveFlatId, saveActiveFlatId } from '@/lib/active-flat-preference
 import { useAuth } from '@/lib/auth-context';
 import { cancelChoreReminder, requestChoreNotificationPermission, scheduleChoreReminder } from '@/lib/chore-notifications';
 import { currentAssigneeId, fetchChores, getChoreCycle, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
-import { fetchFlatBills, isFlatBillDoneThisCycle, type FlatBill } from '@/lib/flat-bills';
+import {
+  cancelFlatBillReminder,
+  requestFlatBillNotificationPermission,
+  scheduleFlatBillReminder,
+} from '@/lib/flat-bill-notifications';
+import { fetchFlatBills, getFlatBillCycle, isFlatBillDoneThisCycle, type FlatBill } from '@/lib/flat-bills';
 import {
   loadFlatTrendPeriodPreference,
   setFlatTrendPeriodPreference,
@@ -414,6 +419,26 @@ function FlatView({
               return scheduleChoreReminder(chore.id, chore.name, cycle.startDate).catch(() => {});
             }
             return cancelChoreReminder(chore.id).catch(() => {});
+          }),
+        );
+      } catch {
+        // reminders just won't fire -- not worth blocking the load over
+      }
+
+      // Same reminder-sync idea as chores above, but no "whose turn"
+      // check -- a flat bill has no single assignee, any member can
+      // confirm it, so every member's own device independently reminds
+      // itself for a due, unconfirmed cycle.
+      try {
+        const billsGranted = await requestFlatBillNotificationPermission();
+        await Promise.all(
+          flatBillList.map((bill) => {
+            const done = isFlatBillDoneThisCycle(bill);
+            const cycle = getFlatBillCycle(bill);
+            if (billsGranted && !done && cycle) {
+              return scheduleFlatBillReminder(bill.id, bill.name, cycle.startDate).catch(() => {});
+            }
+            return cancelFlatBillReminder(bill.id).catch(() => {});
           }),
         );
       } catch {
