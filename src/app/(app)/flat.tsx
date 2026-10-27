@@ -143,6 +143,71 @@ function Avatar({
   );
 }
 
+// How many of the most recent shared expenses show inline before
+// "Recent Activity" hands off to the full-history modal -- a flat with
+// months of logged rent/bills otherwise dumps its entire history into
+// the main scroll every time.
+const RECENT_ACTIVITY_LIMIT = 5;
+
+// Shared between the capped inline list and the full-history modal, so
+// the two never drift out of visual sync with each other.
+function ExpenseRow({
+  expense,
+  canEdit,
+  isEditing,
+  onPress,
+  onDelete,
+}: {
+  expense: SharedExpense;
+  canEdit: boolean;
+  isEditing: boolean;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Animated.View entering={FadeIn.duration(200)}>
+      <Pressable
+        onPress={() => canEdit && onPress()}
+        disabled={!canEdit}
+        style={pressFeedback}
+        accessibilityRole="button"
+        accessibilityLabel={canEdit ? `Edit shared expense ${expense.description ?? ''}` : undefined}
+        className={`flex-row items-center gap-3 rounded-2xl px-4 py-3 ${
+          isEditing
+            ? 'bg-tabby-50 dark:bg-tabby-800 border border-tabby-300 dark:border-tabby-600'
+            : 'bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700'
+        }`}
+      >
+        <Avatar
+          name={expense.profiles?.display_name ?? 'Deleted User'}
+          colorKey={expense.paid_by ?? 'deleted'}
+          unknown={!expense.profiles?.display_name}
+        />
+        <View className="flex-1">
+          <Text className="font-nunito-semibold dark:text-white">{expense.description || 'Shared expense'}</Text>
+          <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
+            Paid by {expense.profiles?.display_name ?? 'Deleted User'} · {expense.occurred_at}
+          </Text>
+        </View>
+        <Text className="font-nunito-bold mr-3 dark:text-white">${expense.amount.toFixed(2)}</Text>
+        {canEdit && (
+          <Pressable
+            onPress={(ev) => {
+              ev.stopPropagation();
+              onDelete();
+            }}
+            style={pressFeedback}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete shared expense ${expense.description ?? ''}`}
+          >
+            <Text className="font-nunito text-red-500 dark:text-red-400">Delete</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
@@ -271,6 +336,7 @@ function FlatView({
   const [showChores, setShowChores] = useState(false);
   const [showFlatBills, setShowFlatBills] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [showExpenseHistory, setShowExpenseHistory] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
   const [flatBills, setFlatBills] = useState<FlatBill[]>([]);
   const [spendTrend, setSpendTrend] = useState<FlatSpendTrend | null>(null);
@@ -986,57 +1052,34 @@ function FlatView({
             </View>
 
             <View className="gap-2">
-              <SectionLabel>RECENT ACTIVITY</SectionLabel>
+              <View className="flex-row items-center justify-between">
+                <SectionLabel>RECENT ACTIVITY</SectionLabel>
+                {expenses.length > RECENT_ACTIVITY_LIMIT && (
+                  <Pressable
+                    onPress={() => setShowExpenseHistory(true)}
+                    style={pressFeedback}
+                    accessibilityRole="button"
+                    accessibilityLabel="View all shared expenses"
+                  >
+                    <Text className="font-nunito text-sm text-gray-500 dark:text-tabby-300">
+                      View all ({expenses.length})
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
               {expenses.length === 0 && (
                 <Text className="font-nunito text-gray-500 dark:text-tabby-300">No shared expenses yet.</Text>
               )}
-              {expenses.map((e) => {
-                const canEdit = e.paid_by === userId;
-                return (
-                  <Animated.View key={e.id} entering={FadeIn.duration(200)}>
-                    <Pressable
-                      onPress={() => canEdit && handleStartEditExpense(e)}
-                      disabled={!canEdit}
-                      style={pressFeedback}
-                      accessibilityRole="button"
-                      accessibilityLabel={canEdit ? `Edit shared expense ${e.description ?? ''}` : undefined}
-                      className={`flex-row items-center gap-3 rounded-2xl px-4 py-3 ${
-                        editingExpenseId === e.id
-                          ? 'bg-tabby-50 dark:bg-tabby-800 border border-tabby-300 dark:border-tabby-600'
-                          : 'bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700'
-                      }`}
-                    >
-                      <Avatar
-                        name={e.profiles?.display_name ?? 'Deleted User'}
-                        colorKey={e.paid_by ?? 'deleted'}
-                        unknown={!e.profiles?.display_name}
-                      />
-                      <View className="flex-1">
-                        <Text className="font-nunito-semibold dark:text-white">
-                          {e.description || 'Shared expense'}
-                        </Text>
-                        <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm">
-                          Paid by {e.profiles?.display_name ?? 'Deleted User'} · {e.occurred_at}
-                        </Text>
-                      </View>
-                      <Text className="font-nunito-bold mr-3 dark:text-white">${e.amount.toFixed(2)}</Text>
-                      {canEdit && (
-                        <Pressable
-                          onPress={(ev) => {
-                            ev.stopPropagation();
-                            handleDeleteExpense(e);
-                          }}
-                          style={pressFeedback}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Delete shared expense ${e.description ?? ''}`}
-                        >
-                          <Text className="font-nunito text-red-500 dark:text-red-400">Delete</Text>
-                        </Pressable>
-                      )}
-                    </Pressable>
-                  </Animated.View>
-                );
-              })}
+              {expenses.slice(0, RECENT_ACTIVITY_LIMIT).map((e) => (
+                <ExpenseRow
+                  key={e.id}
+                  expense={e}
+                  canEdit={e.paid_by === userId}
+                  isEditing={editingExpenseId === e.id}
+                  onPress={() => handleStartEditExpense(e)}
+                  onDelete={() => handleDeleteExpense(e)}
+                />
+              ))}
             </View>
 
             {/* Same enclosed-border treatment as the personal dashboard's
@@ -1120,6 +1163,50 @@ function FlatView({
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Full shared-expense history -- "Recent Activity" only ever shows
+          the RECENT_ACTIVITY_LIMIT most recent inline; this is the
+          unbounded list behind "View all". Tapping a row to edit closes
+          this modal in the same state update that opens the edit one
+          (never both visible={true} at once) -- two stacked RN Modals
+          silently fail to present the top one on iOS (see
+          transactions.tsx's own DateTimePicker comment for the same
+          constraint). */}
+      <Modal visible={showExpenseHistory} animationType="slide" onRequestClose={() => setShowExpenseHistory(false)}>
+        <SafeAreaProvider>
+          <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
+            <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-tabby-700">
+              <Pressable
+                onPress={() => setShowExpenseHistory(false)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <Feather name="chevron-left" size={20} color={isDark ? '#E8C39E' : '#374151'} />
+              </Pressable>
+              <Text className="font-fredoka-semibold text-lg dark:text-white">All Activity</Text>
+              <View style={{ width: 20 }} />
+            </View>
+            <FlatList
+              data={expenses}
+              keyExtractor={(e) => e.id}
+              contentContainerStyle={{ padding: 16, gap: 10 }}
+              renderItem={({ item: e }) => (
+                <ExpenseRow
+                  expense={e}
+                  canEdit={e.paid_by === userId}
+                  isEditing={editingExpenseId === e.id}
+                  onPress={() => {
+                    setShowExpenseHistory(false);
+                    handleStartEditExpense(e);
+                  }}
+                  onDelete={() => handleDeleteExpense(e)}
+                />
+              )}
+            />
+          </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
 
       {/* Split an Expense -- the form that used to permanently occupy the
