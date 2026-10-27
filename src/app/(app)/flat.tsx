@@ -37,6 +37,7 @@ import {
   deleteSharedExpense,
   fetchExpenseSplitUserIds,
   fetchFlatMembers,
+  fetchFlatMonthlyTotals,
   fetchMyFlats,
   fetchSharedExpenses,
   joinFlat,
@@ -48,8 +49,10 @@ import {
   type Flat,
   type FlatHealth,
   type FlatMember,
+  type FlatMonthlyTotal,
   type SharedExpense,
 } from '@/lib/flats';
+import { TrendChart } from '@/components/trend-chart';
 
 // Shared press-feedback style: a quick opacity dip on tap, applied via the
 // style prop (not className) since it needs the live `pressed` state.
@@ -239,6 +242,7 @@ function FlatView({
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
   const [flatBills, setFlatBills] = useState<FlatBill[]>([]);
+  const [monthlyTotals, setMonthlyTotals] = useState<FlatMonthlyTotal[]>([]);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -251,19 +255,22 @@ function FlatView({
     if (!userId) return;
     try {
       setError(null);
-      const [memberList, expenseList, balanceList, healthResult, choreList, flatBillList] = await Promise.all([
-        fetchFlatMembers(flat.id),
-        fetchSharedExpenses(flat.id),
-        computeBalances(flat.id, userId),
-        computeFlatHealth(flat.id),
-        fetchChores(flat.id),
-        fetchFlatBills(flat.id),
-      ]);
+      const [memberList, expenseList, balanceList, healthResult, choreList, flatBillList, monthlyTotalList] =
+        await Promise.all([
+          fetchFlatMembers(flat.id),
+          fetchSharedExpenses(flat.id),
+          computeBalances(flat.id, userId),
+          computeFlatHealth(flat.id),
+          fetchChores(flat.id),
+          fetchFlatBills(flat.id),
+          fetchFlatMonthlyTotals(flat.id),
+        ]);
       setMembers(memberList);
       setExpenses(expenseList);
       setBalances(balanceList);
       setChores(choreList);
       setFlatBills(flatBillList);
+      setMonthlyTotals(monthlyTotalList);
       setHealth(healthResult);
 
       // Keep each chore's on-device reminder in sync with whose turn it
@@ -977,6 +984,18 @@ function FlatView({
                   </Animated.View>
                 );
               })}
+            </View>
+
+            {/* Same enclosed-border treatment as the personal dashboard's
+                own 6-month trend card -- the flat health score above is a
+                current-snapshot only, this is the history view. Always
+                monthly (unlike the personal chart's weekly/monthly
+                'auto' mode) -- a flat's shared costs are inherently a
+                monthly rhythm (rent, power, internet), and there's no
+                equivalent pay-cycle concept here to make weekly useful. */}
+            <View className="border border-tabby-100 dark:border-tabby-700 rounded-3xl p-4 gap-3">
+              <Text className="font-nunito-bold text-lg dark:text-white">Last 6 months</Text>
+              <TrendChart data={monthlyTotals.map((m) => ({ key: m.month, label: m.label, total: m.total }))} />
             </View>
           </View>
         }
