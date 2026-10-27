@@ -115,12 +115,13 @@ export async function deleteFlat(flatId: string) {
   if (error) throw error;
 }
 
-export async function leaveFlat(flatId: string, userId: string) {
-  const { error } = await supabase
-    .from('flat_members')
-    .delete()
-    .eq('flat_id', flatId)
-    .eq('user_id', userId);
+// RPC rather than a plain delete -- if the leaving user is the flat's
+// only admin, this atomically promotes the longest-standing other member
+// to admin first, so the flat is never left with zero admins (nothing
+// could rename/delete it or manage chores otherwise). See
+// 0045_safe_leave_flat.sql.
+export async function leaveFlat(flatId: string) {
+  const { error } = await supabase.rpc('leave_flat', { p_flat_id: flatId });
   if (error) throw error;
 }
 
