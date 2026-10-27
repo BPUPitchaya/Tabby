@@ -58,6 +58,8 @@ From the Expo CLI output you can open the app in:
 
 Some native modules (e.g. `expo-sharing`, notifications) aren't available in Expo Go — use `npm run ios` / `npm run android` for a full dev build if a feature doesn't seem to work in Expo Go.
 
+If you typecheck or lint before ever running `npx expo start`, TypeScript will fail on `Cannot find module ... for side-effect import of '@/global.css'`. That's expected — `expo-env.d.ts` is gitignored (Expo's own convention) and only gets written the first time the dev server runs. Start the dev server once, or see `.github/workflows/ci.yml` for how CI generates it without one.
+
 ### Backend (Supabase)
 
 The database schema lives in `supabase/migrations/` and the two Edge Functions (`ai-proxy`, `delete-account`) live in `supabase/functions/`. If you're pointing at your own Supabase project rather than an existing one, apply the migrations and deploy the functions via the [Supabase CLI](https://supabase.com/docs/guides/cli) or the Supabase MCP server.
