@@ -268,16 +268,17 @@ function FlatView({
       // hiccup shouldn't block loading the rest of the screen.
       try {
         const granted = await requestChoreNotificationPermission();
-        for (const chore of choreList) {
-          const isMine = currentAssigneeId(chore) === userId;
-          const done = isChoreDoneThisCycle(chore);
-          const cycle = getChoreCycle(chore);
-          if (granted && isMine && !done && cycle) {
-            await scheduleChoreReminder(chore.id, chore.name, cycle.startDate).catch(() => {});
-          } else {
-            await cancelChoreReminder(chore.id).catch(() => {});
-          }
-        }
+        await Promise.all(
+          choreList.map((chore) => {
+            const isMine = currentAssigneeId(chore) === userId;
+            const done = isChoreDoneThisCycle(chore);
+            const cycle = getChoreCycle(chore);
+            if (granted && isMine && !done && cycle) {
+              return scheduleChoreReminder(chore.id, chore.name, cycle.startDate).catch(() => {});
+            }
+            return cancelChoreReminder(chore.id).catch(() => {});
+          }),
+        );
       } catch {
         // reminders just won't fire -- not worth blocking the load over
       }
