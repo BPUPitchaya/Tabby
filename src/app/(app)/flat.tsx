@@ -54,7 +54,9 @@ import {
   joinFlat,
   leaveFlat,
   recordSettlement,
+  removeMember,
   renameFlat,
+  updateMemberRole,
   updateSharedExpense,
   type Balance,
   type Flat,
@@ -672,6 +674,46 @@ function FlatView({
     }
   };
 
+  // Never targets the acting admin's own row (the member list this maps
+  // over already excludes `userId` -- see the Manage Members section
+  // below) -- see updateMemberRole/removeMember in flats.ts for why that
+  // alone keeps a flat from ever ending up with zero admins here.
+  const handleToggleMemberRole = async (member: FlatMember) => {
+    setSettingsBusy(true);
+    setError(null);
+    try {
+      await updateMemberRole(flat.id, member.user_id, member.role === 'admin' ? 'member' : 'admin');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update that member.');
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleRemoveMember = (member: FlatMember) => {
+    const name = member.profiles?.display_name ?? 'this person';
+    Alert.alert('Remove from flat?', `${name} will need a new invite to rejoin "${flat.name}" later.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          setSettingsBusy(true);
+          setError(null);
+          try {
+            await removeMember(flat.id, member.user_id);
+            await load();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to remove that member.');
+          } finally {
+            setSettingsBusy(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleAddByEmail = async () => {
     if (!addEmail.trim()) return;
     setSettingsBusy(true);
@@ -837,6 +879,48 @@ function FlatView({
                     </Pressable>
                   </View>
                 </View>
+
+                {isAdmin && members.filter((m) => m.user_id !== userId).length > 0 && (
+                  <View className="gap-2">
+                    <Text className="font-nunito-semibold text-sm dark:text-white">Manage members</Text>
+                    <View className="gap-1.5">
+                      {members
+                        .filter((m) => m.user_id !== userId)
+                        .map((m) => (
+                          <View
+                            key={m.user_id}
+                            className="flex-row items-center justify-between bg-white dark:bg-tabby-900 border border-gray-200 dark:border-tabby-700 rounded-lg px-3 py-2"
+                          >
+                            <Text className="font-nunito-medium text-sm dark:text-white flex-1">
+                              {m.profiles?.display_name ?? 'Unknown'}
+                            </Text>
+                            <Pressable
+                              onPress={() => handleToggleMemberRole(m)}
+                              disabled={settingsBusy}
+                              style={pressFeedback}
+                              accessibilityRole="button"
+                              accessibilityLabel={m.role === 'admin' ? `Demote ${m.profiles?.display_name ?? ''}` : `Promote ${m.profiles?.display_name ?? ''}`}
+                              className="px-2.5 py-1"
+                            >
+                              <Text className="font-nunito-semibold text-xs text-tabby-700 dark:text-tabby-200">
+                                {m.role === 'admin' ? 'Demote' : 'Promote'}
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => handleRemoveMember(m)}
+                              disabled={settingsBusy}
+                              style={pressFeedback}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Remove ${m.profiles?.display_name ?? ''}`}
+                              className="px-2.5 py-1"
+                            >
+                              <Text className="font-nunito-semibold text-xs text-rust-600">Remove</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                    </View>
+                  </View>
+                )}
 
                 {isAdmin && (
                   <View className="gap-2">

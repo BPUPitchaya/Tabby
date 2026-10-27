@@ -126,6 +126,25 @@ export async function leaveFlat(flatId: string) {
   if (error) throw error;
 }
 
+// Admin-only (see 0047_admin_member_management.sql); the caller (flat.tsx)
+// never targets the acting admin's own row, so this can never leave a
+// flat with zero admins -- no RPC-level safety needed the way leaveFlat's
+// does, since a plain update/delete under that migration's policies is
+// already safe by construction.
+export async function updateMemberRole(flatId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
+  const { error } = await supabase
+    .from('flat_members')
+    .update({ role })
+    .eq('flat_id', flatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function removeMember(flatId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('flat_members').delete().eq('flat_id', flatId).eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function addMemberByEmail(flatId: string, email: string) {
   const { data: foundUserId, error: rpcError } = await supabase.rpc('find_user_id_by_email', {
     target_email: email.trim(),
