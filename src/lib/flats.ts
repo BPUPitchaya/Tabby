@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { MONTH_LABELS } from '@/lib/dashboard';
 
 export type FlatMember = {
   user_id: string;
@@ -474,4 +475,52 @@ export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
     settlements ?? [],
     totalSpend
   );
+}
+
+export type FlatMonthlyTotal = { month: string; label: string; total: number };
+
+/**
+ * Pure calculation, no network calls -- same split-for-testability
+ * pattern as computeDashboardFromRows/computeBalancesFromData. Always
+ * the full last 6 calendar months, including months with zero spend,
+ * same shape as the personal dashboard's trend chart -- this is a
+ * flat-wide history view, not scoped to a pay cycle the way the
+ * dashboard's "current period" figures are.
+ */
+export function computeFlatMonthlyTotalsFromRows(
+  rows: { amount: number; occurred_at: string }[],
+  now: Date = new Date(),
+): FlatMonthlyTotal[] {
+  const monthlyMap = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.occurred_at.slice(0, 7); // 'YYYY-MM'
+    monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + row.amount);
+  }
+
+  const monthlyTotals: FlatMonthlyTotal[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    monthlyTotals.push({
+      month: key,
+      label: MONTH_LABELS[d.getMonth()],
+      total: Math.round((monthlyMap.get(key) ?? 0) * 100) / 100,
+    });
+  }
+  return monthlyTotals;
+}
+
+export async function fetchFlatMonthlyTotals(flatId: string): Promise<FlatMonthlyTotal[]> {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+  sixMonthsAgo.setDate(1);
+
+  const { data, error } = await supabase
+    .from('shared_expenses')
+    .select('amount, occurred_at')
+    .eq('flat_id', flatId)
+    .gte('occurred_at', sixMonthsAgo.toISOString().slice(0, 10));
+
+  if (error) throw error;
+  return computeFlatMonthlyTotalsFromRows(data ?? []);
 }

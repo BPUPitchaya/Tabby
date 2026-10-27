@@ -7,6 +7,7 @@
 import {
   computeBalancesFromData,
   computeFlatHealthFromData,
+  computeFlatMonthlyTotalsFromRows,
   type FlatMember,
   type SettlementRow,
   type SplitRow,
@@ -186,5 +187,41 @@ describe('computeFlatHealthFromData', () => {
     const health = computeFlatHealthFromData(FLAT_ID, splits, [], 100);
     expect(health.score).toBe(0);
     expect(health.label).toBe('Needs attention');
+  });
+});
+
+describe('computeFlatMonthlyTotalsFromRows', () => {
+  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026 -- same fixture date as dashboard.test.ts
+
+  it('returns 6 months including months with zero spend, oldest first', () => {
+    const result = computeFlatMonthlyTotalsFromRows([], now);
+    expect(result.map((m) => m.month)).toEqual([
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+      '2026-10',
+    ]);
+    expect(result.every((m) => m.total === 0)).toBe(true);
+  });
+
+  it('sums shared expenses into the correct month bucket', () => {
+    const result = computeFlatMonthlyTotalsFromRows(
+      [
+        { amount: 100, occurred_at: '2026-10-01' },
+        { amount: 50, occurred_at: '2026-10-20' },
+        { amount: 200, occurred_at: '2026-09-15' },
+      ],
+      now,
+    );
+    expect(result.find((m) => m.month === '2026-10')?.total).toBe(150);
+    expect(result.find((m) => m.month === '2026-09')?.total).toBe(200);
+    expect(result.find((m) => m.month === '2026-08')?.total).toBe(0);
+  });
+
+  it('ignores expenses older than the 6-month window', () => {
+    const result = computeFlatMonthlyTotalsFromRows([{ amount: 999, occurred_at: '2026-01-01' }], now);
+    expect(result.every((m) => m.total === 0)).toBe(true);
   });
 });

@@ -61,7 +61,7 @@ export type DashboardRow = {
   categories: { name: string; icon: string | null } | null;
 };
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Monday of the week containing the given local-calendar date string.
 function mondayOf(dateStr: string): Date {
