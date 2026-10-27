@@ -18,6 +18,7 @@ import { useFocusEffect } from 'expo-router';
 
 import { logFlatTabView } from '@/lib/analytics';
 import { ChoresModal } from '@/components/chores-modal';
+import { FlatBillsModal } from '@/components/flat-bills-modal';
 import { FlatHelpModal } from '@/components/flat-help-modal';
 import { FlatSwitcherModal } from '@/components/flat-switcher-modal';
 import { parseNaturalLanguageExpenses, type ParsedExpense } from '@/lib/ai';
@@ -25,6 +26,7 @@ import { loadActiveFlatId, saveActiveFlatId } from '@/lib/active-flat-preference
 import { useAuth } from '@/lib/auth-context';
 import { cancelChoreReminder, requestChoreNotificationPermission, scheduleChoreReminder } from '@/lib/chore-notifications';
 import { currentAssigneeId, fetchChores, getChoreCycle, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
+import { fetchFlatBills, isFlatBillDoneThisCycle, type FlatBill } from '@/lib/flat-bills';
 import {
   addMemberByEmail,
   addSharedExpense,
@@ -233,30 +235,35 @@ function FlatView({
   const [showHelp, setShowHelp] = useState(false);
   const [showFlatSwitcher, setShowFlatSwitcher] = useState(false);
   const [showChores, setShowChores] = useState(false);
+  const [showFlatBills, setShowFlatBills] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
+  const [flatBills, setFlatBills] = useState<FlatBill[]>([]);
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
 
   const isAdmin = members.find((m) => m.user_id === userId)?.role === 'admin';
   const pendingChoreCount = chores.filter((c) => !isChoreDoneThisCycle(c)).length;
+  const pendingFlatBillCount = flatBills.filter((b) => !isFlatBillDoneThisCycle(b)).length;
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
       setError(null);
-      const [memberList, expenseList, balanceList, healthResult, choreList] = await Promise.all([
+      const [memberList, expenseList, balanceList, healthResult, choreList, flatBillList] = await Promise.all([
         fetchFlatMembers(flat.id),
         fetchSharedExpenses(flat.id),
         computeBalances(flat.id, userId),
         computeFlatHealth(flat.id),
         fetchChores(flat.id),
+        fetchFlatBills(flat.id),
       ]);
       setMembers(memberList);
       setExpenses(expenseList);
       setBalances(balanceList);
       setChores(choreList);
+      setFlatBills(flatBillList);
       setHealth(healthResult);
 
       // Keep each chore's on-device reminder in sync with whose turn it
@@ -845,6 +852,33 @@ function FlatView({
                       : 'All done'}
                 </Text>
               </Pressable>
+
+              <Pressable
+                onPress={() => setShowFlatBills(true)}
+                style={pressFeedback}
+                accessibilityRole="button"
+                accessibilityLabel="Flat Bills"
+                className="flex-1 gap-2 rounded-2xl bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 p-3.5"
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="w-9 h-9 rounded-full bg-white dark:bg-tabby-700 items-center justify-center">
+                    <Feather name="repeat" size={16} color={isDark ? '#E8C39E' : '#6B4420'} />
+                  </View>
+                  <Feather name="chevron-right" size={14} color={isDark ? '#6B4420' : '#d1d5db'} />
+                </View>
+                <Text className="font-nunito-medium text-sm dark:text-white">Flat Bills</Text>
+                <Text
+                  className={`font-nunito-bold text-xs ${
+                    pendingFlatBillCount > 0 ? 'text-rust-600 dark:text-rust-400' : 'text-sage-700 dark:text-sage-400'
+                  }`}
+                >
+                  {flatBills.length === 0
+                    ? 'Optional'
+                    : pendingFlatBillCount > 0
+                      ? `${pendingFlatBillCount} pending`
+                      : 'All logged'}
+                </Text>
+              </Pressable>
             </View>
 
             <View className="gap-2">
@@ -1191,6 +1225,16 @@ function FlatView({
         members={members}
         isAdmin={isAdmin}
         currentUserId={userId ?? ''}
+      />
+
+      <FlatBillsModal
+        visible={showFlatBills}
+        onClose={() => {
+          setShowFlatBills(false);
+          load();
+        }}
+        flatId={flat.id}
+        isAdmin={isAdmin}
       />
     </SafeAreaView>
   );
