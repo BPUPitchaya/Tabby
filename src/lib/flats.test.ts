@@ -8,6 +8,7 @@ import {
   computeBalancesFromData,
   computeFlatHealthFromData,
   computeFlatMonthlyTotalsFromRows,
+  computeFlatSpendTrendFromRows,
   type FlatMember,
   type SettlementRow,
   type SplitRow,
@@ -223,5 +224,65 @@ describe('computeFlatMonthlyTotalsFromRows', () => {
   it('ignores expenses older than the 6-month window', () => {
     const result = computeFlatMonthlyTotalsFromRows([{ amount: 999, occurred_at: '2026-01-01' }], now);
     expect(result.every((m) => m.total === 0)).toBe(true);
+  });
+});
+
+describe('computeFlatSpendTrendFromRows', () => {
+  // Thu Oct 15, 2026 -- same fixture date as above; the Monday of this
+  // week is Oct 12, the most recent (newest) bucket in every series.
+  const now = new Date(2026, 9, 15);
+
+  it('builds 6 weekly buckets ending on the current week’s Monday', () => {
+    const { weekly } = computeFlatSpendTrendFromRows([], now);
+    expect(weekly.map((p) => p.key)).toEqual([
+      '2026-09-07',
+      '2026-09-14',
+      '2026-09-21',
+      '2026-09-28',
+      '2026-10-05',
+      '2026-10-12',
+    ]);
+    expect(weekly.every((p) => p.total === 0)).toBe(true);
+  });
+
+  it('puts a same-week expense in the most recent weekly bucket', () => {
+    const { weekly } = computeFlatSpendTrendFromRows([{ amount: 80, occurred_at: '2026-10-14' }], now);
+    expect(weekly[5].total).toBe(80); // 2026-10-12, this week
+    expect(weekly[4].total).toBe(0);
+  });
+
+  it('puts a two-week-old expense two weekly buckets back', () => {
+    const { weekly } = computeFlatSpendTrendFromRows([{ amount: 50, occurred_at: '2026-10-01' }], now);
+    expect(weekly[3].total).toBe(50); // 2026-09-28 bucket (14 days before this week's Monday)
+    expect(weekly[5].total).toBe(0);
+  });
+
+  it('builds 6 biweekly buckets, each spanning two calendar weeks', () => {
+    const { biweekly } = computeFlatSpendTrendFromRows([], now);
+    expect(biweekly.map((p) => p.key)).toEqual([
+      '2026-08-03',
+      '2026-08-17',
+      '2026-08-31',
+      '2026-09-14',
+      '2026-09-28',
+      '2026-10-12',
+    ]);
+  });
+
+  it('groups two consecutive weeks into the same biweekly bucket', () => {
+    const { biweekly } = computeFlatSpendTrendFromRows(
+      [
+        { amount: 40, occurred_at: '2026-10-14' }, // this week
+        { amount: 60, occurred_at: '2026-10-06' }, // last week
+      ],
+      now,
+    );
+    expect(biweekly[5].total).toBe(100); // both land in the current fortnight
+  });
+
+  it('still computes the same monthly totals as computeFlatMonthlyTotalsFromRows', () => {
+    const rows = [{ amount: 500, occurred_at: '2026-10-01' }];
+    const { monthly } = computeFlatSpendTrendFromRows(rows, now);
+    expect(monthly).toEqual(computeFlatMonthlyTotalsFromRows(rows, now));
   });
 });

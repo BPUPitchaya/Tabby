@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { MONTH_LABELS } from '@/lib/dashboard';
+import { mondayOf, MONTH_LABELS, toDateKey } from '@/lib/dashboard';
 
 export type FlatMember = {
   user_id: string;
@@ -510,17 +510,103 @@ export function computeFlatMonthlyTotalsFromRows(
   return monthlyTotals;
 }
 
-export async function fetchFlatMonthlyTotals(flatId: string): Promise<FlatMonthlyTotal[]> {
+export type FlatTrendPoint = { key: string; label: string; total: number };
+
+export type FlatSpendTrend = {
+  weekly: FlatTrendPoint[];
+  biweekly: FlatTrendPoint[];
+  monthly: FlatMonthlyTotal[];
+  // Earliest shared_expense ever logged for this flat, regardless of the
+  // 6-month fetch window below -- used to resolve 'auto' (see
+  // resolveFlatTrendView in flat.tsx): a brand-new flat should default
+  // to weekly, not a near-empty 6-month chart.
+  earliestOccurredAt: string | null;
+};
+
+// Groups rows into `count` fixed-length windows of `weekSpan` calendar
+// weeks each, anchored to the Monday of the CURRENT week (not a rolling
+// "last N days ending today") -- same calendar-week definition
+// mondayOf/toDateKey already give the personal dashboard's own weekly
+// chart, just stepping 2 weeks at a time for the biweekly tier instead
+// of 1. Shared by both weekly (weekSpan=1) and biweekly (weekSpan=2)
+// below rather than two near-identical copies.
+function bucketByWeeks(
+  rows: { amount: number; occurred_at: string }[],
+  currentWeekMonday: Date,
+  weekSpan: number,
+  count: number,
+): FlatTrendPoint[] {
+  const stepDays = weekSpan * 7;
+  const totalsByBucketStart = new Map<string, number>();
+  for (const row of rows) {
+    const rowMonday = mondayOf(row.occurred_at);
+    const diffDays = Math.round((currentWeekMonday.getTime() - rowMonday.getTime()) / 86_400_000);
+    if (diffDays < 0) continue;
+    const bucketsBack = Math.floor(diffDays / stepDays);
+    if (bucketsBack >= count) continue;
+    const bucketStart = new Date(currentWeekMonday);
+    bucketStart.setDate(bucketStart.getDate() - bucketsBack * stepDays);
+    const key = toDateKey(bucketStart);
+    totalsByBucketStart.set(key, (totalsByBucketStart.get(key) ?? 0) + row.amount);
+  }
+
+  const points: FlatTrendPoint[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(currentWeekMonday);
+    d.setDate(d.getDate() - i * stepDays);
+    const key = toDateKey(d);
+    points.push({
+      key,
+      label: `${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`,
+      total: Math.round((totalsByBucketStart.get(key) ?? 0) * 100) / 100,
+    });
+  }
+  return points;
+}
+
+/**
+ * Pure calculation, no network calls -- same split-for-testability
+ * pattern as computeFlatMonthlyTotalsFromRows above. Weekly and
+ * biweekly cover the last 6/12 calendar weeks; monthly reuses the
+ * existing calendar-month function unchanged.
+ */
+export function computeFlatSpendTrendFromRows(
+  rows: { amount: number; occurred_at: string }[],
+  now: Date = new Date(),
+): Omit<FlatSpendTrend, 'earliestOccurredAt'> {
+  const currentWeekMonday = mondayOf(toDateKey(now));
+  return {
+    weekly: bucketByWeeks(rows, currentWeekMonday, 1, 6),
+    biweekly: bucketByWeeks(rows, currentWeekMonday, 2, 6),
+    monthly: computeFlatMonthlyTotalsFromRows(rows, now),
+  };
+}
+
+export async function fetchFlatSpendTrend(flatId: string): Promise<FlatSpendTrend> {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
 
-  const { data, error } = await supabase
-    .from('shared_expenses')
-    .select('amount, occurred_at')
-    .eq('flat_id', flatId)
-    .gte('occurred_at', sixMonthsAgo.toISOString().slice(0, 10));
+  const [{ data, error }, { data: earliestRow, error: earliestError }] = await Promise.all([
+    supabase
+      .from('shared_expenses')
+      .select('amount, occurred_at')
+      .eq('flat_id', flatId)
+      .gte('occurred_at', sixMonthsAgo.toISOString().slice(0, 10)),
+    supabase
+      .from('shared_expenses')
+      .select('occurred_at')
+      .eq('flat_id', flatId)
+      .order('occurred_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (error) throw error;
-  return computeFlatMonthlyTotalsFromRows(data ?? []);
+  if (earliestError) throw earliestError;
+
+  return {
+    ...computeFlatSpendTrendFromRows(data ?? []),
+    earliestOccurredAt: earliestRow?.occurred_at ?? null,
+  };
 }

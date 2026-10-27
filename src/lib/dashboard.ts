@@ -64,7 +64,9 @@ export type DashboardRow = {
 export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Monday of the week containing the given local-calendar date string.
-function mondayOf(dateStr: string): Date {
+// Exported for flats.ts's own weekly/biweekly bucketing (the flat spend
+// trend), so both charts define "a week" the same way.
+export function mondayOf(dateStr: string): Date {
   const d = new Date(`${dateStr}T00:00:00`);
   const day = d.getDay(); // 0 = Sunday
   const diff = day === 0 ? -6 : 1 - day;
@@ -72,7 +74,7 @@ function mondayOf(dateStr: string): Date {
   return d;
 }
 
-function toDateKey(d: Date): string {
+export function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
