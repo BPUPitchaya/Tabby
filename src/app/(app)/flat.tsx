@@ -6,6 +6,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   Share,
   Text,
   TextInput,
@@ -413,6 +414,26 @@ function FlatView({
     load().finally(() => setLoading(false));
   }, [load]);
 
+  // Tabs stay mounted when you switch away (standard tab behavior), so
+  // without this, a change made outside this exact screen (another
+  // device, the switcher's "create or join" flow, a direct DB edit)
+  // would show stale data until a manual pull-to-refresh. Silent --
+  // doesn't touch `loading`, only the mount-time effect above does, so
+  // this doesn't flash the spinner on every tab switch. Same pattern as
+  // Home's own useFocusEffect in index.tsx.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
   // Default the expense-split picker to "everyone" whenever the member
   // list changes, but only when adding fresh -- while editing, the
   // selection reflects that specific expense's actual splits instead.
@@ -696,6 +717,7 @@ function FlatView({
         data={[]}
         keyExtractor={() => 'none'}
         renderItem={null}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <View className="px-4 pt-4 gap-5">
             <View className="flex-row items-start justify-between">
@@ -1436,14 +1458,19 @@ export default function FlatScreen() {
     load().finally(() => setLoading(false));
   }, [load]);
 
-  // Decides whether the Flat tab is worth gating behind an onboarding
-  // question (see flat_tab_views migration) -- deliberately counts every
-  // focus, not just the first, since "opened it 3 times and left" is a
-  // different signal from "opened it once by accident."
+  // Re-fetches the flats list on every focus, same "tabs stay mounted"
+  // reasoning as FlatView's own useFocusEffect below -- otherwise being
+  // added to a flat elsewhere (another device, a direct DB change)
+  // wouldn't show up here until a full app reload. Also decides whether
+  // the Flat tab is worth gating behind an onboarding question (see
+  // flat_tab_views migration) -- deliberately counts every focus, not
+  // just the first, since "opened it 3 times and left" is a different
+  // signal from "opened it once by accident."
   useFocusEffect(
     useCallback(() => {
+      load();
       if (!loading && userId) logFlatTabView(userId, flats.length > 0);
-    }, [loading, userId, flats.length]),
+    }, [load, loading, userId, flats.length]),
   );
 
   const handleSwitchFlat = (flatId: string) => {
