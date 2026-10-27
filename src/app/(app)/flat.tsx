@@ -207,6 +207,7 @@ function ExpenseRow({
             style={pressFeedback}
             accessibilityRole="button"
             accessibilityLabel={`Delete shared expense ${expense.description ?? ''}`}
+            accessibilityHint="asks to confirm, then removes it and recalculates balances for everyone"
           >
             <Text className="font-nunito text-red-500 dark:text-red-400">Delete</Text>
           </Pressable>
@@ -807,6 +808,7 @@ function FlatView({
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Switch flat"
+                accessibilityHint="shows your other flats to switch to"
               >
                 <View className="flex-row items-center gap-1.5">
                   <Text className="font-nunito-bold text-2xl dark:text-white">{flat.name}</Text>
@@ -900,6 +902,7 @@ function FlatView({
                               style={pressFeedback}
                               accessibilityRole="button"
                               accessibilityLabel={m.role === 'admin' ? `Demote ${m.profiles?.display_name ?? ''}` : `Promote ${m.profiles?.display_name ?? ''}`}
+                              accessibilityHint={m.role === 'admin' ? 'removes their admin rights for this flat' : 'makes them an admin of this flat'}
                               className="px-2.5 py-1"
                             >
                               <Text className="font-nunito-semibold text-xs text-tabby-700 dark:text-tabby-200">
@@ -912,6 +915,7 @@ function FlatView({
                               style={pressFeedback}
                               accessibilityRole="button"
                               accessibilityLabel={`Remove ${m.profiles?.display_name ?? ''}`}
+                              accessibilityHint="asks to confirm, then removes them from the flat; they will need a new invite to rejoin"
                               className="px-2.5 py-1"
                             >
                               <Text className="font-nunito-semibold text-xs text-rust-600">Remove</Text>
@@ -954,6 +958,7 @@ function FlatView({
                   className="py-2"
                   accessibilityRole="button"
                   accessibilityLabel="Leave flat"
+                  accessibilityHint="asks to confirm; you will need an invite code to rejoin"
                 >
                   <Text className="font-nunito-semibold text-red-500 dark:text-red-400 text-sm">
                     Leave Flat
@@ -968,6 +973,7 @@ function FlatView({
                     className="py-2"
                     accessibilityRole="button"
                     accessibilityLabel="Delete flat"
+                    accessibilityHint="asks to confirm, then permanently deletes the flat and its expenses for everyone"
                   >
                     <Text className="font-nunito-semibold text-red-700 dark:text-red-400 text-sm">
                       Delete Flat
@@ -1058,6 +1064,7 @@ function FlatView({
                     style={pressFeedback}
                     accessibilityRole="button"
                     accessibilityLabel="Share invite"
+                    accessibilityHint="opens the share sheet with this flat's invite link"
                     className="flex-row items-center gap-1.5 py-1"
                   >
                     <Feather name="share" size={13} color={isDark ? '#E8C39E' : '#8B5A2B'} />
@@ -1430,6 +1437,7 @@ function FlatView({
                     className="bg-tabby-900 dark:bg-tabby-700 rounded-xl px-4 flex-row items-center justify-center gap-1.5"
                     accessibilityRole="button"
                     accessibilityLabel="Add with AI"
+                    accessibilityHint="turns your description into expenses to review before adding"
                   >
                     {aiBusy ? (
                       <ActivityIndicator color="white" size="small" />

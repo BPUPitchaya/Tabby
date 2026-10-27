@@ -168,6 +168,7 @@ export function TransactionDetailModal({
                     className="px-5 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950"
                     accessibilityRole="button"
                     accessibilityLabel="Delete this transaction"
+                    accessibilityHint="asks to confirm, then permanently deletes this transaction"
                   >
                     <Text className="font-nunito-semibold text-red-500">Delete</Text>
                   </Pressable>

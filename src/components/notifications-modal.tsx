@@ -437,6 +437,7 @@ export function NotificationsModal({
                               style={pressFeedback}
                               accessibilityRole="button"
                               accessibilityLabel="Scan payslip"
+                              accessibilityHint="fills in this payday from a photo or PDF of your payslip"
                               className="w-8 h-8 rounded-full bg-white dark:bg-tabby-900 border border-gray-300 dark:border-tabby-600 items-center justify-center"
                             >
                               <Feather name="camera" size={14} color={isDark ? '#E8C39E' : '#4b5563'} />
@@ -632,6 +633,7 @@ export function NotificationsModal({
                             style={pressFeedback}
                             accessibilityRole="button"
                             accessibilityLabel={`Accept ${req.otherDisplayName}`}
+                            accessibilityHint="accepts their friend request"
                             className="w-8 h-8 rounded-full bg-tabby-600 dark:bg-white items-center justify-center"
                           >
                             <Feather name="check" size={15} color={isDark ? '#2B1810' : '#fff'} />
@@ -641,6 +643,7 @@ export function NotificationsModal({
                             style={pressFeedback}
                             accessibilityRole="button"
                             accessibilityLabel={`Decline ${req.otherDisplayName}`}
+                            accessibilityHint="declines their friend request"
                             className="w-8 h-8 rounded-full border border-gray-300 dark:border-tabby-600 items-center justify-center"
                           >
                             <Feather name="x" size={15} color={isDark ? '#E8C39E' : '#4b5563'} />

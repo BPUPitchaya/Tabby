@@ -677,6 +677,7 @@ export default function HomeScreen() {
             style={pressFeedback}
             accessibilityRole="button"
             accessibilityLabel="Notifications"
+            accessibilityHint="opens your pending friend requests and reminders"
             className="w-10 h-10 rounded-full bg-gray-100 dark:bg-tabby-700 items-center justify-center"
           >
             <Feather name="bell" size={18} color={isDark ? '#E8C39E' : '#374151'} />

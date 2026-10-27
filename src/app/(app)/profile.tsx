@@ -334,6 +334,7 @@ export default function ProfileScreen() {
             style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
             accessibilityRole="button"
             accessibilityLabel="Delete Account"
+            accessibilityHint="permanently deletes your account and all your data, after two confirmations"
             className="flex-row items-center gap-3"
           >
             <View className="flex-1 gap-0.5">

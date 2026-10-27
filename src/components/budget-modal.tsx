@@ -347,6 +347,7 @@ export function BudgetModal({
                             className="px-4 py-2.5 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
                             accessibilityRole="button"
                             accessibilityLabel="Remove budget"
+                            accessibilityHint="clears your budget amount and closes this screen"
                           >
                             <Text className="font-nunito-semibold text-red-500 text-sm">Clear</Text>
                           </Pressable>

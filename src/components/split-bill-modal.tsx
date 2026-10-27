@@ -510,6 +510,7 @@ export function SplitBillModal({
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Share with ${participant.label}`}
+                          accessibilityHint="shares a message telling them how much they owe"
                           className="w-8 h-8 rounded-full bg-tabby-100 dark:bg-tabby-700 items-center justify-center"
                         >
                           <Feather name="share" size={14} color={isDark ? '#E8C39E' : '#8B5A2B'} />
@@ -572,6 +573,7 @@ export function SplitBillModal({
                   style={pressFeedback}
                   accessibilityRole="button"
                   accessibilityLabel="Scan a receipt"
+                  accessibilityHint="fills in the line items and total from a photo or PDF"
                   className="flex-row items-center justify-center gap-2 border border-dashed border-tabby-300 dark:border-tabby-600 rounded-xl py-3"
                 >
                   {scanning ? (
@@ -796,6 +798,7 @@ export function SplitBillModal({
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Remove ${p.label}`}
+                          accessibilityHint="removes them from this split"
                         >
                           <Feather name="x" size={16} color="#9ca3af" />
                         </Pressable>
@@ -844,6 +847,7 @@ export function SplitBillModal({
                     style={pressFeedback}
                     accessibilityRole="button"
                     accessibilityLabel="Add by email"
+                    accessibilityHint="adds the Tabby user with this email to the split"
                     className="px-3 items-center justify-center rounded-lg bg-gray-100 dark:bg-tabby-700"
                   >
                     {addingByEmail ? (
@@ -901,6 +905,7 @@ export function SplitBillModal({
                     style={pressFeedback}
                     accessibilityRole="button"
                     accessibilityLabel="Add guest"
+                    accessibilityHint="adds someone without a Tabby account to the split"
                     className="px-3 items-center justify-center rounded-lg bg-gray-100 dark:bg-tabby-700"
                   >
                     <Feather name="plus" size={16} color={isDark ? '#E8C39E' : '#374151'} />

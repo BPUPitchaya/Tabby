@@ -419,6 +419,7 @@ export function SavingsGoalsModal({
                     if (goal) handleDeleteGoal(goal);
                   }}
                   style={pressFeedback}
+                  accessibilityHint="asks to confirm, then deletes the goal and its contribution history"
                   className="py-2 items-center"
                 >
                   <Text className="font-nunito-semibold text-rust-600 text-sm">Delete goal</Text>
@@ -486,6 +487,7 @@ export function SavingsGoalsModal({
                     contributions.map((c) => (
                       <Pressable
                         key={c.id}
+                        accessibilityHint="long press to remove this contribution"
                         onLongPress={() =>
                           Alert.alert('Remove this contribution?', `${formatMoney(c.amount)} on ${formatDate(c.occurredAt)}`, [
                             { text: 'Cancel', style: 'cancel' },
@@ -502,7 +504,12 @@ export function SavingsGoalsModal({
                   )}
                 </View>
 
-                <Pressable onPress={() => handleDeleteGoal(selectedGoal)} style={pressFeedback} className="self-center py-2 px-2">
+                <Pressable
+                  onPress={() => handleDeleteGoal(selectedGoal)}
+                  style={pressFeedback}
+                  accessibilityHint="asks to confirm, then deletes the goal and its contribution history"
+                  className="self-center py-2 px-2"
+                >
                   <Text className="font-nunito-bold text-sm text-rust-600">Delete goal</Text>
                 </Pressable>
               </ScrollView>

@@ -320,6 +320,7 @@ export function IncomeTransactionDetailModal({
                           className="flex-row items-center gap-1.5 self-start mt-0.5"
                           accessibilityRole="link"
                           accessibilityLabel="Not sure which tax code to use? Check with IRD"
+                          accessibilityHint="opens the IRD website in your browser"
                         >
                           <Feather name="external-link" size={12} color="#8B5A2B" />
                           <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">

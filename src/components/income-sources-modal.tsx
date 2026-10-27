@@ -362,6 +362,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                   <Pressable
                     key={source.id}
                     onPress={() => presentSourceActions(source)}
+                    accessibilityHint="shows options to edit or delete this income source"
                     disabled={busy}
                     style={pressFeedback}
                     className="rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700 gap-1.5"
@@ -587,6 +588,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
                       className="flex-row items-center gap-1.5 self-start mt-0.5"
                       accessibilityRole="link"
                       accessibilityLabel="Not sure which tax code to use? Check with IRD"
+                      accessibilityHint="opens the IRD website in your browser"
                     >
                       <Feather name="external-link" size={12} color="#8B5A2B" />
                       <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">

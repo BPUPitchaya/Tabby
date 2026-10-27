@@ -411,6 +411,7 @@ export function CategoryBudgetsModal({
                   style={pressFeedback}
                   accessibilityRole="button"
                   accessibilityLabel={`Apply AI-suggested budgets to ${pendingSuggestionIds.length} categories`}
+                  accessibilityHint="saves each suggested amount as that category's budget"
                   className="flex-row items-center justify-center gap-2 py-2.5 rounded-xl bg-tabby-100 dark:bg-tabby-700"
                 >
                   {applyingAll ? (
@@ -494,6 +495,7 @@ export function CategoryBudgetsModal({
                         style={pressFeedback}
                         accessibilityRole="button"
                         accessibilityLabel={`${suggestion.isGuess ? 'Use starter guess' : 'Use AI-suggested'} budget of $${suggestion.amount} for ${cat.name}`}
+                        accessibilityHint="fills in the amount; save to keep it"
                         className={`flex-row items-center gap-1.5 self-start ml-3 px-2.5 py-1 rounded-full ${
                           suggestion.isGuess
                             ? 'border border-dashed border-tabby-300 dark:border-tabby-500'

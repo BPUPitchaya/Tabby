@@ -399,6 +399,7 @@ function TransactionRow({
           style={pressFeedback}
           accessibilityRole="button"
           accessibilityLabel={`Delete transaction ${item.description ?? ''}`}
+          accessibilityHint="asks to confirm, then permanently deletes this transaction"
         >
           <Feather name="trash-2" size={16} color="#ef4444" />
         </Pressable>
@@ -1685,6 +1686,7 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Scan a receipt or statement"
+                accessibilityHint="reads transactions from a photo or PDF for you to review before adding"
                 className="w-10 h-10 rounded-full items-center justify-center bg-gray-100 dark:bg-tabby-700"
               >
                 <Feather name="camera" size={18} color={isDark ? '#E8C39E' : '#4b5563'} />
@@ -1706,6 +1708,7 @@ export default function TransactionsScreen() {
                 style={pressFeedback}
                 accessibilityRole="button"
                 accessibilityLabel="Send"
+                accessibilityHint="turns your message into transactions to review, or answers your question"
                 className={`w-10 h-10 rounded-full items-center justify-center ${
                   quickAddText.trim() ? 'bg-tabby-600 dark:bg-white' : 'bg-gray-200 dark:bg-tabby-700'
                 }`}
@@ -2016,6 +2019,7 @@ export default function TransactionsScreen() {
                     className="px-4 py-3 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950"
                     accessibilityRole="button"
                     accessibilityLabel="Delete transaction"
+                    accessibilityHint="asks to confirm, then permanently deletes this transaction"
                   >
                     <Feather name="trash-2" size={18} color="#ef4444" />
                   </Pressable>
@@ -2099,6 +2103,7 @@ export default function TransactionsScreen() {
                 className="flex-1 bg-tabby-600 dark:bg-white rounded-lg py-3 items-center"
                 accessibilityRole="button"
                 accessibilityLabel="Confirm import"
+                accessibilityHint="adds all the previewed transactions to your account"
               >
                 {csvImporting ? (
                   <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
@@ -2213,6 +2218,7 @@ export default function TransactionsScreen() {
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Remove ${item.description}`}
+                          accessibilityHint="drops this item from the list to be added"
                           className="mr-1"
                         >
                           <Feather name="x" size={16} color="#9ca3af" />

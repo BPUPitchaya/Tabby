@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   Share,
@@ -148,13 +149,22 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
     }
   };
 
-  const handleRemove = async (friendshipId: string) => {
-    try {
-      await removeFriendship(friendshipId);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove.');
-    }
+  const handleRemove = (friendshipId: string, displayName: string) => {
+    Alert.alert('Remove friend?', `Remove ${displayName} from your friends? You'll need to add them again to split bills together.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await removeFriendship(friendshipId);
+            await load();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to remove.');
+          }
+        },
+      },
+    ]);
   };
 
   const handleRespondShare = async (id: string, accept: boolean) => {
@@ -349,6 +359,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
                             style={pressFeedback}
                             accessibilityRole="button"
                             accessibilityLabel={`Accept ${req.otherDisplayName}`}
+                            accessibilityHint="accepts their friend request"
                             className="w-8 h-8 rounded-full bg-tabby-600 dark:bg-white items-center justify-center"
                           >
                             <Feather name="check" size={15} color={isDark ? '#2B1810' : '#fff'} />
@@ -358,6 +369,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
                             style={pressFeedback}
                             accessibilityRole="button"
                             accessibilityLabel={`Decline ${req.otherDisplayName}`}
+                            accessibilityHint="declines their friend request"
                             className="w-8 h-8 rounded-full border border-gray-300 dark:border-tabby-600 items-center justify-center"
                           >
                             <Feather name="x" size={15} color={isDark ? '#E8C39E' : '#4b5563'} />
@@ -435,10 +447,11 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
                           )}
                         </View>
                         <Pressable
-                          onPress={() => handleRemove(friend.friendshipId)}
+                          onPress={() => handleRemove(friend.friendshipId, friend.displayName)}
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Remove ${friend.displayName}`}
+                          accessibilityHint="asks to confirm, then removes them from your friends"
                         >
                           <Feather name="x" size={16} color={isDark ? '#6B4420' : '#9ca3af'} />
                         </Pressable>

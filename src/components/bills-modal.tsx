@@ -429,6 +429,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
                     <Pressable
                       key={bill.id}
                       onPress={() => presentBillActions(bill)}
+                      accessibilityHint="shows options to edit or delete this bill"
                       disabled={busy}
                       style={pressFeedback}
                       className={`flex-row items-center justify-between rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border ${

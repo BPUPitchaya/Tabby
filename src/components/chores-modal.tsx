@@ -385,6 +385,7 @@ export function ChoresModal({
                     <Pressable
                       key={chore.id}
                       onPress={() => presentChoreActions(chore)}
+                      accessibilityHint="shows options to edit or delete this chore"
                       disabled={busy || !isAdmin}
                       style={pressFeedback}
                       className="flex-row items-center justify-between rounded-xl px-3 py-2.5 bg-gray-50 dark:bg-tabby-800 border border-gray-100 dark:border-tabby-700"
@@ -411,6 +412,7 @@ export function ChoresModal({
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Mark ${chore.name} done`}
+                          accessibilityHint="asks to confirm, then marks it done for this cycle"
                           className="px-3 py-1.5 rounded-lg bg-tabby-600 dark:bg-white"
                         >
                           <Text className="font-nunito-semibold text-xs text-white dark:text-tabby-900">Mark done</Text>

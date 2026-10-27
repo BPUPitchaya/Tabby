@@ -298,6 +298,7 @@ export function FlatBillsModal({
                           style={pressFeedback}
                           accessibilityRole="button"
                           accessibilityLabel={`Confirm ${bill.name} paid`}
+                          accessibilityHint="logs it as a shared expense split evenly between flatmates"
                           className="bg-tabby-600 dark:bg-white rounded-lg px-3 py-1.5"
                         >
                           <Text className="font-nunito-bold text-xs text-white dark:text-tabby-900">I paid this</Text>
@@ -397,6 +398,7 @@ export function FlatBillsModal({
                     ])
                   }
                   style={pressFeedback}
+                  accessibilityHint="asks to confirm; the bill stops recurring but past splits stay"
                   className="py-2 items-center"
                 >
                   <Text className="font-nunito-semibold text-rust-600 text-sm">Delete bill</Text>
