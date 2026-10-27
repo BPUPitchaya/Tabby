@@ -522,10 +522,9 @@ function FlatView({
         text: 'Leave',
         style: 'destructive',
         onPress: async () => {
-          if (!userId) return;
           setSettingsBusy(true);
           try {
-            await leaveFlat(flat.id, userId);
+            await leaveFlat(flat.id);
             onFlatsChanged();
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to leave flat.');
