@@ -28,6 +28,11 @@ import { cancelChoreReminder, requestChoreNotificationPermission, scheduleChoreR
 import { currentAssigneeId, fetchChores, getChoreCycle, isChoreDoneThisCycle, type Chore } from '@/lib/chores';
 import { fetchFlatBills, isFlatBillDoneThisCycle, type FlatBill } from '@/lib/flat-bills';
 import {
+  loadFlatTrendPeriodPreference,
+  setFlatTrendPeriodPreference,
+  type FlatTrendPeriodPreference,
+} from '@/lib/flat-trend-preference';
+import {
   addMemberByEmail,
   addSharedExpense,
   computeBalances,
@@ -37,7 +42,7 @@ import {
   deleteSharedExpense,
   fetchExpenseSplitUserIds,
   fetchFlatMembers,
-  fetchFlatMonthlyTotals,
+  fetchFlatSpendTrend,
   fetchMyFlats,
   fetchSharedExpenses,
   joinFlat,
@@ -49,14 +54,40 @@ import {
   type Flat,
   type FlatHealth,
   type FlatMember,
-  type FlatMonthlyTotal,
+  type FlatSpendTrend,
   type SharedExpense,
 } from '@/lib/flats';
+import { Segmented } from '@/components/segmented-control';
 import { TrendChart } from '@/components/trend-chart';
 
 // Shared press-feedback style: a quick opacity dip on tap, applied via the
 // style prop (not className) since it needs the live `pressed` state.
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
+
+// Same 'auto' idea as the personal dashboard's own resolveTrendView, with
+// an extra biweekly tier -- a flat's shared costs (rent/power/internet)
+// get logged far less often than personal transactions, so jumping
+// straight from weekly to monthly left a stretch (roughly 2-6 months in)
+// where neither chart was very informative.
+function resolveFlatTrendView(
+  preference: FlatTrendPeriodPreference,
+  earliestOccurredAt: string | null,
+  now: Date,
+): 'weekly' | 'biweekly' | 'monthly' {
+  if (preference !== 'auto') return preference;
+  if (!earliestOccurredAt) return 'weekly';
+  const daysSinceEarliest = (now.getTime() - new Date(`${earliestOccurredAt}T00:00:00`).getTime()) / 86_400_000;
+  if (daysSinceEarliest < 56) return 'weekly';
+  if (daysSinceEarliest < 180) return 'biweekly';
+  return 'monthly';
+}
+
+const FLAT_TREND_OPTIONS: { value: FlatTrendPeriodPreference; label: string }[] = [
+  { value: 'auto', label: 'Automatic' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
+  { value: 'monthly', label: 'Monthly' },
+];
 
 // Matches Profile's own small tracked-caps group label -- same visual
 // language across reworked screens instead of each inventing its own.
@@ -242,7 +273,8 @@ function FlatView({
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [chores, setChores] = useState<Chore[]>([]);
   const [flatBills, setFlatBills] = useState<FlatBill[]>([]);
-  const [monthlyTotals, setMonthlyTotals] = useState<FlatMonthlyTotal[]>([]);
+  const [spendTrend, setSpendTrend] = useState<FlatSpendTrend | null>(null);
+  const [trendPreference, setTrendPreference] = useState<FlatTrendPeriodPreference>('auto');
   const [newName, setNewName] = useState(flat.name);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -250,12 +282,22 @@ function FlatView({
   const isAdmin = members.find((m) => m.user_id === userId)?.role === 'admin';
   const pendingChoreCount = chores.filter((c) => !isChoreDoneThisCycle(c)).length;
   const pendingFlatBillCount = flatBills.filter((b) => !isFlatBillDoneThisCycle(b)).length;
+  const trendView = resolveFlatTrendView(trendPreference, spendTrend?.earliestOccurredAt ?? null, new Date());
+
+  useEffect(() => {
+    loadFlatTrendPeriodPreference().then(setTrendPreference);
+  }, []);
+
+  const handleSelectTrendPreference = async (value: FlatTrendPeriodPreference) => {
+    setTrendPreference(value); // optimistic -- same as every other toggle in Settings
+    await setFlatTrendPeriodPreference(value);
+  };
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
       setError(null);
-      const [memberList, expenseList, balanceList, healthResult, choreList, flatBillList, monthlyTotalList] =
+      const [memberList, expenseList, balanceList, healthResult, choreList, flatBillList, spendTrendResult] =
         await Promise.all([
           fetchFlatMembers(flat.id),
           fetchSharedExpenses(flat.id),
@@ -263,14 +305,14 @@ function FlatView({
           computeFlatHealth(flat.id),
           fetchChores(flat.id),
           fetchFlatBills(flat.id),
-          fetchFlatMonthlyTotals(flat.id),
+          fetchFlatSpendTrend(flat.id),
         ]);
       setMembers(memberList);
       setExpenses(expenseList);
       setBalances(balanceList);
       setChores(choreList);
       setFlatBills(flatBillList);
-      setMonthlyTotals(monthlyTotalList);
+      setSpendTrend(spendTrendResult);
       setHealth(healthResult);
 
       // Keep each chore's on-device reminder in sync with whose turn it
@@ -631,6 +673,17 @@ function FlatView({
 
             {showSettings && (
               <View className="bg-gray-50 dark:bg-tabby-800 rounded-xl p-4 gap-3">
+                {/* A per-device display preference, not a flat-wide
+                    setting -- everyone can pick their own view, same as
+                    the personal dashboard's trend picker in Profile ->
+                    Settings. */}
+                <View className="gap-2">
+                  <Text className="font-nunito-semibold text-sm dark:text-white">Spend trend chart</Text>
+                  <Segmented options={FLAT_TREND_OPTIONS} value={trendPreference} onChange={handleSelectTrendPreference} />
+                </View>
+
+                <View className="h-px bg-gray-200 dark:bg-tabby-700" />
+
                 <View className="gap-2">
                   <Text className="font-nunito-semibold text-sm dark:text-white">Add a member by email</Text>
                   <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
@@ -987,15 +1040,27 @@ function FlatView({
             </View>
 
             {/* Same enclosed-border treatment as the personal dashboard's
-                own 6-month trend card -- the flat health score above is a
-                current-snapshot only, this is the history view. Always
-                monthly (unlike the personal chart's weekly/monthly
-                'auto' mode) -- a flat's shared costs are inherently a
-                monthly rhythm (rent, power, internet), and there's no
-                equivalent pay-cycle concept here to make weekly useful. */}
+                own trend card -- the flat health score above is a
+                current-snapshot only, this is the history view. 'auto'
+                (see resolveFlatTrendView) steps weekly -> biweekly ->
+                monthly as the flat's own history grows, same idea as the
+                personal chart's weekly/monthly auto mode plus a biweekly
+                tier; overridable per-device in Flat Settings below. */}
             <View className="border border-tabby-100 dark:border-tabby-700 rounded-3xl p-4 gap-3">
-              <Text className="font-nunito-bold text-lg dark:text-white">Last 6 months</Text>
-              <TrendChart data={monthlyTotals.map((m) => ({ key: m.month, label: m.label, total: m.total }))} />
+              <Text className="font-nunito-bold text-lg dark:text-white">
+                {trendView === 'weekly' ? 'Last 6 weeks' : trendView === 'biweekly' ? 'Last 12 weeks' : 'Last 6 months'}
+              </Text>
+              {spendTrend && (
+                <TrendChart
+                  data={
+                    trendView === 'weekly'
+                      ? spendTrend.weekly
+                      : trendView === 'biweekly'
+                        ? spendTrend.biweekly
+                        : spendTrend.monthly.map((m) => ({ key: m.month, label: m.label, total: m.total }))
+                  }
+                />
+              )}
             </View>
           </View>
         }
