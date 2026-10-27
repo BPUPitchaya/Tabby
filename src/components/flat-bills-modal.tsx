@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { cancelFlatBillReminder } from '@/lib/flat-bill-notifications';
 import {
   confirmFlatBill,
   createFlatBill,
@@ -177,6 +178,7 @@ export function FlatBillsModal({
     setBusy(true);
     try {
       await deleteFlatBill(bill.id);
+      await cancelFlatBillReminder(bill.id).catch(() => {});
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete flat bill.');
