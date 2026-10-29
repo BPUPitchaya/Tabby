@@ -91,19 +91,21 @@ export async function fetchFlatByInviteCode(inviteCode: string): Promise<Flat | 
   return (data?.[0] as Flat | undefined) ?? null;
 }
 
-export async function joinFlat(userId: string, inviteCode: string): Promise<Flat> {
-  const flat = await fetchFlatByInviteCode(inviteCode);
-  if (!flat) throw new Error('No flat found with that invite code.');
+// Joining goes through a security-definer RPC (see
+// 0048_fix_flat_membership_insert_policies.sql) rather than a direct insert
+// -- it verifies the invite code itself and always inserts role='member',
+// closing a gap where a direct insert could self-promote to admin or let a
+// removed member silently rejoin.
+export async function joinFlat(inviteCode: string): Promise<Flat> {
+  const { data, error } = await supabase.rpc('join_flat_by_invite_code', {
+    p_invite_code: inviteCode.trim(),
+  });
 
-  const { error: memberError } = await supabase
-    .from('flat_members')
-    .insert({ flat_id: flat.id, user_id: userId, role: 'member' });
-
-  if (memberError) {
-    if (memberError.code === '23505') throw new Error("You're already in this flat.");
-    throw memberError;
+  if (error) {
+    if (error.code === '23505') throw new Error("You're already in this flat.");
+    throw error;
   }
-  return flat;
+  return data as Flat;
 }
 
 export async function renameFlat(flatId: string, name: string) {

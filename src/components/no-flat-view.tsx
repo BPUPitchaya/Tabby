@@ -37,7 +37,7 @@ export function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
     setSubmitting(true);
     setError(null);
     try {
-      await joinFlat(userId, inviteCode.trim());
+      await joinFlat(inviteCode.trim());
       onFlatReady();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join flat.');

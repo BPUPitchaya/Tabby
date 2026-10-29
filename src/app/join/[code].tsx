@@ -46,7 +46,7 @@ export default function JoinScreen() {
     setStatus('joining');
     setError(null);
     try {
-      await joinFlat(userId, code);
+      await joinFlat(code);
       setStatus('joined');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join this flat.');

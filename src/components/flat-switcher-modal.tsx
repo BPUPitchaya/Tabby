@@ -78,7 +78,7 @@ export function FlatSwitcherModal({
     setSubmitting(true);
     setError(null);
     try {
-      const flat = await joinFlat(userId, inviteCode.trim());
+      const flat = await joinFlat(inviteCode.trim());
       onFlatsChanged(flat.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join flat.');
