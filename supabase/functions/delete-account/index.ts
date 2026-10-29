@@ -13,6 +13,16 @@
 // auth user alone is enough: your own data is gone, and anything you did
 // inside a shared flat survives for the other members with its "who"
 // pointer set to null (the UI shows "Deleted User" there).
+//
+// One thing the cascade alone doesn't handle: if the departing user is the
+// SOLE admin of a flat, a plain cascade-delete of their flat_members row
+// leaves that flat permanently admin-less (rename/delete-flat and every
+// chore action are gated on is_flat_admin(), with no recovery path in the
+// UI). leave_flat (0045) already solves this for the explicit "leave a
+// flat" action, but only runs as the leaving user themselves (auth.uid()).
+// This runs as service_role on the user's behalf instead, so it calls the
+// parameterized equivalent (0054) before the cascade deletion removes
+// their membership.
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -44,6 +54,14 @@ export default {
       // key never reaches the client, same posture as ai-proxy's
       // GEMINI_API_KEY.
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      const { error: promoteError } = await adminClient.rpc("promote_admins_before_account_deletion", {
+        p_user_id: user.id,
+      });
+      if (promoteError) {
+        return Response.json({ error: promoteError.message }, { status: 500 });
+      }
+
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
       if (deleteError) {
         return Response.json({ error: deleteError.message }, { status: 500 });
