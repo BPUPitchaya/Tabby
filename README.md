@@ -2,6 +2,16 @@
 
 Tabby is a mobile personal finance tracker that also handles flatmate bill-splitting. AI auto-categorizes transactions, parses natural-language expense entries, answers plain-English questions about your spending, and summarizes trends — so budgeting your own money and splitting shared costs with flatmates both live in one simple app.
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/home.png" alt="Tabby home screen with fortnightly net, savings goal and spending by category" width="30%" />
+  <img src="assets/screenshots/budget.png" alt="Tabby budget editor showing progress against a pay-cycle budget" width="30%" />
+  <img src="assets/screenshots/flat.png" alt="Tabby flat screen with flat health score, balances and recent shared expenses" width="30%" />
+</p>
+
+<p align="center"><sub>Home · Budget · Flat (demo data)</sub></p>
+
 ## Features
 
 - **Transactions** — manual entry or AI-assisted natural-language add ("coffee $6 at Starbucks"), auto-categorization, receipt scanning, CSV export.
