@@ -29,7 +29,7 @@ export default function AddFriendScreen() {
     setStatus('sending');
     setError(null);
     try {
-      await sendFriendRequestByCode(userId, code);
+      await sendFriendRequestByCode(code);
       setStatus('sent');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send that request.');

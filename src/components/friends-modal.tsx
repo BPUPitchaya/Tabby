@@ -108,7 +108,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
     setAdding(true);
     setError(null);
     try {
-      await sendFriendRequest(userId, emailInput.trim());
+      await sendFriendRequest(emailInput.trim());
       setEmailInput('');
       await load();
     } catch (err) {
@@ -123,7 +123,7 @@ export function FriendsModal({ visible, onClose }: { visible: boolean; onClose: 
     setAddingByCode(true);
     setError(null);
     try {
-      await sendFriendRequestByCode(userId, codeInput.trim());
+      await sendFriendRequestByCode(codeInput.trim());
       setCodeInput('');
       await load();
     } catch (err) {

@@ -305,7 +305,7 @@ export function SplitBillModal({
         await respondToFriendRequest(friendPrompt.friendshipId, true);
         setIncomingRequests((prev) => prev.filter((r) => r.id !== friendPrompt.friendshipId));
       } else if (userId) {
-        await sendFriendRequest(userId, friendPrompt.email);
+        await sendFriendRequest(friendPrompt.email);
       }
       setFriendPrompt(null);
     } catch (err) {

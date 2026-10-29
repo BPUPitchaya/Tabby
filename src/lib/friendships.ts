@@ -51,53 +51,38 @@ export async function fetchMyFriendCode(userId: string): Promise<string> {
 // A second input path (invite code, see findUserIdByFriendCode) resolves
 // to the same addresseeId and calls through this same function -- not a
 // parallel flow, same consent requirement either way.
-async function sendFriendRequestTo(requesterId: string, addresseeId: string | null): Promise<void> {
+//
+// Goes through a security-definer RPC (see
+// 0052_fix_friendship_consent_gap.sql) rather than a direct insert/update
+// -- it always sets requester_id to the caller and status to 'pending',
+// closing a gap where a direct update could fabricate an already-accepted
+// friendship with an arbitrary other user, and a real bug where reviving a
+// declined request only ever worked for whichever side happened to be the
+// row's current addressee.
+async function sendFriendRequestTo(addresseeId: string | null): Promise<void> {
   if (!addresseeId) throw new Error('No Tabby account found.');
-  if (addresseeId === requesterId) throw new Error("That's you.");
 
-  const [a, b] = [requesterId, addresseeId].sort();
-  const { data: existing, error: fetchError } = await supabase
-    .from('friendships')
-    .select('id, status, requester_id')
-    .or(`and(requester_id.eq.${a},addressee_id.eq.${b}),and(requester_id.eq.${b},addressee_id.eq.${a})`)
-    .maybeSingle();
-  if (fetchError) throw fetchError;
-
-  if (existing) {
-    if (existing.status === 'accepted') throw new Error("You're already friends.");
-    if (existing.status === 'pending') throw new Error('A request is already pending with that person.');
-    // declined -- revive it as a fresh request from this user
-    const { error } = await supabase
-      .from('friendships')
-      .update({ status: 'pending', requester_id: requesterId, addressee_id: addresseeId, responded_at: null })
-      .eq('id', existing.id);
-    if (error) throw error;
-    return;
-  }
-
-  const { error } = await supabase
-    .from('friendships')
-    .insert({ requester_id: requesterId, addressee_id: addresseeId });
+  const { error } = await supabase.rpc('request_friendship', { p_addressee_id: addresseeId });
   if (error) throw error;
 }
 
-export async function sendFriendRequest(requesterId: string, email: string): Promise<void> {
+export async function sendFriendRequest(email: string): Promise<void> {
   const addresseeId = await findUserIdByEmail(email);
   if (!addresseeId) throw new Error('No Tabby account found with that email.');
-  await sendFriendRequestTo(requesterId, addresseeId);
+  await sendFriendRequestTo(addresseeId);
 }
 
-export async function sendFriendRequestByCode(requesterId: string, code: string): Promise<void> {
+export async function sendFriendRequestByCode(code: string): Promise<void> {
   const addresseeId = await findUserIdByFriendCode(code);
   if (!addresseeId) throw new Error('No Tabby account found with that invite code.');
-  await sendFriendRequestTo(requesterId, addresseeId);
+  await sendFriendRequestTo(addresseeId);
 }
 
 export async function respondToFriendRequest(friendshipId: string, accept: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('friendships')
-    .update({ status: accept ? 'accepted' : 'declined', responded_at: new Date().toISOString() })
-    .eq('id', friendshipId);
+  const { error } = await supabase.rpc('respond_to_friend_request', {
+    p_friendship_id: friendshipId,
+    p_accept: accept,
+  });
   if (error) throw error;
 }
 
