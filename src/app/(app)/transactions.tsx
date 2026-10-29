@@ -25,6 +25,7 @@ import { TransactionSearchView } from '@/components/transaction-search-view';
 import { TransactionTabBar, type TransactionTab } from '@/components/transaction-tab-bar';
 import { useAuth } from '@/lib/auth-context';
 import { parseTransactionsFromCSV, type ParsedCSVTransaction } from '@/lib/csv';
+import { toLocalISODate } from '@/lib/dates';
 import { presentScanSheet } from '@/lib/document-scan';
 import {
   buildFinancialAnswer,
@@ -52,7 +53,7 @@ export default function TransactionsScreen() {
   // Only used to decide whether the AI preview's date caption is worth
   // showing -- "Jul 10" matters, today's own date repeated on every row
   // doesn't.
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = toLocalISODate();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

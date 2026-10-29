@@ -31,6 +31,7 @@ import {
   type DraftShare,
 } from '@/lib/bill-splits';
 import { addTransaction, fetchCategories, type Category } from '@/lib/transactions';
+import { toLocalISODate } from '@/lib/dates';
 import { CategoryIcon } from '@/components/category-icon';
 import { presentScanSheet } from '@/lib/document-scan';
 import { fetchFlatMembers, fetchMyFlat, type FlatMember } from '@/lib/flats';
@@ -45,10 +46,6 @@ type Participant = {
   userId: string | null;
   label: string;
 };
-
-function toLocalISODate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 // Splits `total` across `count` people to the cent, with any leftover cent
 // (from rounding) going to the first person rather than silently dropped

@@ -4,6 +4,7 @@
 // doesn't handle embedded newlines inside quoted fields), which is an
 // accepted limitation for typical bank CSV exports.
 
+import { toLocalISODate } from '@/lib/dates';
 import type { Transaction } from '@/lib/transactions';
 
 export function parseCSVRows(text: string): string[][] {
@@ -65,7 +66,7 @@ function parseDate(raw: string): string {
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
 
-  return new Date().toISOString().slice(0, 10);
+  return toLocalISODate();
 }
 
 export type ParsedCSVTransaction = {
@@ -102,7 +103,7 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
       const isIncome = parsedRaw > 0;
       const amount = Math.abs(parsedRaw);
       const description = descIdx !== -1 ? row[descIdx] : '';
-      const occurredAt = dateIdx !== -1 ? parseDate(row[dateIdx]) : new Date().toISOString().slice(0, 10);
+      const occurredAt = dateIdx !== -1 ? parseDate(row[dateIdx]) : toLocalISODate();
       return { amount, description, occurredAt, isIncome, categoryId: null };
     })
     .filter((t) => !isNaN(t.amount) && t.amount > 0);

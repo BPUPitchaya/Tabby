@@ -11,6 +11,7 @@
 // which `supabase.functions.invoke` attaches automatically. All retry-on-
 // transient-error logic now lives server-side in the proxy itself.
 
+import { toLocalISODate } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 
 // A plain string for text-only prompts, or an array of content parts for
@@ -196,7 +197,7 @@ export async function parseNaturalLanguageExpenses(
   if (!text.trim()) return null;
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalISODate();
     const result = (await callGemini(
       `Today's date is ${today}. Extract one or more transactions from this text -- it may describe a single purchase or payment, or a list of several, separated by commas or "and": "${text}". For each one, decide isIncome: true if money came IN (a gift, salary, refund, being paid back, selling something), false if money went OUT (a purchase, bill, payment). The description should be just what the money was for (e.g. "Coffee", "Birthday gift"), excluding any date words, dollar amounts, merchant names, or filler. If a specific shop/business/brand/person name is mentioned (e.g. "at Starbucks", "from Pak'nSave"), extract it separately as the merchant -- otherwise merchant is "None". Pick the best-fitting category from this exact list if one fits: ${categories.map((c) => c.name).join(', ')}. For the date: if a specific day is mentioned ("on the 9th of September", "yesterday", "last Tuesday", "July 10th"), resolve it to YYYY-MM-DD relative to today's date above -- for a month/day with no year, assume this year unless that would be in the future, in which case assume last year (these are things that already happened). If no date is mentioned at all, use today's date.`,
       expensesSchema(categories),
@@ -222,7 +223,7 @@ export async function parseFinancialDocument(
   if (!base64Data) return null;
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalISODate();
     const partType = mimeType === 'application/pdf' ? 'document' : 'image';
     const result = (await callGemini(
       [
@@ -266,7 +267,7 @@ export async function parseBillSplit(
   if (!text.trim()) return null;
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalISODate();
     const result = (await callGemini(
       `Today's date is ${today}. Decide whether this text describes splitting a bill or expense among a group of people: "${text}". It does if it names a total amount AND one or more other people to split it with (e.g. "split dinner $200 with Sarah and Tom", "drinks $80, me and Alex and Jo each pay a third", "Sarah owes me $50 and Tom owes $70 for the cabin"). It does NOT if it's just a personal purchase, even one mentioning a company/person as a merchant (e.g. "coffee with Sarah $8.50" is one person's own expense, not a split -- only extract participants if money is actually being divided or owed back). If it's not a split, return isSplit: false and leave the other fields empty. If it is a split: title is a short label for what it was (e.g. "Dinner", "Cabin"); merchant is a shop/venue name if mentioned, else null; totalAmount is the whole bill, not any one person's share; for each OTHER person mentioned (never include the message's author/"me"), give their name and, if a specific amount or fraction for them was stated, their amount in dollars -- otherwise null (meaning split evenly). Pick the best-fitting category from this exact list: ${categories.map((c) => c.name).join(', ')} -- pick "Other" if nothing fits well, never leave it blank. Resolve any date mentioned to YYYY-MM-DD relative to today, else use today.`,
       {
@@ -379,7 +380,7 @@ export async function parseSpendingQuery(
   if (!query.trim()) return null;
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalISODate();
     const result = (await callGemini(
       `Today's date is ${today}. A user is searching their own transaction history and typed: "${query}". Figure out three things. 1) and 2) are EITHER a keyword OR a category, never both -- pick whichever actually matches what was asked, since combining them wrongly either hides a real match (if the specific thing named isn't literally in that transaction's text) or, worse, reports a dollar figure for something that was never actually confirmed (if a category's real transactions turn out not to be what was asked about at all -- better to honestly find nothing than to misreport an unrelated charge as an answer). If a specific item, food, brand, or merchant is named (e.g. "coffee", "Uber", "Pak'nSave"), that is almost always the right read -- return it as keyword and leave categoryName as "None", even if it loosely suggests a category, UNLESS the named thing is the category's own name or a very close synonym of it (e.g. "groceries" naming the "Groceries" category itself), in which case return that category instead and leave keyword "None". If the query only names a general category with nothing more specific (e.g. "how much on dining out"), return that category and leave keyword "None". categoryName must be one of this exact list, or "None": ${categories.map((c) => c.name).join(', ')}. 3) A date range implied by the query, resolved relative to today's date above: "last month" means the previous whole calendar month, "this month" means the 1st of this month through today, "this week"/"last 7 days" means the 7 days up to and including today, "in September" means that whole month, a specific day means just that day. Give startDate and endDate as YYYY-MM-DD, or both "None" if no date range is implied at all -- never assume a range just because none was mentioned.`,
       {
@@ -554,7 +555,7 @@ export async function classifyFinancialQuestion(
   if (!query.trim()) return null;
 
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalISODate();
     const result = (await callGemini(
       `Today's date is ${today}. A user typed this question about their own personal finances: "${query}". First, classify which ONE of these it's actually asking about: "spending" (how much was spent or earned on something, or in some time period -- e.g. "how much on coffee last month", "how much did I earn in September"); "budget" (whether they're over/under/within their set budget, or how much of it is left -- e.g. "am I over budget", "how much budget do I have left"); "bills" (a recurring bill's due date or amount -- e.g. "when is rent due", "how much is my power bill", "what bills do I have coming up"); "flat" (money owed between flatmates -- e.g. "how much do I owe", "who owes me money", "am I all settled up"); "income" (their pay rate, hours, or next payday -- e.g. "when do I get paid next", "how much do I get paid"); or "none" if it's not actually a question about any of these. Then, if the topic is "spending": figure out a category (from this exact list: ${categories.map((c) => c.name).join(', ')}, else "None") OR a keyword (a specific item/merchant mentioned, else "None") -- never both at once for the same thing, since combining them can wrongly hide or misattribute a real match -- and a date range (startDate/endDate as YYYY-MM-DD, resolved relative to today, e.g. "last month" is the previous whole calendar month; both "None" if no range is implied). If the topic is "bills" and a specific bill is named (e.g. "rent", "power", "internet"), give that name as keyword, else "None" -- categoryName/startDate/endDate stay "None" for this topic. For every other topic (budget, flat, income, none), categoryName/keyword/startDate/endDate are always "None".`,
       {
