@@ -109,8 +109,15 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
     .filter((t) => !isNaN(t.amount) && t.amount > 0);
 }
 
+// Found in code review: a field starting with =, +, -, or @ is read as a
+// formula by Excel/Sheets when the CSV is opened, not as plain text --
+// classic CSV injection. A transaction description can come from free
+// text (manual entry, AI parsing, CSV import), so neutralize it the
+// standard way: prefix with a leading apostrophe, which every spreadsheet
+// app treats as "force this cell to text" and never displays itself.
 function escapeCSVField(field: string): string {
-  return /[",\n]/.test(field) ? `"${field.replace(/"/g, '""')}"` : field;
+  const safe = /^[=+\-@]/.test(field) ? `'${field}` : field;
+  return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 // The export direction -- a user's own transaction history (full, no
