@@ -22,6 +22,14 @@ const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interaction
 // demand, this alias stays pointed at whichever lite model is healthy.
 const GEMINI_MODEL = "gemini-flash-lite-latest";
 
+// Generous for real use (a long typed description, or a few receipt
+// photos/PDF pages), but bounded so a single request can't balloon the
+// Gemini bill on its own -- found in code review alongside the rate-limit
+// gap below: even within the 40/hour cap, nothing stopped one call from
+// carrying an arbitrarily large payload.
+const MAX_TEXT_LENGTH = 20_000;
+const MAX_TOTAL_PAYLOAD_BYTES = 15 * 1024 * 1024; // ~15MB of base64 image/document data
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // A plain string for text-only prompts, or an array of content parts for
@@ -30,6 +38,21 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // API (type: 'text' | 'image' | 'document', each image/document part
 // carrying `data` + `mime_type`).
 type GeminiInput = string | Record<string, unknown>[];
+
+function validateInputSize(input: GeminiInput): string | null {
+  if (typeof input === "string") {
+    return input.length > MAX_TEXT_LENGTH ? `Text input too long (max ${MAX_TEXT_LENGTH} characters).` : null;
+  }
+
+  let totalBytes = 0;
+  for (const part of input) {
+    const data = part.data;
+    if (typeof data === "string") totalBytes += data.length;
+    const text = part.text;
+    if (typeof text === "string") totalBytes += text.length;
+  }
+  return totalBytes > MAX_TOTAL_PAYLOAD_BYTES ? "Attachment too large." : null;
+}
 
 async function callGeminiOnce(input: GeminiInput, schema: Record<string, unknown>): Promise<unknown> {
   if (!GEMINI_API_KEY) {
@@ -88,29 +111,32 @@ export default {
         return Response.json({ error: "Missing or invalid input/schema." }, { status: 400 });
       }
 
+      const sizeError = validateInputSize(input);
+      if (sizeError) {
+        return Response.json({ error: sizeError }, { status: 413 });
+      }
+
       // 40 calls/hour/user -- generous for normal use (a few receipt
       // scans and quick-adds a day), but bounded so one runaway client
       // can't burn through the shared GEMINI_API_KEY budget for everyone.
       //
-      // Run this alongside the Gemini call rather than gating it first --
-      // the RPC almost always allows the request, so blocking on it
-      // serially cost every normal call a full extra network round trip
-      // for a check that rarely says no. Only on the rare "actually over
-      // the cap" case is the Gemini call's result wasted.
-      const [rateLimitResult, geminiResult] = await Promise.allSettled([
-        ctx.supabaseAdmin.rpc("check_ai_proxy_rate_limit", { p_user_id: ctx.userClaims!.id }),
-        callGemini(input, schema),
-      ]);
-
-      if (rateLimitResult.status === "rejected") throw rateLimitResult.reason;
-      const { data: allowed, error: rateLimitError } = rateLimitResult.value;
+      // Checked BEFORE calling Gemini (not alongside it -- found in code
+      // review): this costs every normal call one extra, fast RPC round
+      // trip, but the earlier parallel version let Gemini fire regardless
+      // of the limit, only discarding the *response* after the fact. That
+      // meant a sustained over-cap client (a bug's retry loop, or
+      // deliberate abuse) kept generating real Gemini cost forever -- the
+      // 40/hour cap was never actually a hard ceiling on spend.
+      const { data: allowed, error: rateLimitError } = await ctx.supabaseAdmin.rpc("check_ai_proxy_rate_limit", {
+        p_user_id: ctx.userClaims!.id,
+      });
       if (rateLimitError) throw rateLimitError;
       if (!allowed) {
         return Response.json({ error: "Too many AI requests. Try again in a bit." }, { status: 429 });
       }
 
-      if (geminiResult.status === "rejected") throw geminiResult.reason;
-      return Response.json({ result: geminiResult.value });
+      const result = await callGemini(input, schema);
+      return Response.json({ result });
     } catch (err) {
       // Log the real error server-side only -- it can carry internal detail
       // (Gemini response shape, RPC/Postgres errors) that shouldn't reach
