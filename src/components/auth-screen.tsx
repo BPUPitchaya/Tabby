@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, Text, TextInput, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, useColorScheme, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
@@ -60,6 +60,7 @@ export function AuthScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View className="flex-1 justify-center px-6 gap-4">
         <View className="items-center mb-2">
           <View
@@ -101,6 +102,8 @@ export function AuthScreen() {
             onChangeText={setPassword}
             placeholder="Password"
             secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
             className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
           />
         )}
@@ -153,6 +156,7 @@ export function AuthScreen() {
           </Pressable>
         )}
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
