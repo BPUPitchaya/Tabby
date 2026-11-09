@@ -1,6 +1,6 @@
-// "What did I actually spend this on" -- opened by tapping a category row
+// "What did I actually spend this on": opened by tapping a category row
 // in Budget's breakdown (budget-modal.tsx). Scoped to the exact pay-cycle
-// window, not an approximation like a calendar month -- a dedicated small
+// window, not an approximation like a calendar month. A dedicated small
 // screen instead of routing into Transactions' own search, since that
 // screen's "month"/"week" ranges don't necessarily line up with a pay
 // cycle (weekly/biweekly cycles almost never match a calendar month).

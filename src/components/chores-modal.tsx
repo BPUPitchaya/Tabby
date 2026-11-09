@@ -1,4 +1,4 @@
-// Flat chores -- recurring (weekly/biweekly/monthly), assigned to one
+// Flat chores: recurring (weekly/biweekly/monthly), assigned to one
 // fixed person or rotating through an ordered list of flat members.
 // Same chrome/form shape as bills-modal.tsx (frequency segment + weekday/
 // day-of-month picker sheets), reached from flat.tsx. Create/edit/delete
@@ -202,7 +202,7 @@ export function ChoresModal({
   const handleMarkDone = (chore: Chore) => {
     const cycle = getChoreCycle(chore);
     if (!cycle) return;
-    // Confirm first -- a tap in a scrollable list is easy to fire by
+    // Confirm first: a tap in a scrollable list is easy to fire by
     // accident, and unlike most of this app's actions, there's no undo
     // for "mark done" once the rotation advances.
     Alert.alert(`Mark "${chore.name}" done?`, undefined, [
@@ -239,7 +239,7 @@ export function ChoresModal({
   const presentChoreActions = (chore: Chore) => {
     if (!isAdmin) return;
     // Undo only makes sense (and is only offered) while the chore is
-    // actually marked done -- otherwise there's nothing to reverse.
+    // actually marked done. Otherwise there's nothing to reverse.
     const canUndo = isChoreDoneThisCycle(chore);
     const options = [...(canUndo ? ['Undo done'] : []), 'Edit', 'Delete', 'Cancel'];
     const destructiveIndex = options.indexOf('Delete');
@@ -305,7 +305,7 @@ export function ChoresModal({
         : 'Pick a day of the week';
 
   // Done chores sink to the bottom; everything still pending sorts by
-  // cycle start date, soonest/most-overdue first -- fetchChores itself
+  // cycle start date, soonest/most-overdue first. fetchChores itself
   // just orders by created_at, which puts a chore due today wherever it
   // happened to be added instead of at the top.
   const sortedChores = [...chores].sort((a, b) => {
@@ -375,8 +375,8 @@ export function ChoresModal({
                 sortedChores.map((chore) => {
                   const assigneeId = currentAssigneeId(chore);
                   const done = isChoreDoneThisCycle(chore);
-                  // Only the person it's currently assigned to -- or the
-                  // admin, as a fix-a-mistake override -- can mark it
+                  // Only the person it's currently assigned to, or the
+                  // admin as a fix-a-mistake override, can mark it
                   // done; same rule the confirm_chore RPC enforces
                   // server-side, mirrored here so the button doesn't
                   // promise something the backend will reject.

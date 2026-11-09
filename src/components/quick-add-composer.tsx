@@ -6,9 +6,9 @@ import type { PendingEdit } from '@/lib/quick-add-commands';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// The chat-style composer pinned to the bottom of the Transactions screen
-// -- type a sentence, AI extracts one or more expenses from it (or answers
-// a question, or proposes an edit) -- plus the status/answer/confirm
+// The chat-style composer pinned to the bottom of the Transactions screen.
+// Type a sentence and AI extracts one or more expenses from it (or answers
+// a question, or proposes an edit), plus the status/answer/confirm
 // strips that sit directly above it. Purely presentational: all the
 // AI routing lives in the screen's handleQuickAdd.
 export function QuickAddComposer({
@@ -30,7 +30,7 @@ export function QuickAddComposer({
   onScan: () => void;
   aiBusy: boolean;
   // Only true for the composer's own calls (quick-add text, receipt/
-  // statement scan) -- see the screen's composerThinking state.
+  // statement scan); see the screen's composerThinking state.
   thinking: boolean;
   answer: string | null;
   pendingEdit: PendingEdit | null;

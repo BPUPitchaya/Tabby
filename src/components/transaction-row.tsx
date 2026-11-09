@@ -9,7 +9,7 @@ import type { Transaction } from '@/lib/transactions';
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 // Shared row, used by the Activity list, search results, and category
-// drill-ins -- one place to keep the colored icon + layout consistent.
+// drill-ins. One place to keep the colored icon + layout consistent.
 // `showDate` is on for anything not already grouped under a day header
 // (search results span multiple days with no header to carry that context).
 export function TransactionRow({

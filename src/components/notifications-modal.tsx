@@ -1,10 +1,10 @@
-// A thin aggregator over data that already exists elsewhere -- friend
+// A thin aggregator over data that already exists elsewhere: friend
 // requests and split money-owing both already live in friends-modal.tsx.
 // This reads the exact same lib functions rather than a separate table or
 // fetch path, so the Home bell's badge count can never drift out of sync
 // with what the Friends screen shows (see session design notes/premortem:
 // "bill reminders" was deliberately cut from v1 since it has no data model
-// yet -- only ship sources that already have one).
+// yet; only ship sources that already have one).
 import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
@@ -89,11 +89,11 @@ export function NotificationsModal({
   const [billAmountDrafts, setBillAmountDrafts] = useState<Record<string, string>>({});
   // Fixed-mode sources: an editable amount, same shape the old singleton
   // payday prompt had. Hourly-mode sources: paid hours instead, run through
-  // computeGrossPay -- "paid" not "worked" since paid leave still counts
+  // computeGrossPay. "Paid" not "worked" since paid leave still counts
   // (see income-sources.ts).
   const [incomeAmountDrafts, setIncomeAmountDrafts] = useState<Record<string, string>>({});
   const [incomeHoursDrafts, setIncomeHoursDrafts] = useState<Record<string, string>>({});
-  // Phase 6: which source is mid AI round-trip right now -- either reading
+  // Phase 6: which source is mid AI round-trip right now, either reading
   // a scanned payslip, or parsing free-text hours. Separate from the
   // parent's own `busy`/`incomeSourceBusyId` (that one covers the actual
   // confirm/skip RPC), since this covers the AI step that happens before
@@ -110,13 +110,13 @@ export function NotificationsModal({
 
   // Two-step settle: a guest share (no account on the other side) still
   // settles on this one confirm, same as a real user's share once THEY'VE
-  // already confirmed their half -- otherwise this is just the payee's
+  // already confirmed their half. Otherwise this is just the payee's
   // own half, and the share stays "waiting for them" until the ower
-  // confirms too. Already confirmed your own half? Nothing left to do --
+  // confirms too. Already confirmed your own half? Nothing left to do:
   // the row that reached here shouldn't even be tappable then (see the
   // OVERDUE section's own filter below).
   const presentOverdueActions = (share: OwedToMeShare) => {
-    // Already confirmed your own half -- nothing left for you to do,
+    // Already confirmed your own half, nothing left for you to do,
     // just remind them (or wait).
     if (share.payeeConfirmedAt) {
       const options = ['Remind in App', 'Remind via Text/Other Apps', 'Cancel'];
@@ -156,9 +156,9 @@ export function NotificationsModal({
   // Phase 6: scan a photographed payslip as ground truth, reusing the same
   // picker/AI infra as receipt scanning (document-scan.ts / lib/ai.ts).
   // Only ever prefills the input the user still reviews and taps confirm
-  // on -- never auto-submits, and never touches tax code or rate (that AI
+  // on; never auto-submits, and never touches tax code or rate (that AI
   // use was ruled out earlier in this project). For a net-tracked source,
-  // only grossPay is used to prefill -- the field there means gross (tax
+  // only grossPay is used to prefill: the field there means gross (tax
   // is computed from it), so filling it from a scanned netPay would get
   // taxed a second time.
   const handleScanPayslip = async (source: IncomeSource) => {
@@ -203,7 +203,7 @@ export function NotificationsModal({
     }
   };
 
-  // Plain numbers resolve for free, instantly -- only reaches for AI when
+  // Plain numbers resolve for free, instantly; only reaches for AI when
   // the typed text isn't one (see parsePaidHours in lib/ai.ts), so a
   // normal "40" never costs a round trip.
   const resolveHours = async (sourceId: string, draft: string): Promise<number | null> => {
@@ -217,7 +217,7 @@ export function NotificationsModal({
     }
   };
 
-  // Your own debt, already pending -- nothing to accept/decline, just
+  // Your own debt, already pending: nothing to accept/decline, just
   // settle it (or leave it, closing the sheet).
   const presentReminderActions = (shareId: string) => {
     const options = ['Mark as Paid', 'Cancel'];
@@ -349,10 +349,10 @@ export function NotificationsModal({
                       const amountDraft = incomeAmountDrafts[source.id] ?? '';
                       const hoursDraft = incomeHoursDrafts[source.id] ?? '';
                       // The field above always holds GROSS pay (what the payslip
-                      // itself shows) -- for net-tracked sources, what actually
+                      // itself shows); for net-tracked sources, what actually
                       // gets logged as Earned is the estimated take-home, computed
                       // from that gross figure via lib/nz-tax.ts. Only resolved
-                      // here when the typed text is already a plain number --
+                      // here when the typed text is already a plain number;
                       // free-text hours ("32 plus 8 sick") only resolve on confirm,
                       // via resolveHours's AI fallback.
                       const plainGrossAmount =

@@ -1,4 +1,4 @@
-// Savings goals -- save toward something specific ("$500 for a trip by
+// Savings goals: save toward something specific ("$500 for a trip by
 // March"), tracked via real logged contributions rather than a single
 // mutable "amount saved" field, so a correction never silently overwrites
 // history. See 0043_add_savings_goals.sql for the two-table shape and
@@ -50,7 +50,7 @@ export async function fetchGoals(userId: string): Promise<SavingsGoal[]> {
 }
 
 // One extra query (all this user's contributions, filtered by goal id),
-// not N -- same reasoning as every other list screen in this app that
+// not N, same reasoning as every other list screen in this app that
 // needs a per-row aggregate.
 export async function fetchGoalsWithProgress(userId: string): Promise<GoalWithProgress[]> {
   const goals = await fetchGoals(userId);
@@ -125,7 +125,7 @@ export async function deleteContribution(contributionId: string): Promise<void> 
   if (error) throw error;
 }
 
-// Pure, over an already-fetched list -- same split-for-testability
+// Pure, over an already-fetched list, same split-for-testability
 // pattern as computeDashboardFromRows, so the sum is never a stored
 // running total that could drift from the real contribution rows.
 export function totalSaved(contributions: GoalContribution[]): number {

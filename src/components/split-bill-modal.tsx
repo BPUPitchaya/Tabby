@@ -1,7 +1,7 @@
-// "Went out with a group, split the bill" -- separate from the Flat tab's
+// "Went out with a group, split the bill": separate from the Flat tab's
 // ongoing shared-expense tracking (flats.ts), this is a one-off split that
 // can include anyone: a flatmate, any other Tabby user by email, or a
-// guest with no account (settled outside the app for now -- see
+// guest with no account (settled outside the app for now, see
 // bill-splits.ts for why there's no guest share link yet).
 import { Feather } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -48,8 +48,8 @@ type Participant = {
 };
 
 // Splits `total` across `count` people to the cent, with any leftover cent
-// (from rounding) going to the first person rather than silently dropped
-// -- otherwise a $10 split 3 ways is $3.33 x3 = $9.99, a cent short.
+// (from rounding) going to the first person rather than silently dropped,
+// since otherwise a $10 split 3 ways is $3.33 x3 = $9.99, a cent short.
 function splitEvenly(total: number, count: number): number[] {
   if (count <= 0) return [];
   const cents = Math.round(total * 100);
@@ -58,7 +58,7 @@ function splitEvenly(total: number, count: number): number[] {
   return Array.from({ length: count }, (_, i) => (base + (i < remainder ? 1 : 0)) / 100);
 }
 
-// Never leave a bill uncategorized -- an exact name match if the AI
+// Never leave a bill uncategorized: an exact name match if the AI
 // suggested one that exists, else "Other" rather than nothing at all.
 function pickCategoryId(categories: Category[], name: string | null): string | null {
   const match = name ? categories.find((c) => c.name === name) : null;
@@ -75,12 +75,12 @@ export function SplitBillModal({
   visible: boolean;
   onClose: () => void;
   // Fires right after the bill's transaction is saved, so the caller can
-  // refresh its own transaction list -- this modal has no list of its own
+  // refresh its own transaction list, since this modal has no list of its own
   // to update.
   onCreated?: () => void;
   // Pre-fills the form from a chat quick-add parse (ParsedBillSplit in
   // ai.ts) instead of opening blank. Participants always come in as
-  // guests-by-name here -- matching a name to a real flatmate account is
+  // guests-by-name here; matching a name to a real flatmate account is
   // left to the user (tap the x, add them properly via the flatmate/email
   // pickers) rather than guessed, since a wrong auto-match would silently
   // put a debt on the wrong person.
@@ -120,10 +120,10 @@ export function SplitBillModal({
   const [emailInput, setEmailInput] = useState('');
   const [addingByEmail, setAddingByEmail] = useState(false);
   // Surfaced right after adding someone by email who isn't already a
-  // friend -- a one-tap way to fold them into the persistent friends list
+  // friend: a one-tap way to fold them into the persistent friends list
   // so the next split with them doesn't need their email typed in again.
-  // 'accept' instead of 'add' when they'd already sent *us* a request --
-  // sending a second one the normal way just errors as already-pending,
+  // 'accept' instead of 'add' when they'd already sent *us* a request,
+  // since sending a second one the normal way just errors as already-pending,
   // so this surfaces the real action (accept theirs) instead.
   const [friendPrompt, setFriendPrompt] = useState<
     | { mode: 'add'; userId: string; email: string; label: string }
@@ -143,7 +143,7 @@ export function SplitBillModal({
 
   useEffect(() => {
     if (!visible || !userId) return;
-    // Reset every time the sheet opens -- same pattern as transactions.tsx's
+    // Reset every time the sheet opens, same pattern as transactions.tsx's
     // resetForm, so a half-filled split doesn't linger from last time. A
     // draft (from a chat quick-add parse) prefills instead of blanking.
     setTitle(draft?.title ?? '');
@@ -168,7 +168,7 @@ export function SplitBillModal({
     setItemAssignments({});
 
     // Flatmates/friends have to be in hand before a draft's participant
-    // names can be matched against them -- otherwise "Sarah" always ends
+    // names can be matched against them, otherwise "Sarah" always ends
     // up a guest even when she's a real friend, since knownPeople would
     // still be empty at match time.
     Promise.all([
@@ -221,7 +221,7 @@ export function SplitBillModal({
   const total = parseFloat(totalAmount) || 0;
 
   // Flatmates and accepted friends, unioned into one "known people" list
-  // for the picker -- deduped by user_id so someone who's both (a
+  // for the picker, deduped by user_id so someone who's both (a
   // flatmate you've also friended) shows up once, not twice.
   const knownPeople = [
     ...flatMembers.map((m) => ({
@@ -369,7 +369,7 @@ export function SplitBillModal({
   // stored separately, so switching modes never leaves stale amounts.
   const shareAmounts: Record<string, number> = (() => {
     if (splitMode === 'equal') {
-      // +1 for you -- the bill is split N+1 ways (you + everyone here),
+      // +1 for you: the bill is split N+1 ways (you + everyone here),
       // but only the others' slices are owed back to you; your own slice
       // just stays with you.
       const amounts = splitEvenly(total, participants.length + 1);
@@ -438,7 +438,7 @@ export function SplitBillModal({
         shares,
       });
       // You fronted the full bill, but only YOUR slice is actually your
-      // expense -- the rest is money you'll get back, not spending. What
+      // expense; the rest is money you'll get back, not spending. What
       // people owe you is tracked separately via bill_split_shares.
       const yourShare = Math.max(0, total - shareTotal);
       if (yourShare > 0) {

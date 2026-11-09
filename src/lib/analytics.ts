@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 // Purpose-built for one decision: whether solo (no-flat) users actually
 // open the Flat tab more than once, or just ignore it. See flat_tab_views
-// migration (0011). Not a general analytics pipeline -- if a second
+// migration (0011). Not a general analytics pipeline: if a second
 // question comes up later, that's the time to generalize this, not now.
 //
 // Fire-and-forget: a logging failure should never be visible to the user

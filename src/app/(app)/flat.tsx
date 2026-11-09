@@ -75,7 +75,7 @@ function FlatView({
 }: {
   flat: Flat;
   allFlats: Flat[];
-  // Re-fetches the full flats list -- called after leaving, deleting,
+  // Re-fetches the full flats list. Called after leaving, deleting,
   // creating, or joining a flat, any of which can change which flat
   // should be active.
   onFlatsChanged: () => void;
@@ -127,7 +127,7 @@ function FlatView({
   }, []);
 
   const handleSelectTrendPreference = async (value: FlatTrendPeriodPreference) => {
-    setTrendPreference(value); // optimistic -- same as every other toggle in Settings
+    setTrendPreference(value); // optimistic, same as every other toggle in Settings
     await setFlatTrendPeriodPreference(value);
   };
 
@@ -154,7 +154,7 @@ function FlatView({
       setHealth(healthResult);
 
       // Keep each chore's on-device reminder in sync with whose turn it
-      // actually is right now -- chores are flat-scoped, not user-scoped
+      // actually is right now. Chores are flat-scoped, not user-scoped
       // like bills, so this device only ever schedules for chores
       // CURRENTLY assigned to this user, and cancels for every other one
       // (done, not due yet, or no longer this user's turn after a
@@ -174,11 +174,11 @@ function FlatView({
           }),
         );
       } catch {
-        // reminders just won't fire -- not worth blocking the load over
+        // reminders just won't fire, which isn't worth blocking the load over
       }
 
       // Same reminder-sync idea as chores above, but no "whose turn"
-      // check -- a flat bill has no single assignee, any member can
+      // check: a flat bill has no single assignee, any member can
       // confirm it, so every member's own device independently reminds
       // itself for a due, unconfirmed cycle.
       try {
@@ -194,7 +194,7 @@ function FlatView({
           }),
         );
       } catch {
-        // reminders just won't fire -- not worth blocking the load over
+        // reminders just won't fire, which isn't worth blocking the load over
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load flat data.');
@@ -226,7 +226,7 @@ function FlatView({
   };
 
   // Default the expense-split picker to "everyone" whenever the member
-  // list changes, but only when adding fresh -- while editing, the
+  // list changes, but only when adding fresh. While editing, the
   // selection reflects that specific expense's actual splits instead.
   useEffect(() => {
     if (!editingExpenseId) {
@@ -383,7 +383,7 @@ function FlatView({
 
   const handleSettle = async (balance: Balance) => {
     // The "Deleted User" synthetic bucket has no real account left to
-    // record a settlement against -- the row's own Pressable is already
+    // record a settlement against. The row's own Pressable is already
     // hidden for it, this is just a second guard.
     if (!userId || balance.userId === null) return;
     try {
@@ -425,8 +425,8 @@ function FlatView({
   };
 
   // Never targets the acting admin's own row (the member list this maps
-  // over already excludes `userId` -- see the Manage Members section
-  // below) -- see updateMemberRole/removeMember in flats.ts for why that
+  // over already excludes `userId`; see the Manage Members section
+  // below). See updateMemberRole/removeMember in flats.ts for why that
   // alone keeps a flat from ever ending up with zero admins here.
   const handleToggleMemberRole = async (member: FlatMember) => {
     setSettingsBusy(true);
@@ -741,7 +741,7 @@ export default function FlatScreen() {
     const [myFlats, storedActiveId] = await Promise.all([fetchMyFlats(userId), loadActiveFlatId()]);
     setFlats(myFlats);
     // The stored choice only still applies if that flat is still one of
-    // this user's -- otherwise (first run, or they left/lost it since)
+    // this user's. Otherwise (first run, or they left/lost it since),
     // fall back to the oldest one they belong to.
     const stillValid = storedActiveId !== null && myFlats.some((f) => f.id === storedActiveId);
     const nextActiveId = stillValid ? storedActiveId : myFlats[0]?.id ?? null;
@@ -754,11 +754,11 @@ export default function FlatScreen() {
   }, [load]);
 
   // Re-fetches the flats list on every focus, same "tabs stay mounted"
-  // reasoning as FlatView's own useFocusEffect below -- otherwise being
+  // reasoning as FlatView's own useFocusEffect below. Otherwise being
   // added to a flat elsewhere (another device, a direct DB change)
   // wouldn't show up here until a full app reload. Also decides whether
   // the Flat tab is worth gating behind an onboarding question (see
-  // flat_tab_views migration) -- deliberately counts every focus, not
+  // flat_tab_views migration), deliberately counting every focus, not
   // just the first, since "opened it 3 times and left" is a different
   // signal from "opened it once by accident."
   useFocusEffect(

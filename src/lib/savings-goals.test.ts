@@ -1,4 +1,4 @@
-// Same native-module problem as bills.test.ts -- savings-goals.ts
+// Same native-module problem as bills.test.ts: savings-goals.ts
 // imports the real Supabase client for its network functions, so it's
 // stubbed out here; these tests only touch the pure totalSaved/
 // daysUntilTarget helpers, which never call supabase.

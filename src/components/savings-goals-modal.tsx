@@ -1,4 +1,4 @@
-// Savings goals -- create a goal, log manual contributions toward it,
+// Savings goals: create a goal, log manual contributions toward it,
 // watch progress. Single-user (no admin/member split, unlike chores/bills),
 // so the chrome is simpler: list / form / detail, no picker sheets.
 import { Feather } from '@expo/vector-icons';

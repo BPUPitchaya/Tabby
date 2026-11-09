@@ -1,8 +1,8 @@
-// Recurring bills -- schedule a weekly/biweekly/monthly expense (fixed or
+// Recurring bills: schedule a weekly/biweekly/monthly expense (fixed or
 // variable amount), get a local notification + in-app bell prompt on the
 // due date. Standalone Profile row, same reasoning as Money Owing: owing a
 // bill has nothing to do with Friends, and a bill has nothing to do with
-// Money Owing either -- its own place.
+// Money Owing either. It gets its own place.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -44,7 +44,7 @@ import type { IncomeFrequency } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Plain native style, not a conditional `shadow-sm` className -- see
+// Plain native style, not a conditional `shadow-sm` className. See
 // transactions.tsx's SEGMENT_SHADOW for why.
 const SEGMENT_SHADOW = {
   shadowColor: '#000',
@@ -104,7 +104,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [suggestingCategory, setSuggestingCategory] = useState(false);
   const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
-  // A ref, not state -- same reasoning as transactions.tsx's
+  // A ref, not state: same reasoning as transactions.tsx's
   // newCategoryIconTouchedRef, a captured state value would be stale if
   // the user tapped an icon while the AI suggestion call was in flight.
   const newCategoryIconTouchedRef = useRef(false);
@@ -209,7 +209,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
       const billId = form.id ?? (await createBill(userId, params));
       if (form.id) await updateBill(form.id, params);
 
-      // Best-effort -- a denied permission or scheduling hiccup shouldn't
+      // Best-effort: a denied permission or scheduling hiccup shouldn't
       // block saving the bill itself; the in-app bell check still works.
       try {
         const granted = await requestBillNotificationPermission();
@@ -220,7 +220,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
         });
         if (granted && nextDue) await scheduleBillReminder(billId, params.name, nextDue);
       } catch {
-        // reminder just won't fire -- not worth blocking the save over
+        // reminder just won't fire, which isn't worth blocking the save over
       }
 
       await load();
@@ -233,7 +233,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
   };
 
   // Suggests a category from the bill name, same categorizeTransaction
-  // call the manual transaction form already uses -- only when nothing's
+  // call the manual transaction form already uses, only when nothing's
   // been picked yet, so it never overrides an explicit choice (including
   // one already set when editing an existing bill).
   const handleSuggestCategory = async () => {
@@ -248,7 +248,7 @@ export function BillsModal({ visible, onClose }: { visible: boolean; onClose: ()
   };
 
   // Suggests an icon from the typed name as soon as the "New category"
-  // panel opens -- only while the user hasn't manually picked one, same
+  // panel opens, only while the user hasn't manually picked one, same
   // guard as transactions.tsx.
   const handleOpenNewCategory = () => {
     setShowNewCategory((v) => !v);

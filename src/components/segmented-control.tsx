@@ -1,11 +1,11 @@
-// Shared segmented control -- originally lived only in settings-modal.tsx
+// Shared segmented control, originally lived only in settings-modal.tsx
 // for the theme/dashboard-period/trend pickers there; extracted so the
 // Flat screen's own trend-period picker can reuse the exact same look.
 import { Pressable, Text, View } from 'react-native';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Plain native style, not a conditional `shadow-sm` className -- a known
+// Plain native style, not a conditional `shadow-sm` className. A known
 // NativeWind/CSS interop race that only a native style prop sidesteps
 // (same pattern as income-sources-modal.tsx's Fixed/Hourly toggle).
 const SEGMENT_SHADOW = {

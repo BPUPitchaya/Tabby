@@ -13,11 +13,11 @@ type AuthContextValue = {
     displayName: string
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  // Emails a recovery link to tabby://reset-password -- that screen
+  // Emails a recovery link to tabby://reset-password. That screen
   // establishes a session from the link's tokens itself (see
   // src/app/reset-password.tsx), so this just fires the email.
   sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
-  // Only meaningful once a session exists -- either a normal signed-in
+  // Only meaningful once a session exists: either a normal signed-in
   // one, or the recovery session reset-password.tsx establishes.
   updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
 };

@@ -5,7 +5,7 @@ import type { Category } from '@/lib/transactions';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Review sheet for a picked CSV file -- shows every parsed row (with the
+// Review sheet for a picked CSV file: shows every parsed row (with the
 // batched AI category suggestion filling in as it arrives) before
 // anything is actually imported. Visible whenever `preview` is non-null.
 export function CsvImportPreviewModal({

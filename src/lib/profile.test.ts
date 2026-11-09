@@ -1,5 +1,5 @@
 // profile.ts imports the real Supabase client for its network functions,
-// which side-effect-imports expo-sqlite -- same Jest/native-module problem
+// which side-effect-imports expo-sqlite, same Jest/native-module problem
 // as flats.test.ts and dashboard.test.ts. Stubbed out since these tests
 // only touch the pure computeIncomeCycle function, which never calls
 // supabase.
@@ -66,7 +66,7 @@ describe('computeIncomeCycle', () => {
     });
 
     it('clamps a day-of-month that overflows a shorter month', () => {
-      // paid on the 31st -- February only has 28 days in 2026 (not a leap year)
+      // paid on the 31st; February only has 28 days in 2026 (not a leap year)
       const now = new Date(2026, 2, 5); // Mar 5, before the 31st-clamped-to-28th
       const result = computeIncomeCycle({ frequency: 'monthly', payWeekday: null, payDayOfMonth: 31 }, now);
       expect(result?.startDate).toBe('2026-02-28');
@@ -76,10 +76,10 @@ describe('computeIncomeCycle', () => {
 });
 
 describe('getOverspendPrediction', () => {
-  // A 10-day cycle, Oct 1 (inclusive) to Oct 11 (exclusive) -- 5 days
+  // A 10-day cycle, Oct 1 (inclusive) to Oct 11 (exclusive): 5 days
   // elapsed by "now" makes the math easy to check by hand.
   const cycle = { startDate: '2026-10-01', endDate: '2026-10-11' };
-  const now = new Date(2026, 9, 5); // Oct 5 -- day 5 of 10
+  const now = new Date(2026, 9, 5); // Oct 5, day 5 of 10
 
   it('projects spend forward from the current daily pace', () => {
     // $50 spent over 5 days -> $10/day -> $100 projected over 10 days
@@ -88,7 +88,7 @@ describe('getOverspendPrediction', () => {
   });
 
   it('returns null when the projection is under the 10%-over floor', () => {
-    // $42/5 days -> $84 projected on an $80 budget -- only 5% over
+    // $42/5 days -> $84 projected on an $80 budget, only 5% over
     const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 42 }, now);
     expect(result).toBeNull();
   });

@@ -93,18 +93,18 @@ import {
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.6 } : undefined);
 
 // Earned, Spent, and Budget used to be three separate cards (two filled
-// twins plus a bordered progress card below them) -- one row with dividers
+// twins plus a bordered progress card below them); one row with dividers
 // instead of edges reads as one glance instead of three things to scan.
 // Budget stays its own cell rather than folding into Spent: Spent is
 // recorded fact, Budget is a figure the user sets separately from what
 // they earn, and blending them would make "what happened" and "what you
 // intend" indistinguishable. Earned is tappable too, into Income Sources
-// (not literally "edit Earned" -- Earned stays a record of actual income
-// transactions either way) -- the modal's own copy says plainly that it
+// (not literally "edit Earned": Earned stays a record of actual income
+// transactions either way). The modal's own copy says plainly that it
 // won't change this figure, since a first pass without that line read as
 // a bug ("I set my earnings and Earned still shows $0.00"). Phase 2 of the
 // income-sources plan retired the old single-job Pay Schedule screen from
-// this call site in favor of the new multi-job one -- see
+// this call site in favor of the new multi-job one. See
 // income-sources-modal.tsx.
 const FREQUENCY_LABELS: Record<IncomeFrequency, string> = {
   weekly: 'Weekly',
@@ -113,7 +113,7 @@ const FREQUENCY_LABELS: Record<IncomeFrequency, string> = {
 };
 
 // Lowercase noun form for "This ___" phrasing (hero label, Earned/Spent
-// captions) -- distinct from FREQUENCY_LABELS, which is for Budget's own
+// captions), distinct from FREQUENCY_LABELS, which is for Budget's own
 // standalone caption.
 const PERIOD_NOUNS: Record<IncomeFrequency, string> = {
   weekly: 'week',
@@ -139,7 +139,7 @@ function MoneyFlowRow({
   const pct =
     progress && progress.budgetAmount > 0 ? Math.round((progress.spent / progress.budgetAmount) * 100) : null;
   const over = pct !== null && pct >= 100;
-  // Pacing to clear budget by cycle end, even though not over yet -- a
+  // Pacing to clear budget by cycle end, even though not over yet: a
   // quieter amber cue here, not new text in this already-tight cell. The
   // actual "on pace to go $X over" line lives on the Budget screen itself,
   // where there's room to say it (see budget-modal.tsx).
@@ -200,7 +200,7 @@ function MoneyFlowRow({
               />
             </View>
             {/* Budget always resets on the pay cycle from Pay Schedule,
-                regardless of the dashboard period setting -- Earned/Spent
+                regardless of the dashboard period setting. Earned/Spent
                 only follow it when that setting is "Follow pay schedule."
                 Set to "Always this month" instead, Budget's window can
                 genuinely differ from theirs, so its own label stays even
@@ -352,7 +352,7 @@ export default function HomeScreen() {
       setTrendPreference(trendPref);
       const primary = getPrimaryIncomeSource(incomeSources);
       // getIncomeSourceCycle only needs frequency/payday, which the primary
-      // source always has once set -- unlike IncomeSourceProgress, this
+      // source always has once set. Unlike IncomeSourceProgress, this
       // isn't gated on a budget amount existing too, since Earned/Spent
       // following pay schedule shouldn't require a budget to be set.
       const cycle = primary ? getIncomeSourceCycle(primary) : null;
@@ -379,7 +379,7 @@ export default function HomeScreen() {
   }, [userId]);
 
   // Thin aggregator, same lib functions notifications-modal.tsx and
-  // friends-modal.tsx both read -- no separate fetch/cache path, so the
+  // friends-modal.tsx both read. No separate fetch/cache path, so the
   // bell badge can't drift out of sync with what those screens show.
   const loadNotifications = useCallback(async () => {
     if (!userId) return;
@@ -414,8 +414,8 @@ export default function HomeScreen() {
         }),
       );
     } catch {
-      // the badge just stays at its last known count -- not worth surfacing
-      // a dashboard-wide error banner for a secondary, non-blocking feature
+      // the badge just stays at its last known count, which isn't worth
+      // surfacing a dashboard-wide error banner for a secondary, non-blocking feature
     }
   }, [userId]);
 
@@ -428,8 +428,8 @@ export default function HomeScreen() {
 
   // Tabs stay mounted when you switch away (standard tab behavior), so
   // without this, adding a transaction on another tab and coming back to
-  // Home would show stale numbers until a manual pull-to-refresh. Silent
-  // -- doesn't touch `loading`, only the mount-time effect above does, so
+  // Home would show stale numbers until a manual pull-to-refresh. Silent:
+  // it doesn't touch `loading`, only the mount-time effect above does, so
   // this doesn't flash the spinner on every tab switch.
   useFocusEffect(
     useCallback(() => {
@@ -466,7 +466,7 @@ export default function HomeScreen() {
     }).catch(() => {});
   };
 
-  // Two-step settle: this is just my own half confirming -- the share only
+  // Two-step settle: this is just my own half confirming. The share only
   // reaches 'paid' once the other side has confirmed too. See
   // confirmSharePaidByOwer/confirmSharePaidByPayee for the guest-share
   // exception (no account on the other side, so the payee's confirm alone
@@ -482,7 +482,7 @@ export default function HomeScreen() {
   };
 
   // The old singleton payday confirm/decline (income_settings-based) is
-  // retired here -- every income source, primary included, now goes
+  // retired here. Every income source, primary included, now goes
   // through handleConfirmIncomeSource/handleDeclineIncomeSource below,
   // which already covers this same job via the INCOME bell section.
 
@@ -507,7 +507,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Same as payday's decline -- stays pending, re-asked after the follow-up.
+  // Same as payday's decline: stays pending, re-asked after the follow-up.
   const handleDeclineBill = async (bill: Bill & { dueDate: string }) => {
     await scheduleBillFollowUp(bill.id, bill.name).catch(() => {});
   };
@@ -533,7 +533,7 @@ export default function HomeScreen() {
 
   // `amount` is the bell's own editable field for fixed-mode sources, or
   // rate x paid hours for hourly-mode (computed in the bell before this is
-  // called, via computeGrossPay) -- "paid" not "worked" hours, since paid
+  // called, via computeGrossPay): "paid" not "worked" hours, since paid
   // leave still counts (see income-sources.ts).
   const handleConfirmIncomeSource = async (
     source: IncomeSource & { paydayDate: string },
@@ -551,7 +551,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Same as bills' decline -- stays pending, re-asked after the follow-up.
+  // Same as bills' decline: stays pending, re-asked after the follow-up.
   const handleDeclineIncomeSource = async (source: IncomeSource & { paydayDate: string }) => {
     await scheduleIncomeSourceFollowUp(source.id, source.label).catch(() => {});
   };
@@ -577,7 +577,7 @@ export default function HomeScreen() {
   }
 
   // Single soonest bill, by the more urgent of "still unresolved" vs "next
-  // scheduled" -- just a glance, not a list (that's the Bills screen
+  // scheduled." Just a glance, not a list (that's the Bills screen
   // itself, reached via "View all"); showing more than one here crowds
   // Home for a feature that's meant to stay out of the way most days.
   const billsPreview = bills
@@ -586,7 +586,7 @@ export default function HomeScreen() {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 1);
 
-  // Same "single most relevant one" rule as billsPreview -- closest target
+  // Same "single most relevant one" rule as billsPreview: closest target
   // date first (most urgent), goals with no target date pushed to the end.
   const goalsPreview = goals
     .filter((g) => g.saved < g.targetAmount)
@@ -608,7 +608,7 @@ export default function HomeScreen() {
   // time-of-day shift reads as "this app feels like now" rather than noise:
   // a touch deeper/dustier once evening hits, same as the sky outside.
   const heroBg = hour < 18 ? 'bg-tabby-100 dark:bg-tabby-800' : 'bg-tabby-200 dark:bg-tabby-700';
-  // Same formula as MoneyFlowRow's own bar -- lifted here too since the
+  // Same formula as MoneyFlowRow's own bar, lifted here too since the
   // bear's mood needs it before that row even renders.
   const pct =
     incomeProgress && incomeProgress.budgetAmount > 0
@@ -616,7 +616,7 @@ export default function HomeScreen() {
       : null;
   const periodLabel = periodFrequency ? PERIOD_NOUNS[periodFrequency] : 'month';
 
-  // What tapping Tabby cycles through -- every line here is plain text
+  // What tapping Tabby cycles through: every line here is plain text
   // built from numbers already loaded on this screen, no AI call per tap
   // (the one AI-written line, `insight`, is generated once per visit and
   // just takes its turn in the rotation). Filtered to whatever actually
@@ -650,7 +650,7 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* The full illustrated bear (eyes, nose, eyebrows) only reads clean
-            at splash/auth size -- at 46px it turns to noise, so the header
+            at splash/auth size. At 46px it turns to noise, so the header
             badge uses the flat monochrome silhouette instead, tinted brown. */}
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-3">
@@ -707,7 +707,7 @@ export default function HomeScreen() {
         {/* Hero: the one number that matters most this month, given real
             visual weight instead of sitting in a same-size box as everything
             else below it. Tabby sits inside it now, not as a separate zone
-            above -- mood reflects the same budget % as the progress card
+            above; mood reflects the same budget % as the progress card
             below, and tapping reveals the AI insight instead of it sitting
             always-visible underneath (see git history for that old block). */}
         <View className={`${heroBg} rounded-3xl p-5 gap-1 items-center`}>
@@ -733,7 +733,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Bills used to be reachable only one tap deep in Profile -- a
+        {/* Bills used to be reachable only one tap deep in Profile, so a
             quick preview here (soonest 1-2) surfaces them without taking
             as much room as a full section, since most days there's nothing
             urgent to show. Hidden entirely once there are no bills at all,
@@ -800,7 +800,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Same compact-preview pattern as Bills above -- the single most
+        {/* Same compact-preview pattern as Bills above: the single most
             relevant goal (closest target date), tappable to the full
             Savings Goals screen. Hidden with no incomplete goals, same
             reasoning as Bills' empty state. */}
@@ -872,7 +872,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* The 6-month trend gets its own enclosed block -- a quiet border
+        {/* The 6-month trend gets its own enclosed block: a quiet border
             rather than a gray fill, so the hero stays the only solid-filled
             card on the screen and this doesn't read as "another gray box." */}
         <View className="border border-tabby-100 dark:border-tabby-700 rounded-3xl p-4 gap-3">

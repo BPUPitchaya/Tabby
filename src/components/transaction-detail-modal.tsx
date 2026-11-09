@@ -1,10 +1,10 @@
-// "Tap a transaction, see an overview, edit if you need to" -- same shape
+// "Tap a transaction, see an overview, edit if you need to": same shape
 // as income-transaction-detail-modal.tsx, for every ordinary transaction
 // (manual entry, CSV import, receipt scan) that doesn't carry a payslip
 // breakdown. "Edit" switches this same screen into an inline editor
-// instead of opening a separate form -- editing doesn't need to feel like
+// instead of opening a separate form, since editing doesn't need to feel like
 // leaving the summary you just opened. Only lets you pick among existing
-// categories (not create a new one) -- that flow's AI icon suggestion
+// categories (not create a new one); that flow's AI icon suggestion
 // step belongs to the main Add/Edit form, not a quick correction here.
 import { useEffect, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';

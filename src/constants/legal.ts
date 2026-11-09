@@ -1,5 +1,5 @@
 // Plain-structured versions of legal/privacy-policy.md and
-// legal/terms-of-service.md, kept in sync by hand -- rendered in-app via
+// legal/terms-of-service.md, kept in sync by hand. Rendered in-app via
 // LegalModal. Source-of-truth markdown files live in /legal at the repo
 // root (also usable as a public URL for App Store Connect's privacy
 // policy field, since GitHub renders markdown files directly).

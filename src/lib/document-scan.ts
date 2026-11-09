@@ -1,4 +1,4 @@
-// Shared "take a photo, pick a photo, or choose a file" picker -- used by
+// Shared "take a photo, pick a photo, or choose a file" picker, used by
 // the AI quick-add scan in transactions.tsx and by the bill-split receipt
 // scan. Returns inline base64 + mime type, ready for parseFinancialDocument.
 import * as DocumentPicker from 'expo-document-picker';

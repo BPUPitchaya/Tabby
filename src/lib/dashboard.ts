@@ -20,12 +20,12 @@ export type WeeklyTotal = {
 };
 
 export type DashboardData = {
-  periodTotal: number; // expenses only -- "spend" has always meant this
+  periodTotal: number; // expenses only; "spend" has always meant this
   periodIncome: number;
   periodNet: number; // income - total, can go negative
   transactionCount: number;
   categoryTotals: CategoryTotal[];
-  // Same category breakdown, but for the previous CALENDAR month --
+  // Same category breakdown, but for the previous CALENDAR month: it's
   // always calendar-bucketed regardless of `period`, same independence
   // monthlyTotals already has, so "this month vs last month" in the AI
   // insight compares like with like even when Earned/Spent is following a
@@ -36,17 +36,17 @@ export type DashboardData = {
   weeklyTotals: WeeklyTotal[];
   // Earliest occurred_at seen across all fetched rows (income + expense),
   // or null with no transactions at all. Used to pick weekly vs. monthly
-  // for the trend chart in 'auto' mode (trend-period-preference.ts) --
+  // for the trend chart in 'auto' mode (trend-period-preference.ts). It's
   // not a reliable "first ever transaction" once it hits the edge of the
   // 6-month fetch window, but at that point the user has 6+ months of
   // history anyway, so auto mode wants monthly either way.
   earliestOccurredAt: string | null;
 };
 
-// The hero/flow-row figures' window -- calendar month by default, or the
+// The hero/flow-row figures' window: calendar month by default, or the
 // user's own pay cycle when they've set one and prefer that (see
 // dashboard-period-preference.ts). The 6-month trend chart always stays
-// calendar-month-bucketed regardless -- it's a monthly history view, a
+// calendar-month-bucketed regardless; it's a monthly history view, a
 // different concern from "the current period."
 export type DashboardPeriod = {
   startDate: string; // inclusive, 'YYYY-MM-DD'
@@ -81,13 +81,13 @@ export function toDateKey(d: Date): string {
 // Pure calculation, split out from fetchDashboardData so it's unit-testable
 // without a live Supabase client (same pattern as flats.ts).
 //
-// Category breakdown and the 6-month chart stay expense-only on purpose --
+// Category breakdown and the 6-month chart stay expense-only on purpose:
 // mixing income in would make "spending by category" misleading (a salary
 // deposit isn't a spending category) and would make the trend chart look
 // like spending dropped in months you just happened to earn more.
 //
 // `period` is null for the calendar-month default; when given (the user's
-// pay cycle), it governs periodTotal/periodIncome/categoryTotals -- the
+// pay cycle), it governs periodTotal/periodIncome/categoryTotals. The
 // 6-month trend stays calendar-month-bucketed either way.
 export function computeDashboardFromRows(
   rows: DashboardRow[],
@@ -106,10 +106,10 @@ export function computeDashboardFromRows(
   const categoryMap = new Map<string, CategoryTotal>();
   // same, but always the previous CALENDAR month regardless of `period`
   const previousMonthCategoryMap = new Map<string, CategoryTotal>();
-  // monthly totals, for the last 6 months, expenses only -- always
+  // monthly totals, for the last 6 months, expenses only; always
   // calendar-month buckets, independent of `period`
   const monthlyMap = new Map<string, number>();
-  // weekly totals, for the last 6 weeks, expenses only -- Monday-start
+  // weekly totals, for the last 6 weeks, expenses only; Monday-start
   // buckets, same independence from `period` as monthlyMap
   const weeklyMap = new Map<string, number>();
 
@@ -222,7 +222,7 @@ export type CategorySwing = {
 };
 
 // Picks the single biggest category swing worth mentioning in the monthly
-// AI insight (see generateMonthlySummary in lib/ai.ts) -- not just the
+// AI insight (see generateMonthlySummary in lib/ai.ts): not just the
 // biggest dollar category, the biggest CHANGE from last month. Thresholds
 // exist so a $3 coffee habit fluctuation never gets called out as if it
 // were news: at least $20 moved, and (when there was spend last month to
@@ -258,7 +258,7 @@ export async function fetchDashboardData(
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
   sixMonthsAgo.setDate(1);
   // The 6-month chart always needs 6 calendar months back regardless of
-  // `period` -- but if the pay cycle itself starts earlier than that (only
+  // `period`. But if the pay cycle itself starts earlier than that (only
   // possible right at a month boundary), widen the fetch so period totals
   // aren't silently missing rows.
   const sinceDate = [sixMonthsAgo.toISOString().slice(0, 10), period?.startDate].filter(Boolean).sort()[0]!;

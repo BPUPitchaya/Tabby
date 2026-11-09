@@ -1,4 +1,4 @@
-// "Download my data" -- writes the user's full transaction history to a
+// "Download my data": writes the user's full transaction history to a
 // CSV file in the app's cache dir, then hands it to the OS share sheet.
 // Mail, Files, AirDrop, etc. all show up there for free; no email-sending
 // infra of our own needed just so someone can forward their data to

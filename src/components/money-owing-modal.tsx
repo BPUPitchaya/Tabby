@@ -1,8 +1,8 @@
-// Full owe/owed history for bill splits -- the two existing fetch
+// Full owe/owed history for bill splits: the two existing fetch
 // functions (fetchMyPendingShares, fetchOwedToMe) already existed in
 // bill-splits.ts with nothing in the UI reading them; this is their home.
-// Proposed (not-yet-accepted) shares deliberately aren't duplicated here
-// -- those live in the Home bell and the Friends screen's Split Requests
+// Proposed (not-yet-accepted) shares deliberately aren't duplicated here.
+// Those live in the Home bell and the Friends screen's Split Requests
 // section, which already resolve them via accept/decline.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
@@ -38,7 +38,7 @@ import { fetchMyPaymentDetails } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Plain native style, not a conditional `shadow-sm` className -- see
+// Plain native style, not a conditional `shadow-sm` className. See
 // transactions.tsx's SEGMENT_SHADOW for why (a known NativeWind/CSS
 // interop race that only a native style prop sidesteps).
 const SEGMENT_SHADOW = {
@@ -69,8 +69,8 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
   const [payingId, setPayingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [myPaymentDetails, setMyPaymentDetails] = useState<string | null>(null);
-  // Which "You Owe" row is expanded into its own confirm-with-note form --
-  // only one at a time, same reasoning as any other inline-edit-in-place
+  // Which "You Owe" row is expanded into its own confirm-with-note form,
+  // only one at a time: same reasoning as any other inline-edit-in-place
   // pattern in this app (never two forms open at once).
   const [expandedOweId, setExpandedOweId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -105,10 +105,10 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     setRefreshing(false);
   };
 
-  // Two-step settle -- a share only reaches 'paid' once BOTH sides have
+  // Two-step settle: a share only reaches 'paid' once BOTH sides have
   // confirmed. "You Owe" is your own half (the ower); "Owed To You" is
   // the other half (the payee). A guest share (no account on the other
-  // side) still settles on the payee's confirm alone -- see
+  // side) still settles on the payee's confirm alone. See
   // confirmSharePaidByPayee for that exception.
   const handleOwerConfirm = async (shareId: string) => {
     setPayingId(shareId);
@@ -135,7 +135,7 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     }
   };
 
-  // Two distinct choices rather than always bundling both -- the user
+  // Two distinct choices rather than always bundling both: the user
   // picks whether this nudge goes through Tabby's own bell/Money Owing
   // (silent, no share sheet) or out as a text/other-app message (nothing
   // written in-app). Harmless to stamp a guest share too, it's just never
@@ -152,10 +152,10 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
     }).catch(() => {});
   };
 
-  // Your own half of the settle -- the share only reaches 'paid' once the
+  // Your own half of the settle: the share only reaches 'paid' once the
   // other party (the payee) confirms too. Expands in place to an optional
-  // note field (a bank ref, "paid via cash") rather than an ActionSheet --
-  // the payee's own cross-check, see confirmSharePaidByOwer.
+  // note field (a bank ref, "paid via cash") rather than an ActionSheet,
+  // since the payee still does their own cross-check; see confirmSharePaidByOwer.
   const toggleYouOweExpanded = (share: MyBillSplitShare) => {
     if (share.ower_confirmed_at) return; // already confirmed your half
     setExpandedOweId((id) => (id === share.id ? null : share.id));
@@ -163,7 +163,7 @@ export function MoneyOwingModal({ visible, onClose }: { visible: boolean; onClos
 
   const presentOwedToYouActions = (share: OwedToMeShare) => {
     if (share.status !== 'pending') return;
-    // Already confirmed your own half -- nothing left to do but remind
+    // Already confirmed your own half. Nothing left to do but remind
     // (or wait) until they confirm theirs.
     if (share.payeeConfirmedAt) {
       const options = ['Remind in App', 'Remind via Text/Other Apps', 'Cancel'];

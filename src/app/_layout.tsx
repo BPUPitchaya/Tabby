@@ -1,8 +1,8 @@
-// NativeWind's Tailwind directives -- this MUST be imported somewhere in
+// NativeWind's Tailwind directives: this MUST be imported somewhere in
 // every platform's root module graph, or every `className` in the app
 // silently resolves to nothing (no error, just zero styles). It used to
 // come in transitively through constants/theme.ts via app-tabs.tsx, but
-// that import was removed when the tab icons were redone -- so it's
+// that import was removed when the tab icons were redone. So it's
 // imported directly here, at the actual root, where it can't get dropped
 // again as a side effect of an unrelated change.
 import '@/global.css';
@@ -71,18 +71,18 @@ Sentry.init({
 });
 
 // Governs how a payday reminder (or any future local notification)
-// presents while the app is already open in the foreground -- without
+// presents while the app is already open in the foreground. Without
 // this, a foreground-delivered notification shows nothing at all on iOS.
 // Loaded lazily via require(), never a static top-level import: merely
 // `import`-ing expo-notifications throws synchronously in Expo Go on
 // Android (SDK 53+, remote push support was pulled from the Expo Go
 // sandbox there), even though this only configures local notification
 // presentation. A static top-level import's side effects ran before
-// anything could catch them, which took down the whole root layout --
-// and with it the entire app -- on Android. require() (not a dynamic
+// anything could catch them, which took down the whole root layout,
+// and with it the entire app, on Android. require() (not a dynamic
 // import()) because Metro's production/eager-bundle step, used by EAS
 // builds, fails to bundle a dynamic import() of this native module at
-// all -- an opaque "Cannot read properties of undefined (reading
+// all: an opaque "Cannot read properties of undefined (reading
 // 'match')" with no useful stack trace. require() is the conventional
 // React Native pattern for an optional native dependency and bundles
 // fine in both dev and production.
@@ -100,7 +100,7 @@ if (!(Platform.OS === 'android' && isRunningInExpoGo())) {
     });
   } catch {
     // Foreground notification presentation just won't be customized on
-    // this platform/environment -- not worth crashing the app over.
+    // this platform/environment. Not worth crashing the app over.
   }
 }
 
@@ -116,7 +116,7 @@ function TabLayout() {
     Nunito_600SemiBold,
     Nunito_700Bold,
     Nunito_800ExtraBold,
-    // Alternate font packs (see src/lib/font-preference.ts) -- all three
+    // Alternate font packs (see src/lib/font-preference.ts): all three
     // weight sets are bundled upfront so switching in Settings is instant,
     // not a re-download.
     Fraunces_600SemiBold,
@@ -144,7 +144,7 @@ function TabLayout() {
 
   // Nothing mounts (including AnimatedSplashOverlay) until the custom
   // typeface is ready AND any saved manual theme/font override has been
-  // re-applied -- otherwise the app would briefly flash the default look
+  // re-applied. Otherwise the app would briefly flash the default look
   // before snapping to the user's chosen one.
   if (!fontsLoaded || !themeRestored || fontPack === null) return null;
 
@@ -153,13 +153,13 @@ function TabLayout() {
       <AnimatedSplashOverlay />
       <FontPreferenceProvider initialPack={fontPack}>
         <FontVarsView>
-          {/* Wraps every screen/provider below it -- a render crash
+          {/* Wraps every screen/provider below it, so a render crash
               anywhere in the app shows the recovery screen instead of a
               white screen with no way back. See error-boundary.tsx. */}
           <ErrorBoundary>
             <AuthProvider>
               {/* join/[code] is a public, always-reachable screen (see
-                  app/join/[code].tsx) -- it's a sibling of (app) rather than
+                  app/join/[code].tsx): it's a sibling of (app) rather than
                   living inside it, so an invite link works before the
                   recipient has signed in, instead of depending on the tab bar
                   already being on screen. (app) still does its own full
@@ -182,7 +182,7 @@ function TabLayout() {
 export default Sentry.wrap(TabLayout);
 
 // The actual font-switching mechanism: NativeWind's CSS vars resolved at
-// runtime, same way `dark:` variants resolve colorScheme -- not touching
+// runtime, same way `dark:` variants resolve colorScheme, without touching
 // every font-* classname site. Must wrap everything that renders text, so
 // it sits here rather than deeper in the tree.
 function FontVarsView({ children }: { children: ReactNode }) {

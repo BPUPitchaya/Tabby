@@ -8,7 +8,7 @@ import { useFlatPreference } from '@/lib/flat-preference-context';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Home for flat-related settings specifically -- starts with just the
+// Home for flat-related settings specifically. Starts with just the
 // show/hide toggle, but it's its own screen (not a row buried in general
 // Settings) so more can land here later (default split method, notification
 // prefs, etc.) without fighting for space with APPEARANCE.

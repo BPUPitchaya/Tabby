@@ -1,4 +1,4 @@
-// Shared bar chart for a short history series -- originally lived only
+// Shared bar chart for a short history series. It originally lived only
 // in index.tsx for the personal 6-week/6-month spend trend; extracted so
 // the Flat screen's spend trend can reuse the exact same look instead of
 // a second hand-rolled chart.

@@ -1,4 +1,4 @@
-// Local (on-device) notifications for income_sources paydays -- same
+// Local (on-device) notifications for income_sources paydays, same
 // mechanism as payday-notifications.ts, but IDs are keyed per source id
 // rather than a single fixed string, since a user can now have several
 // jobs paying on different days (see bill-notifications.ts for the same
@@ -14,7 +14,7 @@ export async function requestIncomeSourceNotificationPermission(): Promise<boole
   return requested.granted;
 }
 
-// `paydayDate` is 'YYYY-MM-DD' -- interpreted as noon local time, same
+// `paydayDate` is 'YYYY-MM-DD', interpreted as noon local time, same
 // convention as the old singleton payday reminder.
 export async function scheduleIncomeSourceReminder(
   sourceId: string,
@@ -26,7 +26,7 @@ export async function scheduleIncomeSourceReminder(
   const reminderId = `income-source-reminder-${sourceId}`;
   await Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
   const target = new Date(`${paydayDate}T12:00:00`);
-  if (target.getTime() <= Date.now()) return; // already past -- the in-app bell prompt covers this case instead
+  if (target.getTime() <= Date.now()) return; // already past, and the in-app bell prompt covers this case instead
 
   await Notifications.scheduleNotificationAsync({
     identifier: reminderId,
@@ -38,7 +38,7 @@ export async function scheduleIncomeSourceReminder(
   });
 }
 
-// One follow-up, 12 hours after "not yet" -- not a repeating nag.
+// One follow-up, 12 hours after "not yet". Not a repeating nag.
 export async function scheduleIncomeSourceFollowUp(sourceId: string, label: string): Promise<void> {
   const Notifications = await getNotifications();
   if (!Notifications) return;
@@ -63,7 +63,7 @@ export async function cancelIncomeSourceFollowUp(sourceId: string): Promise<void
   await Notifications.cancelScheduledNotificationAsync(`income-source-followup-${sourceId}`).catch(() => {});
 }
 
-// Every scheduled notification for one source -- used on delete, since
+// Every scheduled notification for one source. Used on delete, since
 // there's no longer a schedule to remind anyone about.
 export async function cancelAllIncomeSourceReminders(sourceId: string): Promise<void> {
   const Notifications = await getNotifications();

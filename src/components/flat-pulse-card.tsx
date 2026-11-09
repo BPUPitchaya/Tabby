@@ -8,7 +8,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 
 // Flat Pulse: health score and members used to be two
 // unrelated pieces (a members-chip row, then a separate
-// health card further down) -- one hero now, since they're
+// health card further down). It's one hero now, since they're
 // both "how is this flat doing" at a glance. Admin badges
 // stay visible to everyone, same as before.
 export function FlatPulseCard({

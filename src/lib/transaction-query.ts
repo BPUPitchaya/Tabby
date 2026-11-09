@@ -1,8 +1,8 @@
-// Pure date/filter/grouping helpers for the Transactions screen -- moved
+// Pure date/filter/grouping helpers for the Transactions screen, moved
 // out of transactions.tsx so the screen file only holds UI and wiring.
 import type { Transaction } from '@/lib/transactions';
 
-// Local calendar date, not UTC -- Date#toISOString() converts to UTC first,
+// Local calendar date, not UTC: Date#toISOString() converts to UTC first,
 // which can shift the date by a day in timezones behind/ahead of it (same
 // footgun the toISODate helper in lib/profile.ts exists to avoid).
 export function toLocalISODate(d: Date): string {
@@ -10,7 +10,7 @@ export function toLocalISODate(d: Date): string {
 }
 
 // Shared by the search screen's filters and the quick-add composer's
-// spending-question answers -- both narrow the same transaction list by
+// spending-question answers. Both narrow the same transaction list by
 // the same {category, keyword, date range} shape (lib/ai.ts's
 // ParsedSpendingQuery), so the matching logic lives in one place.
 export function filterTransactionsByQuery(
@@ -28,7 +28,7 @@ export function filterTransactionsByQuery(
   });
 }
 
-// "Today" / "Yesterday" / "Mon, Oct 5" -- same day-label convention as the
+// "Today" / "Yesterday" / "Mon, Oct 5", same day-label convention as the
 // dashboard's trend chart labels, just at day instead of week/month grain.
 function dayLabel(dateStr: string, todayISO: string, yesterdayISO: string): string {
   if (dateStr === todayISO) return 'Today';

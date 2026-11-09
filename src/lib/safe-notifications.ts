@@ -7,7 +7,7 @@
 // scope, so an unsupported environment gets null back at call time
 // instead of crashing the whole app at import time.
 //
-// require(), not a dynamic import() -- Metro's eager/production bundle
+// require(), not a dynamic import(): Metro's eager/production bundle
 // step (used by EAS builds, not the Expo Go dev bundle this was first
 // caught on) doesn't handle a dynamic import() of a native module here;
 // it fails bundling entirely with an opaque "Cannot read properties of

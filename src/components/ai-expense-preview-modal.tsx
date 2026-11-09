@@ -27,7 +27,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 export function useAiExpensePreview() {
   const [preview, setPreview] = useState<ParsedExpense[] | null>(null);
   // Which preview row is expanded for editing, and whether that row's
-  // category picker is open -- only one row/picker open at a time, closed
+  // category picker is open. Only one row/picker open at a time, closed
   // whenever the preview list itself is replaced or dismissed.
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
@@ -51,7 +51,7 @@ export function useAiExpensePreview() {
     closeCategoryPicker();
   };
 
-  // AI's first guess isn't always right -- these let the user correct the
+  // AI's first guess isn't always right, so these let the user correct the
   // amount, description, or category right in the preview before anything
   // is actually saved, instead of an all-or-nothing Confirm/Cancel.
   const updateItem = (index: number, patch: Partial<ParsedExpense>) => {
@@ -128,7 +128,7 @@ function AiPreviewRow({
 
   return (
     <View className="gap-1.5">
-      {/* Collapsed row -- same look as the Activity list's
+      {/* Collapsed row, same look as the Activity list's
           TransactionRow, so the preview reads like the
           transactions it's about to become. Tap to edit
           instead of every field sitting open at once. */}
@@ -222,7 +222,7 @@ function AiPreviewRow({
           </View>
 
           {/* The AI's expense/income guess, same as
-              everything else in this preview -- wrong often
+              everything else in this preview: wrong often
               enough (any "got paid", "refund", "sold
               my...") that it needs to be correctable, not
               just displayed. */}
@@ -373,7 +373,7 @@ function AiPreviewRow({
   );
 }
 
-// Review sheet for AI-extracted transactions -- each row collapsed by
+// Review sheet for AI-extracted transactions: each row collapsed by
 // default, tap to correct it, then Confirm adds them all at once.
 export function AiExpensePreviewModal({
   state,

@@ -1,5 +1,5 @@
 // `Date#toISOString()` is always UTC. Formatting "today" with it is wrong
-// for any NZ user before roughly midday UTC (NZ is UTC+12/+13) -- the date
+// for any NZ user before roughly midday UTC (NZ is UTC+12/+13): the date
 // hasn't rolled over to NZ's actual "today" yet, so expenses logged first
 // thing in the morning, AI date resolution ("today", "yesterday"), and
 // month-boundary Q&A ("this month") would all land on the wrong day. This

@@ -1,13 +1,13 @@
-// "Detail of the pay" -- opened instead of the generic edit form when a
+// "Detail of the pay": opened instead of the generic edit form when a
 // tapped income transaction carries a breakdown (logged via an income
 // source's bell confirm, see income-sources.ts's IncomeBreakdown /
 // 0031_add_income_breakdown_to_transactions.sql). A plain manual income
-// entry has none of these fields and never reaches this modal -- see the
-// tap-handler branch in transactions.tsx.
+// entry has none of these fields and never reaches this modal (see the
+// tap-handler branch in transactions.tsx).
 //
 // "Edit this transaction" switches this same screen into an inline editor
-// for the pay figures themselves -- hours/gross, tax code, student loan,
-// KiwiSaver -- the same inputs income-sources-modal.tsx's form uses to set
+// for the pay figures themselves: hours/gross, tax code, student loan,
+// and KiwiSaver, the same inputs income-sources-modal.tsx's form uses to set
 // the job up, not the generic amount/description/merchant/date form (that
 // one doesn't know what a tax code or KiwiSaver % even is). A small link
 // still reaches the generic form for merchant/description/date typos.
@@ -81,7 +81,7 @@ export function IncomeTransactionDetailModal({
     fetchIncomeSourceById(transaction.income_source_id)
       .then((s) => {
         setSource(s);
-        // Seed the editor from the source's current settings -- the same
+        // Seed the editor from the source's current settings, the same
         // starting point as setting the job up, which the user can still
         // override for this one payday (e.g. hours differ from usual).
         setAmountDraft(String(transaction.gross_amount ?? transaction.amount));

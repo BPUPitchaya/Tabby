@@ -1,4 +1,4 @@
-// Same native-module problem as profile.test.ts -- bill-splits.ts imports
+// Same native-module problem as profile.test.ts: bill-splits.ts imports
 // the real Supabase client for its network functions, so it's stubbed out
 // here; this only touches the pure matchKnownParticipant helper.
 import { matchKnownParticipant } from './bill-splits';

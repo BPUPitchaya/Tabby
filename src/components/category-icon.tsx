@@ -22,7 +22,7 @@ export const CUSTOM_CATEGORY_ICONS: FeatherIconName[] = [
   'music',
 ];
 
-// Keyword map for guessCategoryIcon -- checked before reaching for an AI
+// Keyword map for guessCategoryIcon. Checked before reaching for an AI
 // call, since picking 1 of 12 icons from a name is cheap enough to do
 // locally most of the time. Order matters: first keyword match wins, so
 // more specific terms are listed ahead of broader ones where they could
@@ -45,7 +45,7 @@ const ICON_KEYWORDS: { icon: FeatherIconName; keywords: string[] }[] = [
   { icon: 'music', keywords: ['music', 'concert', 'spotify', 'song', 'band'] },
 ];
 
-// Instant, local-only guess from a handful of common keywords -- null means
+// Instant, local-only guess from a handful of common keywords. Null means
 // nothing matched, in which case the caller falls back to the (slower)
 // AI suggestion instead of making every category wait on a network call.
 export function guessCategoryIcon(name: string): FeatherIconName | null {
@@ -54,10 +54,10 @@ export function guessCategoryIcon(name: string): FeatherIconName | null {
 }
 
 // Falls back to a generic tag icon for any unrecognized name, so a bad/typo'd
-// icon value in the DB never crashes the icon lookup -- just looks slightly
+// icon value in the DB never crashes the icon lookup; it just looks slightly
 // generic instead.
 //
-// `color` is a native prop, not a className -- it won't respond to a dark:
+// `color` is a native prop, not a className, so it won't respond to a dark:
 // variant the way the rest of the app's colors do, so when no explicit color
 // is passed, the default itself has to be scheme-aware or it'd stay
 // gray-600 (too dark to read) against the brown dark-mode background.

@@ -3,8 +3,8 @@
 //
 // This calls the `ai-proxy` Supabase Edge Function rather than Gemini
 // directly. Earlier versions called Gemini straight from the app, which
-// meant the API key shipped inside the app bundle -- fine for early dev
-// but a real problem for anything actually distributed, since a published
+// meant the API key shipped inside the app bundle. That was fine for early
+// dev but a real problem for anything actually distributed, since a published
 // app binary can be decompiled and the key extracted. The proxy
 // (supabase/functions/ai-proxy) holds the real Gemini key as a server
 // secret; this file only ever sends the user's own Supabase session,
@@ -15,7 +15,7 @@ import { toLocalISODate } from '@/lib/dates';
 import { supabase } from '@/lib/supabase';
 
 // A plain string for text-only prompts, or an array of content parts for
-// multimodal input (receipt/statement scanning) -- see ai-proxy/index.ts.
+// multimodal input (receipt/statement scanning); see ai-proxy/index.ts.
 type GeminiInput = string | Record<string, unknown>[];
 
 async function callGemini(input: GeminiInput, schema: Record<string, unknown>): Promise<unknown> {
@@ -25,7 +25,7 @@ async function callGemini(input: GeminiInput, schema: Record<string, unknown>): 
 
   if (error) {
     // supabase.functions.invoke only throws a generic "non-2xx status
-    // code" message on failure -- the proxy's actual { error } body (e.g.
+    // code" message on failure. The proxy's actual { error } body (e.g.
     // the rate-limit message) lives on error.context, a Response object,
     // and has to be read out explicitly or it's lost.
     const body = await error.context?.json?.().catch(() => null);
@@ -59,7 +59,7 @@ export async function categorizeTransaction(
 
 // Picks a starting icon for a new custom category from its name, so
 // creating one isn't always the same generic tag icon until the user
-// manually taps through the grid -- they can still override it before
+// manually taps through the grid; they can still override it before
 // saving. `icons` is CUSTOM_CATEGORY_ICONS from category-icon.tsx, kept
 // as a plain string[] param here so lib/ai.ts doesn't import a component.
 export async function suggestCategoryIcon(name: string, icons: string[]): Promise<string | null> {
@@ -87,7 +87,7 @@ export async function suggestCategoryIcon(name: string, icons: string[]): Promis
 // feature existed (never a hard failure, just no suggestion).
 const CSV_CATEGORIZE_CAP = 150;
 
-// One batched call for a whole CSV import, not one call per row -- an
+// One batched call for a whole CSV import, not one call per row: an
 // import can be a few hundred transactions, and categorizeTransaction's
 // one-call-per-description shape would mean a few hundred round trips.
 // Same enum-constrained schema shape as categorizeTransaction, just an
@@ -144,8 +144,8 @@ type RawParsedExpense = {
   occurredAt: string;
 };
 
-// Shared by parseNaturalLanguageExpenses and parseFinancialDocument -- both
-// extract the same shape, one from text, one from an image/PDF.
+// Shared by parseNaturalLanguageExpenses and parseFinancialDocument, both of
+// which extract the same shape, one from text, one from an image/PDF.
 function expensesSchema(categories: { id: string; name: string }[]) {
   return {
     type: 'object',
@@ -183,10 +183,10 @@ function mapRawExpenses(expenses: RawParsedExpense[] | undefined): ParsedExpense
 }
 
 // Handles both a single expense ("coffee $8.50") and a bulk list in one
-// sentence ("coffee $8.50, breakfast $12.50, lunch $22.20") -- always
+// sentence ("coffee $8.50, breakfast $12.50, lunch $22.20"). It always
 // returns an array so callers don't need two separate code paths. Despite
 // the function's name (kept for now to avoid a wider rename), this also
-// picks up income lines ("got $500 for my birthday") -- isIncome is model-
+// picks up income lines ("got $500 for my birthday"); isIncome is model-
 // judged per item, same as the manual form's Expense/Income toggle, so a
 // mixed quick-add like "got $500 for my bday, spent $20 on lunch" comes
 // back correctly split.
@@ -210,7 +210,7 @@ export async function parseNaturalLanguageExpenses(
 }
 
 // Scans a photographed/uploaded receipt or a bank/card statement (image or
-// PDF) and extracts every line as its own transaction -- a receipt's line
+// PDF) and extracts every line as its own transaction: a receipt's line
 // items individually (not just the total), or a statement's rows. Shares
 // the quick-add preview flow in transactions.tsx: same ParsedExpense[]
 // shape as parseNaturalLanguageExpenses, just sourced from a document
@@ -250,13 +250,13 @@ export type ParsedBillSplit = {
   categoryName: string | null;
   // amount null = this person's share isn't specified, split what's left
   // of the total evenly among everyone with a null amount (handled by the
-  // split screen itself, not here -- this just reports what was said).
+  // split screen itself, not here; this just reports what was said).
   participants: { name: string; amount: number | null }[];
 };
 
 // Only called when a cheap local keyword check (transactions.tsx) thinks a
 // quick-add message might describe a group split rather than a personal
-// expense -- avoids a second AI round trip on every ordinary "coffee
+// expense, avoiding a second AI round trip on every ordinary "coffee
 // $8.50". Returns null (not an error) when the text turns out not to
 // actually name a total and people to split it with, so the caller can
 // fall back to the regular parseNaturalLanguageExpenses path.
@@ -330,13 +330,13 @@ export async function parseBillSplit(
 }
 
 // Phase 6 of the income-sources plan: natural-language PAID hours entry
-// for an hourly income source's bell confirm -- "40" still parses locally
+// for an hourly income source's bell confirm. "40" still parses locally
 // for free (see notifications-modal.tsx, which tries plain parseFloat
 // first and only calls this when that fails). This exists for phrasing a
 // plain number can't express: "32 plus 8 sick", "4 full days", "worked
-// Mon-Thu, 8 hours each". "Paid" hours, not "worked" -- paid leave (sick,
+// Mon-Thu, 8 hours each". "Paid" hours, not "worked": paid leave (sick,
 // annual, public holiday) still counts, same distinction as the bell's
-// own copy. Never guesses a number that isn't actually stated -- returns
+// own copy. It never guesses a number that isn't actually stated, returning
 // null rather than invent one, so the user re-types instead of silently
 // logging a wrong figure (same risk class as the tax-code/wage-rate AI
 // uses this project explicitly ruled out).
@@ -368,7 +368,7 @@ export type ParsedSpendingQuery = {
 
 // Turns a typed question ("how much did I spend on coffee last month")
 // into the same {category, keyword, date range} shape the Transactions
-// search already filters by -- the AI's only job is figuring out INTENT,
+// search already filters by. The AI's only job is figuring out INTENT,
 // never the dollar total itself. The actual sum still comes from a plain
 // reduce over the already-fetched transactions once these filters are
 // applied (transactions.tsx), same "computed math, not AI math" rule as
@@ -412,17 +412,17 @@ export async function parseSpendingQuery(
 export type ParsedPayslip = {
   grossPay: number | null;
   netPay: number | null;
-  // Hours this pay period covered, for an hourly job -- null for a salaried
+  // Hours this pay period covered, for an hourly job; null for a salaried
   // payslip with no hourly breakdown, or if it's just not legible.
   hoursPaid: number | null;
 };
 
-// Phase 6: reads a photographed/uploaded payslip as ground truth -- same
-// infra as parseFinancialDocument (document-scan.ts's presentScanSheet),
+// Phase 6: reads a photographed/uploaded payslip as ground truth, using the
+// same infra as parseFinancialDocument (document-scan.ts's presentScanSheet),
 // just a different extraction target and schema. This is read-only
 // evidence the user still reviews and can edit before confirming a
 // payday; it never decides a tax code or a wage rate itself (that AI use
-// was explicitly ruled out earlier in this project's design -- too risky
+// was explicitly ruled out earlier in this project's design, since it is too risky
 // with real money, same reasoning as never guessing hours above).
 export async function parsePayslip(base64Data: string, mimeType: string): Promise<ParsedPayslip | null> {
   if (!base64Data) return null;
@@ -463,7 +463,7 @@ export async function generateMonthlySummary(params: {
   lastMonthTotal: number;
   topCategories: { name: string; total: number }[];
   // The single biggest category swing from last month, if one clears the
-  // noise threshold (see findNotableCategorySwing in dashboard.ts) -- null
+  // noise threshold (see findNotableCategorySwing in dashboard.ts); null
   // when nothing moved enough to be worth calling out specifically.
   notableSwing?: { name: string; thisMonthTotal: number; lastMonthTotal: number } | null;
 }): Promise<string | null> {
@@ -487,7 +487,7 @@ export async function generateMonthlySummary(params: {
 }
 
 // One short reason per category, explaining an already-computed budget
-// suggestion -- the dollar amount itself is plain arithmetic (see
+// suggestion. The dollar amount itself is plain arithmetic (see
 // computeCategorySpendAverages in category-budgets.ts) and never comes
 // from this call. Money math shouldn't depend on a model's output; AI's
 // only job here is turning the pattern into a sentence a person would
@@ -541,7 +541,7 @@ export type ClassifiedFinancialQuestion = {
 };
 
 // Broader sibling of parseSpendingQuery, for the quick-add composer's
-// "chat about your finances" questions -- covers budget/bills/flat/income
+// "chat about your finances" questions, covering budget/bills/flat/income
 // topics too, not just transaction search. Still only ever classifies
 // INTENT; transactions.tsx computes every actual figure from real data for
 // whichever topic comes back, same "computed math, not AI math" rule as
@@ -609,7 +609,7 @@ export type ClassifiedEditCommand = {
   settlementDirection: 'i_paid' | 'they_paid' | null; // settlement only
 };
 
-// EDIT commands ("change my budget to $500", "I paid Jo $20") -- unlike
+// EDIT commands ("change my budget to $500", "I paid Jo $20"). Unlike
 // every other AI function in this file, a wrong answer here isn't just
 // unhelpful, it's a wrong value actually saved or a wrong balance
 // recorded between two people. So this only ever classifies WHICH action
@@ -618,7 +618,7 @@ export type ClassifiedEditCommand = {
 // user taps Confirm. One classifier for every edit action (rather than a
 // parser per action) so a command can't get misrouted between, say,
 // "change my budget" (overall) and "change my groceries budget"
-// (category) -- both mention "budget", only the model can tell them apart.
+// (category): both mention "budget", only the model can tell them apart.
 export async function classifyEditCommand(
   text: string,
   categories: { id: string; name: string }[],

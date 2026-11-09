@@ -68,7 +68,7 @@ function resolveCategoryColors(categoryIds: string[], isDark: boolean): Map<stri
 // otherwise. Rather than let the user set a budget with no cycle (which
 // would mean introducing a second, independent time window alongside the
 // pay cycle already used everywhere else), this just redirects to Income
-// Sources (formerly Pay Schedule -- see income-sources-modal.tsx).
+// Sources (formerly Pay Schedule; see income-sources-modal.tsx).
 export function BudgetModal({
   visible,
   onClose,

@@ -45,7 +45,7 @@ export default function AddFriendScreen() {
     );
   }
 
-  // No account yet, or signed out -- sign in/up first, then this screen
+  // No account yet, or signed out: sign in/up first, then this screen
   // re-renders with a session and picks up where it left off.
   if (!session) return <AuthScreen />;
 

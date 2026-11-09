@@ -1,15 +1,15 @@
-// Phase 4: NZ PAYE estimate engine. Pure functions only -- this never
+// Phase 4: NZ PAYE estimate engine. Pure functions only: this never
 // calls anything, it just turns a gross pay + tax-code setup into an
 // estimated take-home figure, same "estimate only, check your payslip"
 // framing already shown in income-sources-modal.tsx.
 //
 // Deliberately NOT modeled (see session design notes / non-goals):
 // - The ACC earner levy's annual income cap (combined across jobs, only
-//   reconciled at tax-return time) -- always applies the flat rate.
-// - Any AI involvement in picking a tax code or rate -- this is a plain
+//   reconciled at tax-return time); it always applies the flat rate.
+// - Any AI involvement in picking a tax code or rate: this is a plain
 //   calculator the user's own tax-code choice drives.
 // Rates below are the 2024/25 NZ figures as a reasonable estimate baseline;
-// they're not re-fetched from IRD and will drift as rates change -- same
+// they're not re-fetched from IRD and will drift as rates change, same
 // caveat as the UI's own "estimate only" disclaimer.
 import type { IncomeFrequency } from '@/lib/profile';
 
@@ -24,8 +24,8 @@ export type NetPayBreakdown = {
   netPay: number;
 };
 
-// Progressive brackets, applied to the annualized equivalent of one pay --
-// this mirrors how IRD's own per-period PAYE tables work (annualize, tax
+// Progressive brackets, applied to the annualized equivalent of one pay.
+// This mirrors how IRD's own per-period PAYE tables work (annualize, tax
 // the annual figure, divide back down), rather than taxing the single pay
 // amount against full-year thresholds directly.
 const PAYE_BRACKETS: { upTo: number; rate: number }[] = [
@@ -37,7 +37,7 @@ const PAYE_BRACKETS: { upTo: number; rate: number }[] = [
 ];
 
 // Secondary-income codes use a single flat rate instead of the progressive
-// table -- the lower brackets are assumed already used up by the primary
+// table: the lower brackets are assumed already used up by the primary
 // (M/ME) job, so IRD's own secondary tax tables apply one rate per code
 // straight to the period amount, no annualizing needed.
 const SECONDARY_FLAT_RATES: Record<'S' | 'SB' | 'SH' | 'ST', number> = {
@@ -79,14 +79,14 @@ function computeIncomeTax(grossPay: number, taxCode: NzTaxCode, frequency: Incom
 }
 
 // ME is the only code exempt from the ACC earner levy (already covered
-// another way) -- every other code pays it, M included.
+// another way); every other code pays it, M included.
 function computeAccLevy(grossPay: number, taxCode: NzTaxCode): number {
   if (taxCode === 'ME') return 0;
   return grossPay * ACC_EARNER_LEVY_RATE;
 }
 
 // 12% of earnings over the period-equivalent repayment threshold, not 12%
-// of the whole pay -- matches the real SL deduction rule.
+// of the whole pay. Matches the real SL deduction rule.
 function computeStudentLoan(grossPay: number, frequency: IncomeFrequency, hasStudentLoan: boolean): number {
   if (!hasStudentLoan) return 0;
   const periodThreshold = STUDENT_LOAN_ANNUAL_THRESHOLD / periodsPerYear(frequency);
@@ -95,7 +95,7 @@ function computeStudentLoan(grossPay: number, frequency: IncomeFrequency, hasStu
 }
 
 // KiwiSaver employee contribution is a % of gross pay, deducted post-tax
-// from take-home -- null/opted-out source means 0, not skipped entirely,
+// from take-home. A null/opted-out source means 0, not skipped entirely,
 // so callers don't need their own null check.
 function computeKiwiSaver(grossPay: number, kiwiSaverPct: number | null): number {
   if (!kiwiSaverPct) return 0;

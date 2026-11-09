@@ -1,4 +1,4 @@
-// A single label/value line -- shared by income-transaction-detail-modal.tsx
+// A single label/value line, shared by income-transaction-detail-modal.tsx
 // and transaction-detail-modal.tsx so both "tap a transaction, see an
 // overview" screens render identically, not two near-copies that drift.
 import { Text, View } from 'react-native';

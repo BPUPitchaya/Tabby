@@ -50,8 +50,8 @@ function PillarTile({
   );
 }
 
-// The two pillars of flat living -- money fairness and chore
-// fairness -- as parallel tiles instead of money being a
+// The two pillars of flat living, money fairness and chore
+// fairness, shown as parallel tiles instead of money being a
 // giant always-open form and chores a visually unrelated
 // card. Tapping either opens its own focused screen.
 export function FlatPillarTiles({

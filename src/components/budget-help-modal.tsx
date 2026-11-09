@@ -1,4 +1,4 @@
-// Static explanation sheet -- same chrome as legal-modal.tsx, but for
+// Static explanation sheet, same chrome as legal-modal.tsx, but for
 // explaining the overall-vs-category-budget relationship, which isn't
 // obvious from the Budget screen alone (see budget-modal.tsx).
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';

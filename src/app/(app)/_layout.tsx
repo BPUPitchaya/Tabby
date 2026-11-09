@@ -4,28 +4,39 @@ import { ActivityIndicator, useColorScheme, View } from 'react-native';
 import AppTabs from '@/components/app-tabs';
 import { AuthScreen } from '@/components/auth-screen';
 import { FlatOnboardingQuestion } from '@/components/flat-onboarding-question';
+import { IncomeOnboardingQuestion } from '@/components/income-onboarding-question';
 import { PaymentDetailsOnboardingQuestion } from '@/components/payment-details-onboarding-question';
 import { useAuth } from '@/lib/auth-context';
 import { FlatPreferenceProvider, useFlatPreference } from '@/lib/flat-preference-context';
-import { fetchPaymentDetailsPrompted } from '@/lib/profile';
+import { fetchIncomePrompted, fetchPaymentDetailsPrompted } from '@/lib/profile';
 
 // wants_flat is null exactly until the user answers the onboarding
-// question once -- after that (or once they have a flat from an invite,
+// question once. After that (or once they have a flat from an invite,
 // including one joined via the public join/[code] screen), this always
-// resolves straight to the payment-details question, then AppTabs.
+// resolves straight to the income question, then the payment-details
+// question, then AppTabs.
 function FlatGate({ userId }: { userId: string }) {
   const { loading, wantsFlat, hasFlat, tabVisible } = useFlatPreference();
   // null = still loading; a plain boolean once fetched. Not worth a
-  // context provider for one flag checked once per session -- unlike
-  // wants_flat, nothing else in the app needs to react to this changing.
+  // context provider for these two flags checked once per session, since
+  // unlike wants_flat, nothing else in the app needs to react to either
+  // changing.
+  const [incomePrompted, setIncomePrompted] = useState<boolean | null>(null);
   const [paymentPrompted, setPaymentPrompted] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (loading || (wantsFlat === null && !hasFlat)) return;
+    fetchIncomePrompted(userId)
+      .then(setIncomePrompted)
+      .catch(() => setIncomePrompted(true)); // fail open: never block entry over this
+  }, [loading, wantsFlat, hasFlat, userId]);
+
+  useEffect(() => {
+    if (!incomePrompted) return;
     fetchPaymentDetailsPrompted(userId)
       .then(setPaymentPrompted)
-      .catch(() => setPaymentPrompted(true)); // fail open -- never block entry over this
-  }, [loading, wantsFlat, hasFlat, userId]);
+      .catch(() => setPaymentPrompted(true)); // fail open: never block entry over this
+  }, [incomePrompted, userId]);
 
   if (loading) {
     return (
@@ -37,6 +48,18 @@ function FlatGate({ userId }: { userId: string }) {
 
   if (wantsFlat === null && !hasFlat) {
     return <FlatOnboardingQuestion />;
+  }
+
+  if (incomePrompted === null) {
+    return (
+      <View className="flex-1 items-center justify-center bg-tabby-50 dark:bg-tabby-900">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (!incomePrompted) {
+    return <IncomeOnboardingQuestion userId={userId} onDone={() => setIncomePrompted(true)} />;
   }
 
   if (paymentPrompted === null) {
@@ -54,7 +77,7 @@ function FlatGate({ userId }: { userId: string }) {
   return <AppTabs hideFlatTab={!tabVisible} />;
 }
 
-// This is the app's "normal" experience (auth-gated tabs) -- a sibling of
+// This is the app's "normal" experience (auth-gated tabs), a sibling of
 // the public join/[code] screen at the Stack root (see app/_layout.tsx),
 // not the app's actual root layout anymore. useColorScheme here (not in
 // the root) because it only affects this branch's own loading spinner.

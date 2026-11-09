@@ -1,4 +1,4 @@
-// Only the pure hash function is tested here -- wasRecentlyScanned/
+// Only the pure hash function is tested here; wasRecentlyScanned/
 // recordScan depend on AsyncStorage, same reasoning as other lib tests in
 // this project that stick to pure helpers. AsyncStorage itself still needs
 // stubbing just to let the module load (it reaches for native code at

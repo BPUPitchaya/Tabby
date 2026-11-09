@@ -9,7 +9,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 
 // Shown once, right after signup, only while wants_flat is still null and
 // the user has no flat (see FlatPreferenceProvider). Answering either way
-// is permanent until changed from Settings -- there's no "ask me later."
+// is permanent until changed from Settings: there's no "ask me later."
 export function FlatOnboardingQuestion() {
   const { setWantsFlat } = useFlatPreference();
   const isDark = useColorScheme() === 'dark';
@@ -18,7 +18,7 @@ export function FlatOnboardingQuestion() {
   const handleYes = async () => {
     setSubmitting('yes');
     await setWantsFlat(true);
-    // Straight into create/join -- answering "yes" should finish the
+    // Straight into create/join, since answering "yes" should finish the
     // task, not just unlock a tab the user still has to go find.
     router.push('/flat');
   };

@@ -51,7 +51,7 @@ export default function TransactionsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
   // Only used to decide whether the AI preview's date caption is worth
-  // showing -- "Jul 10" matters, today's own date repeated on every row
+  // showing: "Jul 10" matters, today's own date repeated on every row
   // doesn't.
   const todayISO = toLocalISODate();
 
@@ -62,22 +62,22 @@ export default function TransactionsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [recentMerchants, setRecentMerchants] = useState<string[]>([]);
 
-  // The chat-style composer pinned to the bottom of the screen -- type a
+  // The chat-style composer pinned to the bottom of the screen: type a
   // sentence, AI extracts one or more expenses from it.
   const [quickAddText, setQuickAddText] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   // Separate from aiBusy (shared with the manual-form auto-categorize and
   // CSV flows elsewhere) so this status line only ever shows for the
-  // composer's own calls (quick-add text, receipt/statement scan) -- the
+  // composer's own calls (quick-add text, receipt/statement scan). The
   // Gemini round trip here runs 3-10s+ with real variance, and a bare
   // spinner reads as "stuck" past a couple seconds without a reason why.
   const [composerThinking, setComposerThinking] = useState(false);
   // A plain-language answer to a spending question typed into the
-  // composer ("how much did I spend on coffee last month") -- shown in
+  // composer ("how much did I spend on coffee last month"), shown in
   // the same slot composerThinking occupies while busy, cleared the next
   // time the composer is used for anything else.
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
-  // An edit command parsed but not yet applied -- see PendingEdit in
+  // An edit command parsed but not yet applied. See PendingEdit in
   // lib/quick-add-commands.ts.
   const [pendingEdit, setPendingEdit] = useState<PendingEdit | null>(null);
   const [applyingEdit, setApplyingEdit] = useState(false);
@@ -90,12 +90,12 @@ export default function TransactionsScreen() {
   const [splitDraft, setSplitDraft] = useState<ParsedBillSplit | null>(null);
   const [aiImporting, setAiImporting] = useState(false);
 
-  // Activity (date-grouped) vs By Category (totals grid) -- search overlays
+  // Activity (date-grouped) vs By Category (totals grid): search overlays
   // either tab rather than being a third tab, since it's a transient
   // "narrow what I'm looking at" mode, not a destination of its own.
   const [activeTab, setActiveTab] = useState<TransactionTab>('activity');
   const [searchActive, setSearchActive] = useState(false);
-  // Which category the search view opens pre-filtered to (null = All) --
+  // Which category the search view opens pre-filtered to (null = All);
   // the search filters themselves live inside TransactionSearchView.
   const [searchInitialCategoryId, setSearchInitialCategoryId] = useState<string | null>(null);
 
@@ -147,7 +147,7 @@ export default function TransactionsScreen() {
     setPendingEdit(null);
     try {
       // An EDIT command ("change my budget to $500", "I paid Jo $20", ...)
-      // -- never applied directly. resolveEditCommand classifies which
+      // is never applied directly. resolveEditCommand classifies which
       // action and its parameters and returns an old -> new confirmation;
       // nothing is written until the user taps Confirm.
       if (EDIT_COMMAND_HINT.test(quickAddText.trim())) {
@@ -162,7 +162,7 @@ export default function TransactionsScreen() {
           setQuickAddText('');
           return;
         }
-        // Classified as 'none' (or the classify call failed) -- fall
+        // Classified as 'none' (or the classify call failed), so fall
         // through below and try parsing it as an ordinary expense
         // instead, in case the hint just caught an oddly-phrased
         // statement.
@@ -171,7 +171,7 @@ export default function TransactionsScreen() {
       // A question about personal finances ("how much did I spend on
       // coffee last month", "am I over budget", "when is rent due", "who
       // owes me money", "when do I get paid next") isn't a transaction to
-      // log -- answer it directly instead of running it through the
+      // log. Answer it directly instead of running it through the
       // expense extractor, which would correctly find nothing to add and
       // show a misleading "AI unavailable" message for what's actually a
       // successful AI call.
@@ -188,12 +188,12 @@ export default function TransactionsScreen() {
           setQuickAddText('');
           return;
         }
-        // Classified as not actually one of the known topics -- fall
+        // Classified as not actually one of the known topics, so fall
         // through below and try parsing it as an ordinary expense instead,
         // in case the hint just caught an oddly-phrased statement.
       }
 
-      // Cheap local pre-filter before spending a second AI call -- only
+      // Cheap local pre-filter before spending a second AI call: only
       // texts that plausibly describe a group split (keyword hit + any
       // number, not necessarily a "$") go through parseBillSplit at all,
       // so an ordinary "coffee $8.50" never pays for the extra round trip.
@@ -249,7 +249,7 @@ export default function TransactionsScreen() {
           merchant: p.merchant,
           occurredAt: p.occurredAt,
           isIncome: p.isIncome,
-          // Matched by type too, not just name -- an expense and income
+          // Matched by type too, not just name: an expense and income
           // category could share a name, and only one of them is valid
           // for this row (same rule the manual Expense/Income toggle uses).
           categoryId:
@@ -289,7 +289,7 @@ export default function TransactionsScreen() {
 
       setCsvPreview(parsed);
 
-      // One batched call per type (expense/income), not one per row -- an
+      // One batched call per type (expense/income), not one per row, since an
       // import can be a few hundred transactions. Best-effort: the preview
       // is already showing with no categories, and fills in as soon as this
       // resolves rather than blocking on it.
@@ -352,7 +352,7 @@ export default function TransactionsScreen() {
       const scanned = await presentScanSheet();
       if (!scanned) return;
 
-      // Catches re-scanning the same photo by accident -- not a duplicate
+      // Catches re-scanning the same photo by accident, not a duplicate
       // *purchase* check (see lib/receipt-dedup.ts for why that's a
       // different, harder problem this deliberately doesn't try to solve).
       const hash = hashBase64(scanned.base64Data);
@@ -388,7 +388,7 @@ export default function TransactionsScreen() {
     }
   };
 
-  // Every transaction now opens an overview first, edit form second -- a
+  // Every transaction now opens an overview first, edit form second: a
   // tap is usually "what was this again", not "I need to change it". A
   // transaction logged via an income source's bell confirm carries a
   // payslip-style breakdown (income_source_id set) and gets the dedicated
@@ -404,7 +404,7 @@ export default function TransactionsScreen() {
     setViewingDetail(item);
   };
 
-  // Confirmed first -- deleting used to fire straight from the row's trash
+  // Confirmed first: deleting used to fire straight from the row's trash
   // icon (or the edit form's own delete button) with no way back if it was
   // a mis-tap. Both call sites go through this one function, so the
   // confirm only needs adding here.

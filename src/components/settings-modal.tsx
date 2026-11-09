@@ -61,17 +61,17 @@ export function SettingsModal({ visible, onClose }: { visible: boolean; onClose:
   }, [visible]);
 
   const handleSelect = async (value: ThemePreference) => {
-    setPreference(value); // optimistic -- the toggle should feel instant
+    setPreference(value); // optimistic, so the toggle feels instant
     await setThemePreference(value);
   };
 
   const handleSelectPeriod = async (value: DashboardPeriodPreference) => {
-    setPeriodPreference(value); // optimistic -- same as the other toggles here
+    setPeriodPreference(value); // optimistic, same as the other toggles here
     await setDashboardPeriodPreference(value);
   };
 
   const handleSelectTrend = async (value: TrendPeriodPreference) => {
-    setTrendPreferenceState(value); // optimistic -- same as the other toggles here
+    setTrendPreferenceState(value); // optimistic, same as the other toggles here
     await setTrendPeriodPreference(value);
   };
 
@@ -91,7 +91,7 @@ export function SettingsModal({ visible, onClose }: { visible: boolean; onClose:
           </View>
 
           <View className="p-4 gap-6">
-            {/* Theme and font are both purely visual preferences -- one
+            {/* Theme and font are both purely visual preferences, so one
                 card, not two near-identical boxes. */}
             <View className="gap-2">
               <Text className="font-nunito-bold text-[11px] tracking-wide text-gray-400 dark:text-tabby-400 px-1">
@@ -113,7 +113,7 @@ export function SettingsModal({ visible, onClose }: { visible: boolean; onClose:
             </View>
 
             {/* Dashboard period and history chart are both "what the data
-                on Home means" preferences -- same reasoning, one card. */}
+                on Home means" preferences; same reasoning, one card. */}
             <View className="gap-2">
               <Text className="font-nunito-bold text-[11px] tracking-wide text-gray-400 dark:text-tabby-400 px-1">
                 DISPLAY

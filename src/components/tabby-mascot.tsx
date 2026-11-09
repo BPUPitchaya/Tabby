@@ -29,7 +29,7 @@ export function moodFromPct(pct: number | null): MascotMood {
   return 'good';
 }
 
-// Brow/mouth curves, eye shape, nose -- entirely species-agnostic, so
+// Brow/mouth curves, eye shape, nose: entirely species-agnostic, so
 // every animal shares the exact same mood-expression system the bear
 // originally had. Only the shapes in ANIMAL_VARIANTS below (ears, head/
 // muzzle color, optional markings) actually vary per animal.
@@ -255,10 +255,10 @@ function MarkingsOverlay({ markings }: { markings: Markings }) {
   }
 }
 
-// The pure face -- no Pressable, no animation. Used both inside
+// The pure face: no Pressable, no animation. Used both inside
 // TabbyMascot (wrapped in its own breathing/tap Pressable) and directly
 // by the animal picker grid (wrapped in the GRID's own selection
-// Pressable) -- kept separate so a picker cell is never a Pressable
+// Pressable). Kept separate so a picker cell is never a Pressable
 // nested inside another Pressable.
 export function MascotFace({
   animal,
@@ -301,7 +301,7 @@ export function MascotFace({
   );
 }
 
-// Tapping Tabby is the only way to see the AI insight now -- replaces the
+// Tapping Tabby is the only way to see the AI insight now. Replaces the
 // always-visible quote row that used to sit under the hero (see git
 // history on index.tsx). Keeps the hero calm by default, rewards a glance
 // with the full sentence instead of showing it unconditionally.
@@ -318,7 +318,7 @@ export function TabbyMascot({
   insight: string | null;
   size?: number;
   showLabel?: boolean;
-  // Called on every tap, before this render's `insight` is shown -- lets
+  // Called on every tap, before this render's `insight` is shown. Lets
   // the caller advance to a different line for the NEXT tap (see Home's
   // mascotCardIndex) without this component needing to know anything
   // about where the text comes from.
@@ -370,7 +370,7 @@ export function TabbyMascot({
     );
     onTap?.();
     if (insight) {
-      // Always (re)show with a fresh timer, rather than toggling -- a
+      // Always (re)show with a fresh timer, rather than toggling, since a
       // repeat tap should show a new line, not close the bubble.
       setShowBubble(true);
       if (bubbleTimer.current) clearTimeout(bubbleTimer.current);
@@ -401,7 +401,7 @@ export function TabbyMascot({
           </Animated.View>
         )}
 
-        {/* Soft color wash behind the mascot, no blur lib -- a flat tint
+        {/* Soft color wash behind the mascot, no blur lib: a flat tint
             reads as "glow" well enough at this size. */}
         <View
           style={{

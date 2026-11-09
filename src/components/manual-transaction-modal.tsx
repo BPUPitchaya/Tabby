@@ -31,7 +31,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 // style instead of NativeWind's `shadow-sm` class. A conditionally-applied
 // `shadow-*` className hits a known race in NativeWind's CSS interop layer
 // that throws "Couldn't find a navigation context" the first time the
-// class is added (nativewind/nativewind#1536) -- native shadow props
+// class is added (nativewind/nativewind#1536). Native shadow props
 // sidestep that code path entirely.
 const SEGMENT_SHADOW = {
   shadowColor: '#000',
@@ -60,13 +60,13 @@ export function useManualTransactionForm({
   categories: Category[];
   setCategories: Dispatch<SetStateAction<Category[]>>;
   setError: (error: string | null) => void;
-  // Shared with the screen's composer -- auto-categorizing on description
+  // Shared with the screen's composer: auto-categorizing on description
   // blur shows the same busy state.
   setAiBusy: (busy: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
   // Manual add/edit now lives in its own bottom-sheet modal, triggered by
-  // the "+" button or by tapping an existing transaction -- rather than a
+  // the "+" button or by tapping an existing transaction, rather than a
   // permanently-visible form taking up the top of the screen.
   const [manualOpen, setManualOpen] = useState(false);
   const [amount, setAmount] = useState('');
@@ -82,7 +82,7 @@ export function useManualTransactionForm({
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState(CUSTOM_CATEGORY_ICONS[0]);
-  // A ref, not state -- handleSuggestCategoryIcon reads this after an
+  // A ref, not state: handleSuggestCategoryIcon reads this after an
   // await, where a captured state value would be stale if the user tapped
   // an icon while the AI call was still in flight.
   const newCategoryIconTouchedRef = useRef(false);
@@ -105,7 +105,7 @@ export function useManualTransactionForm({
     setNewCategoryError(null);
   };
 
-  // Suggests an icon from the typed name -- a local keyword guess first
+  // Suggests an icon from the typed name: a local keyword guess first
   // (instant, covers most common names), AI only as a fallback when
   // nothing matches, so this isn't a network round trip every time. Only
   // while the user hasn't manually picked one themselves, so it never
@@ -176,7 +176,7 @@ export function useManualTransactionForm({
 
   const handleDescriptionBlur = async () => {
     // Only auto-suggest if the user hasn't picked (or we haven't already
-    // AI-suggested) a category -- never override a manual choice.
+    // AI-suggested) a category. Never override a manual choice.
     if (!description.trim() || categorySource === 'manual' || categories.length === 0) return;
 
     setAiBusy(true);
@@ -285,7 +285,7 @@ export function useManualTransactionForm({
 
 export type ManualTransactionForm = ReturnType<typeof useManualTransactionForm>;
 
-// Manual add/edit -- opened via the + button or by tapping a transaction.
+// Manual add/edit, opened via the + button or by tapping a transaction.
 export function ManualTransactionModal({
   form,
   todayISO,
@@ -631,11 +631,11 @@ export function ManualTransactionModal({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Android shows its own native dialog with no wrapper needed --
+      {/* Android shows its own native dialog with no wrapper needed:
           rendering the picker at all is what triggers it, and it unmounts
           itself via onValueChange/onDismiss below. iOS's picker renders
           inline inside the manual-add sheet above instead of a second
-          Modal -- stacking two RN Modals on iOS silently fails to present
+          Modal, since stacking two RN Modals on iOS silently fails to present
           the top one. */}
       {showDatePicker && Platform.OS === 'android' && (
         <DateTimePicker

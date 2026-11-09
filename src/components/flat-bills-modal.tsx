@@ -1,7 +1,7 @@
-// Recurring flat bills -- rent/power/internet, scheduled once instead of
+// Recurring flat bills: rent/power/internet, scheduled once instead of
 // logged as a one-off shared expense every cycle. Same chrome as
 // chores-modal.tsx (frequency segment + weekday/day-of-month picker
-// sheets), minus the assignment/rotation section -- a bill has no
+// sheets), minus the assignment/rotation section, since a bill has no
 // "whose turn", any member can confirm it once they've paid it, which
 // splits it equally among every current flat member (see
 // 0046_add_flat_bills.sql). Create/edit/delete is admin-only, same

@@ -1,7 +1,7 @@
-// Local (on-device) notifications for recurring flat bills -- same
+// Local (on-device) notifications for recurring flat bills, same
 // mechanism as chore-notifications.ts/bill-notifications.ts, IDs keyed
-// by bill id. Unlike a chore, a flat bill has no single "assignee" --
-// any member can confirm it once it's paid -- so every member's own
+// by bill id. Unlike a chore, a flat bill has no single "assignee":
+// any member can confirm it once it's paid, so every member's own
 // device independently schedules its own reminder for an unconfirmed,
 // due cycle; there's no "whose turn" check to gate it the way chores
 // have (see the caller in flat.tsx's load()).
@@ -20,7 +20,7 @@ function reminderId(billId: string): string {
   return `flat-bill-reminder-${billId}`;
 }
 
-// `dueDate` is 'YYYY-MM-DD' -- interpreted as noon local time, same
+// `dueDate` is 'YYYY-MM-DD', interpreted as noon local time, same
 // convention as chore/bill/income reminders.
 export async function scheduleFlatBillReminder(billId: string, billName: string, dueDate: string): Promise<void> {
   const Notifications = await getNotifications();
@@ -33,7 +33,7 @@ export async function scheduleFlatBillReminder(billId: string, billName: string,
     identifier: id,
     content: {
       title: `${billName} is due`,
-      body: "Log it in Tabby once it's paid -- it splits automatically among the flat.",
+      body: "Log it in Tabby once it's paid; it splits automatically among the flat.",
     },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
   });

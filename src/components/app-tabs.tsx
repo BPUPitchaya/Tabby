@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 
-// Same brown as the `tabby` Tailwind scale (tailwind.config.js) -- these are
+// Same brown as the `tabby` Tailwind scale (tailwind.config.js). These are
 // native tab-bar props, not NativeWind classNames, so the exact hex values
 // are duplicated here rather than referenced from the Tailwind config.
 const TABBY_BROWN = '#8B5A2B'; // tabby-600, light-mode accent

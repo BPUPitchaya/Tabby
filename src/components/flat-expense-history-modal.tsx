@@ -8,11 +8,11 @@ import type { SharedExpense } from '@/lib/flats';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Full shared-expense history -- "Recent Activity" only ever shows
+// Full shared-expense history: "Recent Activity" only ever shows
 // the RECENT_ACTIVITY_LIMIT most recent inline; this is the
 // unbounded list behind "View all". Tapping a row to edit closes
 // this modal in the same state update that opens the edit one
-// (never both visible={true} at once) -- two stacked RN Modals
+// (never both visible={true} at once), since two stacked RN Modals
 // silently fail to present the top one on iOS (see
 // manual-transaction-modal.tsx's own DateTimePicker comment for the
 // same constraint).
@@ -37,7 +37,7 @@ export function FlatExpenseHistoryModal({
   const isDark = useColorScheme() === 'dark';
   const [historySearch, setHistorySearch] = useState('');
 
-  // Matches on the description or who paid -- the two things worth
+  // Matches on the description or who paid, the two things worth
   // scanning a long history by, same "search what's visible" scope as
   // every other plain-text filter in the app (no AI, no date parsing).
   const historyResults = historySearch.trim()

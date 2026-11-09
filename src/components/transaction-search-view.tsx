@@ -9,7 +9,7 @@ import type { Category, Transaction } from '@/lib/transactions';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// The Transactions screen's search mode -- overlays either tab rather than
+// The Transactions screen's search mode. Overlays either tab rather than
 // being a third tab, since it's a transient "narrow what I'm looking at"
 // mode, not a destination of its own. Only mounted while search is open,
 // so every open starts from a fresh filter state (All time, no keyword,
@@ -37,14 +37,14 @@ export function TransactionSearchView({
   const [searchCategoryId, setSearchCategoryId] = useState<string | null>(initialCategoryId);
   const [searchRange, setSearchRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
   // Set only by a submitted AI question whose answer implies a specific
-  // window ("last month", "in September") -- overrides the preset pills
+  // window ("last month", "in September"). Overrides the preset pills
   // above, which only ever express an open-ended "since X" range. Cleared
   // by picking a preset manually, so the two controls never fight.
   const [aiDateRange, setAiDateRange] = useState<{ start: string; end: string } | null>(null);
   const [askingAI, setAskingAI] = useState(false);
 
   const searchResults = useMemo(() => {
-    // Date.now() below is intentional, not a memoization hazard -- this
+    // Date.now() below is intentional, not a memoization hazard: this
     // recomputes on its own explicit deps, never relies on the
     // compiler's auto-memoization, and a relative range ("last 7 days")
     // has to read the actual current time somewhere.
@@ -67,7 +67,7 @@ export function TransactionSearchView({
     });
   }, [transactions, searchText, searchCategoryId, searchRange, aiDateRange]);
 
-  // Expense/income totals for whatever's currently filtered -- answers
+  // Expense/income totals for whatever's currently filtered. Answers
   // "how much did I spend on X" directly instead of making the user add
   // up a results list by hand. Plain sums over already-filtered rows,
   // never an AI-generated figure.
@@ -101,7 +101,7 @@ export function TransactionSearchView({
 
   return (
     <>
-      {/* Search header -- replaces the tabs/search-bar row while active. */}
+      {/* Search header, replaces the tabs/search-bar row while active. */}
       <View className="flex-row items-center gap-2 px-4 pt-3 pb-3">
         <View className="flex-1 h-11 rounded-xl bg-gray-100 dark:bg-tabby-800 border border-tabby-600 dark:border-tabby-200 flex-row items-center px-3 gap-2">
           <Feather name="search" size={15} color={isDark ? '#E8C39E' : '#8B5A2B'} />

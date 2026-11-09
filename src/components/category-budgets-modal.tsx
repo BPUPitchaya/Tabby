@@ -1,4 +1,4 @@
-// Optional per-category budget caps -- reached from Budget, since a
+// Optional per-category budget caps, reached from Budget, since a
 // category budget rides the same pay cycle the overall one does. No
 // category starts with a cap; add one to whichever categories you want to
 // track, clear it to stop. See category-budgets.ts and
@@ -34,20 +34,20 @@ import { fetchDashboardData } from '@/lib/dashboard';
 import { fetchIncomeSources, getIncomeSourceCycle, getPrimaryIncomeSource } from '@/lib/income-sources';
 import { fetchCategories, type Category } from '@/lib/transactions';
 
-// Suggested amounts round to the nearest $5 -- a budget cap of "$83.47"
+// Suggested amounts round to the nearest $5. A budget cap of "$83.47"
 // reads as spurious precision for what's an estimate, not a bill.
 function roundToNearest5(amount: number): number {
   return Math.max(5, Math.round(amount / 5) * 5);
 }
 
 // No single category's suggestion exceeds this share of average monthly
-// income -- pure spending history can suggest something that's already
+// income: pure spending history can suggest something that's already
 // unsustainable (or was a one-off), so this is a sanity backstop, not a
 // full budgeting framework. Picked by the user, not invented here.
 const BUDGET_SUGGESTION_INCOME_CAP_PCT = 0.15;
 
 // Flat starter suggested for a category with zero spend in the averaging
-// window -- deliberately small and explicitly labeled a guess, since there's
+// window. It's deliberately small and explicitly labeled a guess, since there's
 // no real pattern behind it (unlike the history-based suggestions above).
 const BUDGET_SUGGESTION_FALLBACK_AMOUNT = 20;
 
@@ -55,7 +55,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 
 // Same deterministic per-category tint as TransactionRow's categoryTint in
 // transactions.tsx (private there, so duplicated rather than exported just
-// for this) -- keeps a category's color consistent with how it looks in
+// for this). It keeps a category's color consistent with how it looks in
 // the Activity list, without a color column in the DB.
 const CATEGORY_PALETTE_LIGHT = [
   { bg: '#D7E4CE', fg: '#3F5A35' },
@@ -82,13 +82,13 @@ function categoryTintIndex(categoryId: string, paletteLength: number): number {
 type PieSlice = { categoryId: string; name: string; amount: number };
 
 // The hash above can put two different categories at the same palette slot
-// (e.g. "Dining Out" and "Health" both landing on index 2) -- fine for a
+// (e.g. "Dining Out" and "Health" both landing on index 2), fine for a
 // single row elsewhere, but two adjacent pie slices in the same color are
 // unreadable. Only resolve collisions among the slices actually on screen
 // right now, bumping a later colliding slice to the next free slot (wrapping)
 // so this still shows the same color as everywhere else whenever possible.
 // Once every slot is taken (more slices than palette colors), stop looking
-// and just reuse one -- scanning forever for a free slot that doesn't exist
+// and just reuse one: scanning forever for a free slot that doesn't exist
 // froze the app once a budget covered more than `palette.length` categories.
 function resolveSliceColors(
   slices: PieSlice[],
@@ -106,7 +106,7 @@ function resolveSliceColors(
   });
 }
 
-// Read-only -- shows how the budgets you've set (or are drafting) divide
+// Read-only: shows how the budgets you've set (or are drafting) divide
 // up, it never takes a drag/tap itself. A pie/donut is a bad INPUT for an
 // exact dollar figure (a couple pixels of drag swings the number
 // unpredictably); the list below stays the only way to actually set one.
@@ -207,11 +207,11 @@ export function CategoryBudgetsModal({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Suggested budget for any category that doesn't have one saved yet --
+  // Suggested budget for any category that doesn't have one saved yet:
   // amount is plain arithmetic and appears immediately; rationale is
   // filled in afterward once the (much slower) AI call resolves, so the
   // number is never waiting on a network round trip to show up. A capped
-  // suggestion skips the AI call entirely -- "capped to 15% of your
+  // suggestion skips the AI call entirely, since "capped to 15% of your
   // income" is a plain fact, not something worth asking a model to
   // rephrase, and mixing it with an AI-written pattern-rationale would
   // just be two explanations competing for the same line.
@@ -267,7 +267,7 @@ export function CategoryBudgetsModal({
       );
 
       // Categories with no spend in the window at all have nothing to base
-      // a real suggestion on -- give them a small flat starter instead of
+      // a real suggestion on, so give them a small flat starter instead of
       // skipping them, so "apply all" actually covers every category, not
       // just the ones with history. Explicitly marked as a guess rather
       // than disguised as a computed pattern.
@@ -346,7 +346,7 @@ export function CategoryBudgetsModal({
 
   const spentFor = (categoryId: string) => progress.find((p) => p.categoryId === categoryId)?.spent ?? 0;
 
-  // Every suggestion that's still unapplied -- a category with a suggestion
+  // Every suggestion that's still unapplied: a category with a suggestion
   // whose draft hasn't been touched (filled by a single pill tap, or by this
   // same bulk action) yet. Saving one at a time (not Promise.all) so one bad
   // row surfaces a clear error instead of an opaque partial-batch failure.

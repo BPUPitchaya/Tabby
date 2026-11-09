@@ -1,4 +1,4 @@
-// Same native-module problem as profile.test.ts -- category-budgets.ts
+// Same native-module problem as profile.test.ts: category-budgets.ts
 // imports the real Supabase client for its network functions, so it's
 // stubbed out here; this only touches the pure mergeCategoryBudgetProgress,
 // computeCategorySpendAverages, and computeAverageMonthlyIncome helpers.
@@ -45,7 +45,7 @@ describe('mergeCategoryBudgetProgress', () => {
       [
         { categoryId: 'c1', total: 120 },
         { categoryId: 'c2', total: 200 },
-        { categoryId: null, total: 40 }, // uncategorized -- never matched to a budget
+        { categoryId: null, total: 40 }, // uncategorized, never matched to a budget
       ],
     );
     expect(result).toEqual([
@@ -69,7 +69,7 @@ describe('computeCategorySpendAverages', () => {
         row({ amount: 60, category_id: 'c1', occurred_at: '2026-09-10' }),
         row({ amount: 90, category_id: 'c1', occurred_at: '2026-08-10' }),
         row({ amount: 30, category_id: 'c1', occurred_at: '2026-07-10' }),
-        row({ amount: 999, category_id: 'c1', occurred_at: '2026-10-05' }), // current month -- excluded
+        row({ amount: 999, category_id: 'c1', occurred_at: '2026-10-05' }), // current month, excluded
       ],
       3,
       now,
@@ -100,7 +100,7 @@ describe('computeCategorySpendAverages', () => {
 
   it('averages a sparse category over months it actually had spend, not the full window', () => {
     // One real $50 month shouldn't get diluted into $16.67 just because
-    // the other 2 months of the window had nothing logged yet -- a
+    // the other 2 months of the window had nothing logged yet. A
     // suggested budget should reflect "what a normal month looks like",
     // not punish thin history.
     const result = computeCategorySpendAverages(
@@ -129,7 +129,7 @@ describe('computeAverageMonthlyIncome', () => {
       [
         row({ amount: 2000, is_income: true, occurred_at: '2026-09-05' }),
         row({ amount: 2200, is_income: true, occurred_at: '2026-08-05' }),
-        row({ amount: 500, occurred_at: '2026-09-10' }), // expense -- ignored
+        row({ amount: 500, occurred_at: '2026-09-10' }), // expense, ignored
       ],
       3,
       now,

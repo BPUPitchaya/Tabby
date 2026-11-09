@@ -1,6 +1,6 @@
 // Whether the dashboard's "current period" figures (hero net, Earned,
 // Spent, category breakdown) follow the user's pay cycle or always use
-// the calendar month -- same local-only persistence pattern as theme and
+// the calendar month, same local-only persistence pattern as theme and
 // font preference. The 6-month trend chart is unaffected either way (see
 // dashboard.ts).
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,8 +16,8 @@ export async function loadDashboardPeriodPreference(): Promise<DashboardPeriodPr
       return stored;
     }
   } catch {
-    // fall through to the default below -- a storage read failure
-    // shouldn't block the app from rendering
+    // Fall through to the default below. A storage read failure
+    // shouldn't block the app from rendering.
   }
   return 'pay-cycle';
 }
@@ -26,7 +26,7 @@ export async function setDashboardPeriodPreference(preference: DashboardPeriodPr
   try {
     await AsyncStorage.setItem(STORAGE_KEY, preference);
   } catch {
-    // the caller already updated in-memory state -- losing the persisted
-    // value just means it won't survive an app restart
+    // The caller already updated in-memory state, so losing the persisted
+    // value just means it won't survive an app restart.
   }
 }

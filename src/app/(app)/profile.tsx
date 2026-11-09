@@ -20,7 +20,7 @@ import { exportTransactionsCSV } from '@/lib/data-export';
 import { deleteAccount, fetchProfile, type AnimalKey } from '@/lib/profile';
 import { fetchGoalsWithProgress } from '@/lib/savings-goals';
 
-// A row inside a joined list -- no border/radius of its own, a divider
+// A row inside a joined list: no border/radius of its own, a divider
 // between rows instead, so the group reads as one list rather than a
 // stack of identical floating pills. `muted` dials the whole row down
 // (used for Legal, which is plumbing, not a feature worth the same visual
@@ -143,7 +143,7 @@ export default function ProfileScreen() {
     ]);
   };
 
-  // Two confirms, not one -- every other delete in this app (a
+  // Two confirms, not one: every other delete in this app (a
   // transaction, a bill) is undoable in the sense that you could just
   // re-add it; this one genuinely isn't. Same reasoning as why this
   // needed its own Edge Function rather than a plain client-side delete
@@ -192,7 +192,7 @@ export default function ProfileScreen() {
     <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 24, gap: 22 }}>
         {/* Left-aligned header, paired with the avatar, instead of the
-            centered stack every other screen's header uses -- enough to
+            centered stack every other screen's header uses, enough to
             make Profile feel like its own place rather than a repeat of
             the auth screen. */}
         <View className="flex-row items-center gap-4">
@@ -212,7 +212,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* The app's actual job -- surfaced first, not buried alongside
+        {/* The app's actual job, surfaced first, not buried alongside
             Flat/Friends/Settings in one undifferentiated list. */}
         <View className="gap-2">
           <SectionLabel>MONEY</SectionLabel>
@@ -281,7 +281,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Deliberately quieter than the groups above -- plumbing, not a
+        {/* Deliberately quieter than the groups above: plumbing, not a
             feature, so it shouldn't compete for the same attention. */}
         <View className="gap-1.5">
           <SectionLabel muted>LEGAL</SectionLabel>
@@ -304,7 +304,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Sign Out is routine, not destructive -- it no longer shares red
+        {/* Sign Out is routine, not destructive: it no longer shares red
             with Delete Account below, which is the one action on this
             screen that actually warrants it. */}
         <Pressable
@@ -319,7 +319,7 @@ export default function ProfileScreen() {
           <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Sign Out</Text>
         </Pressable>
 
-        {/* The one place this screen raises its voice -- genuinely
+        {/* The one place this screen raises its voice: genuinely
             irreversible, so it looks different from every other row here. */}
         <View className="border-[1.5px] border-rust-200 dark:border-rust-700 bg-rust-50 dark:bg-rust-900/40 rounded-2xl p-4 gap-2.5">
           <View className="flex-row items-center gap-2">

@@ -22,20 +22,20 @@ import { filterTransactionsByQuery } from '@/lib/transaction-query';
 import type { Category, Transaction } from '@/lib/transactions';
 
 // Cheap local pre-filter for whether a quick-add message might describe
-// splitting a bill -- see handleQuickAdd for why this gates a second AI
+// splitting a bill. See handleQuickAdd for why this gates a second AI
 // call instead of asking Gemini to classify every message up front.
 export const SPLIT_HINT = /\bsplit\b|\beach\b|\bowes?\b|\bbetween\b|\bdivide/i;
 
 // Same cheap-local-pre-filter idea, for whether a quick-add message is
-// actually a QUESTION about personal finances -- spending, budget, bills,
-// flat balances, or income -- rather than a transaction to log. Checked
-// first, before the split-hint -- a question should never get mistaken
+// actually a QUESTION about personal finances (spending, budget, bills,
+// flat balances, or income) rather than a transaction to log. Checked
+// first, before the split-hint, since a question should never get mistaken
 // for either a split or a plain expense statement.
 export const FINANCIAL_QUESTION_HINT =
   /^(how (much|many)|what did|did (i|we)|when (did|do|is)|am i|is my|are we|who owes|do i owe|does .* owe)\b|\?\s*$/i;
 
 // Cheap local pre-filter for an EDIT command ("change my budget to
-// $500", "I paid Jo $20", "rename my flat to The Hideout") -- checked
+// $500", "I paid Jo $20", "rename my flat to The Hideout"). Checked
 // before the question hint, since this isn't asking anything, it's
 // asking the app to change or record a value. See classifyEditCommand
 // for which actions this actually covers.
@@ -43,7 +43,7 @@ export const EDIT_COMMAND_HINT =
   /\b(change|set|update|rename)\b.*\b(budget|name|bill|rent|flat)\b|\bi\s+paid\b|\bpaid\s+me\b|\bpaid\b.*\bback\b/i;
 
 // One answer builder per financial topic classifyFinancialQuestion can
-// return -- each pulls whatever real data that topic needs and computes
+// return. Each pulls whatever real data that topic needs and computes
 // a single plain-language fact from it. Never an AI-invented figure: the
 // AI's only job was picking the topic (and, for spending, the filter);
 // every number here comes straight from the database.
@@ -147,7 +147,7 @@ export async function buildFinancialAnswer(
 }
 
 // An edit command ("change my budget to $500", "I paid Jo $20") parsed
-// but not yet applied -- nothing is written until the user taps
+// but not yet applied. Nothing is written until the user taps
 // Confirm. `apply` is a closure holding whatever that specific action
 // needs (an id, a flat id, two user ids, ...) so this one piece of
 // state and its one render block cover every edit action, not just
@@ -168,7 +168,7 @@ export type EditCommandResult = { kind: 'edit'; edit: PendingEdit } | { kind: 'e
 
 // An EDIT command ("change my budget to $500", "set my groceries
 // budget to $300", "change my name to Alex", "change my rent to
-// $480", "rename my flat to The Hideout", "I paid Jo $20") -- never
+// $480", "rename my flat to The Hideout", "I paid Jo $20"). It's never
 // applied directly. Classifies which action and its parameters,
 // then returns an old -> new confirmation; nothing is written until
 // the user taps Confirm.
@@ -301,7 +301,7 @@ export async function resolveEditCommand(
           return { kind: 'error', message: "You're not part of a flat yet." };
         }
         // Renaming is admin-only at the RLS level (same gate
-        // flat.tsx's own rename control uses) -- the policy
+        // flat.tsx's own rename control uses). The policy
         // silently updates 0 rows rather than erroring for a
         // non-admin, so this has to be checked up front or the
         // confirm would report a false success.
@@ -358,7 +358,7 @@ export async function resolveEditCommand(
       }
     }
   }
-  // Classified as 'none' (or the classify call failed) -- fall
+  // Classified as 'none' (or the classify call failed). Fall
   // through and let the caller try parsing it as an ordinary expense
   // instead, in case the hint just caught an oddly-phrased statement.
   return null;

@@ -5,7 +5,7 @@ import type { ParsedExpense } from '@/lib/ai';
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 // Review sheet for shared expenses the AI pulled out of the Split an
-// Expense quick-add text -- each one splits equally across every member.
+// Expense quick-add text; each one splits equally across every member.
 // Visible whenever `preview` is non-null.
 export function FlatAiPreviewModal({
   preview,

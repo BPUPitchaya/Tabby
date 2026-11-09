@@ -1,4 +1,4 @@
-// These scenarios aren't invented -- they're the exact cases manually
+// These scenarios aren't invented: they're the exact cases manually
 // verified against the live database earlier in development (see commit
 // history for "Add Flat Health Score" and the balance-calculation QA
 // pass). Codifying them here turns "I checked this once by hand" into a
@@ -16,7 +16,7 @@ import {
 } from './flats';
 
 // flats.ts imports the real Supabase client (for its non-pure functions),
-// which side-effect-imports expo-sqlite for session storage -- that tries
+// which side-effect-imports expo-sqlite for session storage, and that tries
 // to open a native database that doesn't exist in Jest's environment.
 // Stubbed out here since these tests only touch the pure calculation
 // functions above, which never call supabase at all. (jest.mock calls are
@@ -96,7 +96,7 @@ describe('computeBalancesFromData', () => {
 
   // A deleted flatmate's profile is gone, but 0036's ON DELETE SET NULL
   // means the split/expense/settlement ROWS survive with that pointer
-  // nulled out -- these cover the merged "Deleted User" bucket that
+  // nulled out. These cover the merged "Deleted User" bucket that
   // results (see Balance's own comment for why it's merged rather than
   // per-person).
   describe('a flatmate who has since deleted their account', () => {
@@ -132,7 +132,7 @@ describe('computeBalancesFromData', () => {
     });
 
     it("never attributes a deleted flatmate's history to a real member of the same name", () => {
-      // A still a real member, B deleted -- A's own balance must stay
+      // A is still a real member, B is deleted; A's own balance must stay
       // untouched by B's now-nulled rows.
       const splits: SplitRow[] = [
         { user_id: A, share_amount: 20, shared_expenses: { paid_by: A, flat_id: FLAT_ID } },
@@ -192,7 +192,7 @@ describe('computeFlatHealthFromData', () => {
 });
 
 describe('computeFlatMonthlyTotalsFromRows', () => {
-  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026 -- same fixture date as dashboard.test.ts
+  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026, same fixture date as dashboard.test.ts
 
   it('returns 6 months including months with zero spend, oldest first', () => {
     const result = computeFlatMonthlyTotalsFromRows([], now);
@@ -228,7 +228,7 @@ describe('computeFlatMonthlyTotalsFromRows', () => {
 });
 
 describe('computeFlatSpendTrendFromRows', () => {
-  // Thu Oct 15, 2026 -- same fixture date as above; the Monday of this
+  // Thu Oct 15, 2026, same fixture date as above; the Monday of this
   // week is Oct 12, the most recent (newest) bucket in every series.
   const now = new Date(2026, 9, 15);
 

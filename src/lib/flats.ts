@@ -11,7 +11,7 @@ export type Flat = {
   id: string;
   name: string;
   invite_code: string;
-  // Nullable since 0036_nullable_profile_refs_for_account_deletion.sql --
+  // Nullable since 0036_nullable_profile_refs_for_account_deletion.sql:
   // the creator may have since deleted their account. Not displayed as a
   // name anywhere (admin status is tracked separately via flat_members.role),
   // so no UI fallback needed for this one.
@@ -23,7 +23,7 @@ export type SharedExpense = {
   amount: number;
   description: string | null;
   occurred_at: string;
-  // Nullable -- the payer may have since deleted their account. The row
+  // Nullable, since the payer may have since deleted their account. The row
   // itself survives (ON DELETE SET NULL) so this expense still counts
   // correctly in flat-wide totals/health; only "who" is gone.
   paid_by: string | null;
@@ -32,7 +32,7 @@ export type SharedExpense = {
 
 export type Balance = {
   // null is a synthetic bucket for one or more deleted flatmates, merged
-  // together -- once a profile is gone there's no id left to distinguish
+  // together, since once a profile is gone there's no id left to distinguish
   // *which* deleted person a given split/settlement belonged to (see
   // computeBalancesFromData). Never settle-able: there's no real account
   // left to record a settlement against.
@@ -42,7 +42,7 @@ export type Balance = {
   netAmount: number;
 };
 
-// Every flat this user belongs to, oldest membership first -- a user can
+// Every flat this user belongs to, oldest membership first. A user can
 // belong to more than one (flat_members only has a unique (flat_id,
 // user_id), never a unique user_id), so this is the real source of
 // truth; fetchMyFlat below is just its first result, for call sites that
@@ -82,7 +82,7 @@ export async function createFlat(userId: string, name: string): Promise<Flat> {
   return flat as Flat;
 }
 
-// Looks a flat up by invite code without joining it -- lets a caller
+// Looks a flat up by invite code without joining it, letting a caller
 // (the join screen) show which flat a code points to, or check whether
 // the current user is already in it, before committing to the insert.
 export async function fetchFlatByInviteCode(inviteCode: string): Promise<Flat | null> {
@@ -92,8 +92,8 @@ export async function fetchFlatByInviteCode(inviteCode: string): Promise<Flat | 
 }
 
 // Joining goes through a security-definer RPC (see
-// 0048_fix_flat_membership_insert_policies.sql) rather than a direct insert
-// -- it verifies the invite code itself and always inserts role='member',
+// 0048_fix_flat_membership_insert_policies.sql) rather than a direct insert.
+// It verifies the invite code itself and always inserts role='member',
 // closing a gap where a direct insert could self-promote to admin or let a
 // removed member silently rejoin.
 export async function joinFlat(inviteCode: string): Promise<Flat> {
@@ -118,7 +118,7 @@ export async function deleteFlat(flatId: string) {
   if (error) throw error;
 }
 
-// RPC rather than a plain delete -- if the leaving user is the flat's
+// RPC rather than a plain delete: if the leaving user is the flat's
 // only admin, this atomically promotes the longest-standing other member
 // to admin first, so the flat is never left with zero admins (nothing
 // could rename/delete it or manage chores otherwise). See
@@ -130,7 +130,7 @@ export async function leaveFlat(flatId: string) {
 
 // Admin-only (see 0047_admin_member_management.sql); the caller (flat.tsx)
 // never targets the acting admin's own row, so this can never leave a
-// flat with zero admins -- no RPC-level safety needed the way leaveFlat's
+// flat with zero admins, so no RPC-level safety is needed the way leaveFlat's
 // does, since a plain update/delete under that migration's policies is
 // already safe by construction.
 export async function updateMemberRole(flatId: string, userId: string, role: 'admin' | 'member'): Promise<void> {
@@ -239,7 +239,7 @@ export async function updateSharedExpense(params: {
   if (expenseError) throw expenseError;
 
   // Recompute splits from scratch rather than trying to patch existing
-  // rows -- simpler and correct even if the member list changed since
+  // rows: simpler and correct even if the member list changed since
   // this expense was first logged.
   const { error: deleteError } = await supabase
     .from('shared_expense_splits')
@@ -278,7 +278,7 @@ export async function recordSettlement(params: {
 }
 
 export type SplitRow = {
-  // Nullable -- the person who owed this share may have since deleted
+  // Nullable, since the person who owed this share may have since deleted
   // their account.
   user_id: string | null;
   share_amount: number;
@@ -288,7 +288,7 @@ export type SplitRow = {
 export type SettlementRow = { from_user: string | null; to_user: string | null; amount: number };
 
 /**
- * Pure calculation, no network calls -- extracted so it can be unit
+ * Pure calculation, no network calls. Extracted so it can be unit
  * tested directly with fixture data instead of only ever being verified
  * by hand against a live database. See flats.test.ts.
  *
@@ -303,7 +303,7 @@ export function computeBalancesFromData(
   members: FlatMember[]
 ): Balance[] {
   const net = new Map<string, number>();
-  // Everything involving a now-deleted flatmate merges into one bucket --
+  // Everything involving a now-deleted flatmate merges into one bucket:
   // once their profile is gone, a null paid_by/user_id/from_user/to_user
   // could originally have been any of them, so there's no way to keep
   // them separate. See the Balance type's own comment.
@@ -354,7 +354,7 @@ export function computeBalancesFromData(
       netAmount: Math.round((net.get(m.user_id) ?? 0) * 100) / 100,
     }));
 
-  // Only shown when nonzero -- a deleted flatmate who was already fully
+  // Only shown when nonzero: a deleted flatmate who was already fully
   // settled with leaves nothing to explain, same as any other member.
   const roundedDeletedNet = Math.round(deletedUserNet * 100) / 100;
   if (roundedDeletedNet !== 0) {
@@ -398,9 +398,9 @@ export type FlatHealth = {
 };
 
 export type HealthSplitRow = {
-  // Nullable, same reasoning as SplitRow above -- a deleted flatmate's
+  // Nullable, same reasoning as SplitRow above: a deleted flatmate's
   // old split row survives, just with this unset. pairKey() below just
-  // stringifies it ("null"), which is still a distinct, consistent key --
+  // stringifies it ("null"), which is still a distinct, consistent key, since
   // the magnitude-only health score doesn't need a real identity here.
   user_id: string | null;
   share_amount: number;
@@ -408,7 +408,7 @@ export type HealthSplitRow = {
 };
 
 /**
- * Pure calculation, no network calls -- see computeBalancesFromData's
+ * Pure calculation, no network calls; see computeBalancesFromData's
  * comment above for why this is split out. See flats.test.ts.
  *
  * Flat-wide health score: what fraction of all shared spending in this flat
@@ -501,10 +501,10 @@ export async function computeFlatHealth(flatId: string): Promise<FlatHealth> {
 export type FlatMonthlyTotal = { month: string; label: string; total: number };
 
 /**
- * Pure calculation, no network calls -- same split-for-testability
+ * Pure calculation, no network calls, same split-for-testability
  * pattern as computeDashboardFromRows/computeBalancesFromData. Always
  * the full last 6 calendar months, including months with zero spend,
- * same shape as the personal dashboard's trend chart -- this is a
+ * same shape as the personal dashboard's trend chart. This is a
  * flat-wide history view, not scoped to a pay cycle the way the
  * dashboard's "current period" figures are.
  */
@@ -538,7 +538,7 @@ export type FlatSpendTrend = {
   biweekly: FlatTrendPoint[];
   monthly: FlatMonthlyTotal[];
   // Earliest shared_expense ever logged for this flat, regardless of the
-  // 6-month fetch window below -- used to resolve 'auto' (see
+  // 6-month fetch window below. Used to resolve 'auto' (see
   // resolveFlatTrendView in flat.tsx): a brand-new flat should default
   // to weekly, not a near-empty 6-month chart.
   earliestOccurredAt: string | null;
@@ -546,7 +546,7 @@ export type FlatSpendTrend = {
 
 // Groups rows into `count` fixed-length windows of `weekSpan` calendar
 // weeks each, anchored to the Monday of the CURRENT week (not a rolling
-// "last N days ending today") -- same calendar-week definition
+// "last N days ending today"), same calendar-week definition
 // mondayOf/toDateKey already give the personal dashboard's own weekly
 // chart, just stepping 2 weeks at a time for the biweekly tier instead
 // of 1. Shared by both weekly (weekSpan=1) and biweekly (weekSpan=2)
@@ -586,7 +586,7 @@ function bucketByWeeks(
 }
 
 /**
- * Pure calculation, no network calls -- same split-for-testability
+ * Pure calculation, no network calls, same split-for-testability
  * pattern as computeFlatMonthlyTotalsFromRows above. Weekly and
  * biweekly cover the last 6/12 calendar weeks; monthly reuses the
  * existing calendar-month function unchanged.

@@ -11,7 +11,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 
 // Supabase's recovery email links append access_token/refresh_token as a
 // URL fragment (#...), which detectSessionInUrl would normally pick up
-// automatically -- but that's off in supabase.ts (there's no browser
+// automatically, but that's off in supabase.ts (there's no browser
 // address bar on a device to detect it from), so this parses the
 // fragment by hand, same spirit as join/[code]'s own manual deep-link
 // handling.
@@ -26,7 +26,7 @@ function parseRecoveryTokens(url: string): { accessToken: string; refreshToken: 
   return { accessToken, refreshToken };
 }
 
-// Public screen, outside the (app) auth/onboarding gate -- reachable via
+// Public screen, outside the (app) auth/onboarding gate, reachable via
 // tabby://reset-password#access_token=...&refresh_token=...&type=recovery,
 // the link sendPasswordReset emails out. See _layout.tsx for why this
 // sits as a sibling of (app) rather than inside it.
@@ -56,7 +56,7 @@ export default function ResetPasswordScreen() {
 
     Linking.getInitialURL().then(establishSession);
     // Covers the app already being open (warm start) when the link is
-    // tapped -- getInitialURL above only fires for a cold start.
+    // tapped. getInitialURL above only fires for a cold start.
     const subscription = Linking.addEventListener('url', ({ url }) => establishSession(url));
     return () => subscription.remove();
   }, []);

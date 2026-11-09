@@ -3,7 +3,7 @@ import { Pressable, useColorScheme } from 'react-native';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Small round icon button used in the header -- Feather icon only, no label,
+// Small round icon button used in the header. Feather icon only, no label,
 // consistent 40x40 tap target.
 export function HeaderIconButton({
   icon,

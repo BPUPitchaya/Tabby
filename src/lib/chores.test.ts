@@ -1,4 +1,4 @@
-// Same native-module problem as bills.test.ts -- chores.ts imports the
+// Same native-module problem as bills.test.ts: chores.ts imports the
 // real Supabase client for its network functions, so it's stubbed out
 // here; these tests only touch the pure currentAssigneeId/
 // isChoreDoneThisCycle helpers, which never call supabase.
@@ -24,7 +24,7 @@ describe('currentAssigneeId', () => {
 });
 
 describe('isChoreDoneThisCycle', () => {
-  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026 -- same fixture date as bills.test.ts
+  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026, same fixture date as bills.test.ts
 
   it('is not done when never confirmed', () => {
     const result = isChoreDoneThisCycle(

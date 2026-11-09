@@ -1,4 +1,4 @@
-// Ad-hoc "went out with a group, split the bill" -- distinct from
+// Ad-hoc "went out with a group, split the bill", distinct from
 // flats.ts's shared_expenses, which is ongoing flat/household costs among
 // known flat members. A bill split can include anyone: a flatmate, any
 // other Tabby user (added by email, same pattern as addMemberByEmail), or
@@ -10,7 +10,7 @@ export type BillSplitItem = {
   amount: number;
 };
 
-// What one person owes, before it's saved -- the creator is never a share
+// What one person owes, before it's saved. The creator is never a share
 // (they paid the bill; a share is someone else's debt back to them).
 export type DraftShare = {
   // Exactly one of these is set.
@@ -102,7 +102,7 @@ export async function createBillSplit(
       guest_name: share.userId ? null : share.label,
       amount_owed: share.amount,
       // A share aimed at a real account is a proposal, not an instant
-      // claim -- it only becomes a real pending debt once that person
+      // claim; it only becomes a real pending debt once that person
       // accepts it (respondToShare). A guest has no account to ask, so
       // their share is pending straight away, same as before.
       status: share.userId ? 'proposed' : 'pending',
@@ -119,18 +119,18 @@ export type MyBillSplitShare = {
   status: 'proposed' | 'pending' | 'paid' | 'declined';
   reminded_at: string | null;
   // Two-step settle: status only reaches 'paid' once BOTH sides have
-  // confirmed. While pending, these say who (if anyone) already has --
+  // confirmed. While pending, these say who (if anyone) already has;
   // see confirmSharePaidByOwer/confirmSharePaidByPayee below.
   ower_confirmed_at: string | null;
   payee_confirmed_at: string | null;
   // Optional reference the ower leaves on their own confirm (bank ref,
-  // "paid via cash", etc) -- the payee's own cross-check, cheaper and
+  // "paid via cash", etc), the payee's own cross-check, cheaper and
   // less risky than a screenshot. See confirmSharePaidByOwer.
   note: string | null;
   bill_splits: { title: string; merchant: string | null; occurred_at: string; created_by: string } | null;
 };
 
-// Splits where I'm owed money (I created it) aren't fetched here -- the
+// Splits where I'm owed money (I created it) aren't fetched here: the
 // creation flow already shows the breakdown right after creating one.
 // This is specifically "what do I owe other people," the thing worth
 // surfacing again later. Includes 'paid' alongside 'pending' so the Money
@@ -148,12 +148,12 @@ export async function fetchMyPendingShares(userId: string): Promise<MyBillSplitS
   return data as unknown as MyBillSplitShare[];
 }
 
-// Someone (the creator) sent a reminder about a share you owe -- shown in
+// Someone (the creator) sent a reminder about a share you owe, shown in
 // your own bell/Money Owing next time you open the app, not just as an
 // outgoing text to you. See markReminded for the write side.
 export async function fetchMyReminders(userId: string): Promise<MyBillSplitShare[]> {
   const shares = await fetchMyPendingShares(userId);
-  // Already confirmed your own half -- re-nagging you to "mark as paid"
+  // Already confirmed your own half; re-nagging you to "mark as paid"
   // makes no sense, you're just waiting on them now.
   return shares.filter((s) => s.status === 'pending' && s.reminded_at !== null && s.ower_confirmed_at === null);
 }
@@ -166,7 +166,7 @@ export async function markReminded(shareId: string): Promise<void> {
   if (error) throw error;
 }
 
-// Shares proposed to me, awaiting my accept/decline -- see createBillSplit
+// Shares proposed to me, awaiting my accept/decline. See createBillSplit
 // for why a real-account share starts here instead of straight at pending.
 export async function fetchMyProposedShares(userId: string): Promise<MyBillSplitShare[]> {
   const { data, error } = await supabase
@@ -189,7 +189,7 @@ export async function respondToShare(shareId: string, accept: boolean): Promise<
   if (error) throw error;
 }
 
-// Two-step settle -- status only reaches 'paid' once both sides have
+// Two-step settle: status only reaches 'paid' once both sides have
 // confirmed (see 0034_add_two_step_share_confirmation.sql's RPCs). The
 // ower confirms their own debt; the payee confirms they received it. A
 // guest share (no account, so no ower-side confirm is possible) still
@@ -215,17 +215,17 @@ export type OwedToMeShare = {
   billTitle: string;
   merchant: string | null;
   occurredAt: string;
-  // Two-step settle, same as MyBillSplitShare -- see confirmSharePaidByPayee.
+  // Two-step settle, same as MyBillSplitShare. See confirmSharePaidByPayee.
   owerConfirmedAt: string | null;
   payeeConfirmedAt: string | null;
   isGuest: boolean;
-  // Reference the ower left on their confirm -- your cross-check.
+  // Reference the ower left on their confirm: your cross-check.
   note: string | null;
 };
 
 // Shared by money-owing-modal.tsx and notifications-modal.tsx (via the
 // Home bell) so "overdue" means the same thing in both places. A pending
-// share past this age is flagged for a reminder -- never auto-sent, just
+// share past this age is flagged for a reminder, never auto-sent, just
 // a nudge toward tapping Send Reminder yourself.
 export const OVERDUE_DAYS = 5;
 
@@ -235,10 +235,10 @@ export function isOverdue(share: OwedToMeShare): boolean {
   return days >= OVERDUE_DAYS;
 }
 
-// The other side of fetchMyPendingShares -- shares on bills I created,
+// The other side of fetchMyPendingShares: shares on bills I created,
 // across every status, so "who still owes me" and "who's already paid"
 // are both answerable from one screen. The payee (me) confirms via
-// confirmSharePaidByPayee -- see that function for the two-step settle
+// confirmSharePaidByPayee; see that function for the two-step settle
 // rule and the guest-share exception.
 export async function fetchOwedToMe(userId: string): Promise<OwedToMeShare[]> {
   const { data, error } = await supabase

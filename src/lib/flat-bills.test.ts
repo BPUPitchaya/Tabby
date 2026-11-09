@@ -1,4 +1,4 @@
-// Same native-module problem as bills.test.ts/chores.test.ts -- flat-bills.ts
+// Same native-module problem as bills.test.ts/chores.test.ts: flat-bills.ts
 // imports the real Supabase client for its network functions, so it's
 // stubbed out here; these tests only touch the pure isFlatBillDoneThisCycle
 // helper, which never calls supabase.
@@ -7,7 +7,7 @@ import { isFlatBillDoneThisCycle } from './flat-bills';
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
 describe('isFlatBillDoneThisCycle', () => {
-  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026 -- same fixture date as bills.test.ts/chores.test.ts
+  const now = new Date(2026, 9, 15); // Thu Oct 15, 2026, same fixture date as bills.test.ts/chores.test.ts
 
   it('is not done when never confirmed', () => {
     const result = isFlatBillDoneThisCycle(

@@ -1,7 +1,7 @@
 // Three bundled font packs, picked from Settings. Each pack supplies every
 // weight the app's font-* classNames actually use (see tailwind.config.js's
-// fontFamily block, where each of these var names is referenced) -- no
-// fallback needed since all three families cover the same weight set.
+// fontFamily block, where each of these var names is referenced). No
+// fallback is needed since all three families cover the same weight set.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
@@ -52,7 +52,7 @@ export async function loadFontPreference(): Promise<FontPack> {
       return stored;
     }
   } catch {
-    // fall through to the default below -- a storage read failure
+    // fall through to the default below: a storage read failure
     // shouldn't block the app from rendering
   }
   return 'default';
@@ -62,13 +62,13 @@ export async function setFontPreference(pack: FontPack): Promise<void> {
   try {
     await AsyncStorage.setItem(STORAGE_KEY, pack);
   } catch {
-    // the caller already updated in-memory state -- losing the persisted
+    // the caller already updated in-memory state, so losing the persisted
     // value just means it won't survive an app restart
   }
 }
 
 // Unlike theme-preference.ts's colorScheme.set(), there's no NativeWind
-// global for fonts -- the vars() style lives on a View in _layout.tsx, so
+// global for fonts: the vars() style lives on a View in _layout.tsx, so
 // changing it needs a real re-render. This context is how Settings reaches
 // that state.
 type FontPreferenceContextValue = {
@@ -88,7 +88,7 @@ export function FontPreferenceProvider({
   const [pack, setPackState] = useState(initialPack);
 
   const setPack = (next: FontPack) => {
-    setPackState(next); // optimistic -- the switch should feel instant
+    setPackState(next); // optimistic, so the switch should feel instant
     setFontPreference(next);
   };
 

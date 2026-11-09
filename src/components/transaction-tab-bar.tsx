@@ -7,7 +7,7 @@ const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacit
 // style instead of NativeWind's `shadow-sm` class. A conditionally-applied
 // `shadow-*` className hits a known race in NativeWind's CSS interop layer
 // that throws "Couldn't find a navigation context" the first time the
-// class is added (nativewind/nativewind#1536) -- native shadow props
+// class is added (nativewind/nativewind#1536), so native shadow props
 // sidestep that code path entirely.
 const SEGMENT_SHADOW = {
   shadowColor: '#000',
@@ -68,7 +68,7 @@ export function TransactionTabBar({
         </Pressable>
       </View>
 
-      {/* Search bar -- tap to open filters */}
+      {/* Search bar: tap to open filters */}
       <Pressable
         onPress={onOpenSearch}
         style={pressFeedback}

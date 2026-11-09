@@ -56,7 +56,7 @@ export function FlatSettingsPanel({
   return (
     <View className="bg-gray-50 dark:bg-tabby-800 rounded-xl p-4 gap-3">
       {/* A per-device display preference, not a flat-wide
-          setting -- everyone can pick their own view, same as
+          setting: everyone can pick their own view, same as
           the personal dashboard's trend picker in Profile ->
           Settings. */}
       <View className="gap-2">

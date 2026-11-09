@@ -45,8 +45,8 @@ export async function fetchCategories(type: CategoryType) {
   return data as Category[];
 }
 
-// Case-insensitive duplicate check against this user's OWN categories only
-// -- a custom "Groceries" still collides with another custom "groceries"
+// Case-insensitive duplicate check against this user's OWN categories only:
+// a custom "Groceries" still collides with another custom "groceries"
 // the user made earlier, but never with the fixed global default of the
 // same name (that's a different row, user_id null, not something this
 // check should block re-adding a personal variant of).
@@ -89,7 +89,7 @@ export async function fetchTransactions(userId: string) {
   return data as unknown as Transaction[];
 }
 
-// Exactly one category, within exactly one date range -- used by Budget's
+// Exactly one category, within exactly one date range. Used by Budget's
 // "what did I spend this on" drill-down (budget-modal.tsx), which needs
 // the real pay-cycle window, not an approximation like a calendar month.
 export async function fetchTransactionsForCategoryInRange(
@@ -115,7 +115,7 @@ export async function fetchTransactionsForCategoryInRange(
 }
 
 // Powers merchant autocomplete: your own past merchant names, most
-// recently used first, deduped. No external lookup -- just your own data.
+// recently used first, deduped. No external lookup, just your own data.
 export async function fetchRecentMerchants(userId: string, limit = 8): Promise<string[]> {
   const { data, error } = await supabase
     .from('transactions')
@@ -172,7 +172,7 @@ export async function updateTransaction(
     occurredAt: string;
     isIncome?: boolean;
     // Only set when correcting an income-source payday's figures inline
-    // (income-transaction-detail-modal.tsx) -- omitted, the breakdown
+    // (income-transaction-detail-modal.tsx). When omitted, the breakdown
     // columns are left exactly as they were (a plain amount/date/category
     // edit shouldn't touch them).
     incomeBreakdown?: {

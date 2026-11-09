@@ -7,7 +7,7 @@
 // Routing through here means GEMINI_API_KEY only ever lives as a server
 // secret (set via `supabase secrets set`), never in client code.
 //
-// auth: 'user' requires a real logged-in user's JWT -- not just the
+// auth: 'user' requires a real logged-in user's JWT, not just the
 // publishable key baked into every app install, which proves nothing
 // about who's calling. Matches the "authenticated role only" posture
 // used by every RLS policy elsewhere in this project.
@@ -17,14 +17,14 @@ import { withSupabase } from "@supabase/server";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-// 'latest' alias rather than a pinned version -- see src/lib/ai.ts history
+// 'latest' alias rather than a pinned version. See src/lib/ai.ts history
 // for why: the pinned gemini-3.8-flash model hit sustained 503s under
 // demand, this alias stays pointed at whichever lite model is healthy.
 const GEMINI_MODEL = "gemini-flash-lite-latest";
 
 // Generous for real use (a long typed description, or a few receipt
 // photos/PDF pages), but bounded so a single request can't balloon the
-// Gemini bill on its own -- found in code review alongside the rate-limit
+// Gemini bill on its own, found in code review alongside the rate-limit
 // gap below: even within the 40/hour cap, nothing stopped one call from
 // carrying an arbitrarily large payload.
 const MAX_TEXT_LENGTH = 20_000;
@@ -33,7 +33,7 @@ const MAX_TOTAL_PAYLOAD_BYTES = 15 * 1024 * 1024; // ~15MB of base64 image/docum
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // A plain string for text-only prompts, or an array of content parts for
-// multimodal input (receipt/statement scanning) -- a text part plus an
+// multimodal input (receipt/statement scanning): a text part plus an
 // image or document part with inline base64 data, per Gemini's Interactions
 // API (type: 'text' | 'image' | 'document', each image/document part
 // carrying `data` + `mime_type`).
@@ -88,7 +88,7 @@ async function callGeminiOnce(input: GeminiInput, schema: Record<string, unknown
   return JSON.parse(text);
 }
 
-// One retry on transient 5xx -- observed gemini-3.8-flash doing this under
+// One retry on transient 5xx. Observed gemini-3.8-flash doing this under
 // demand spikes during development; cheap insurance against the same
 // happening to whichever model the 'latest' alias currently points at.
 async function callGemini(input: GeminiInput, schema: Record<string, unknown>): Promise<unknown> {
@@ -116,16 +116,16 @@ export default {
         return Response.json({ error: sizeError }, { status: 413 });
       }
 
-      // 40 calls/hour/user -- generous for normal use (a few receipt
+      // 40 calls/hour/user. Generous for normal use (a few receipt
       // scans and quick-adds a day), but bounded so one runaway client
       // can't burn through the shared GEMINI_API_KEY budget for everyone.
       //
-      // Checked BEFORE calling Gemini (not alongside it -- found in code
+      // Checked BEFORE calling Gemini, not alongside it (found in code
       // review): this costs every normal call one extra, fast RPC round
       // trip, but the earlier parallel version let Gemini fire regardless
       // of the limit, only discarding the *response* after the fact. That
       // meant a sustained over-cap client (a bug's retry loop, or
-      // deliberate abuse) kept generating real Gemini cost forever -- the
+      // deliberate abuse) kept generating real Gemini cost forever: the
       // 40/hour cap was never actually a hard ceiling on spend.
       const { data: allowed, error: rateLimitError } = await ctx.supabaseAdmin.rpc("check_ai_proxy_rate_limit", {
         p_user_id: ctx.userClaims!.id,
@@ -138,7 +138,7 @@ export default {
       const result = await callGemini(input, schema);
       return Response.json({ result });
     } catch (err) {
-      // Log the real error server-side only -- it can carry internal detail
+      // Log the real error server-side only, since it can carry internal detail
       // (Gemini response shape, RPC/Postgres errors) that shouldn't reach
       // the client.
       console.error("ai-proxy error:", err);

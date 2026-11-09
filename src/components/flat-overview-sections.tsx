@@ -10,12 +10,12 @@ import type { Balance, FlatSpendTrend, SharedExpense } from '@/lib/flats';
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 // How many of the most recent shared expenses show inline before
-// "Recent Activity" hands off to the full-history modal -- a flat with
+// "Recent Activity" hands off to the full-history modal. A flat with
 // months of logged rent/bills otherwise dumps its entire history into
 // the main scroll every time.
 export const RECENT_ACTIVITY_LIMIT = 5;
 
-// Matches Profile's own small tracked-caps group label -- same visual
+// Matches Profile's own small tracked-caps group label, same visual
 // language across reworked screens instead of each inventing its own.
 function SectionLabel({ children }: { children: string }) {
   return (
@@ -132,7 +132,7 @@ export function FlatRecentActivitySection({
 }
 
 // Same 'auto' idea as the personal dashboard's own resolveTrendView, with
-// an extra biweekly tier -- a flat's shared costs (rent/power/internet)
+// an extra biweekly tier: a flat's shared costs (rent/power/internet)
 // get logged far less often than personal transactions, so jumping
 // straight from weekly to monthly left a stretch (roughly 2-6 months in)
 // where neither chart was very informative.
@@ -150,7 +150,7 @@ function resolveFlatTrendView(
 }
 
 // Same enclosed-border treatment as the personal dashboard's
-// own trend card -- the flat health score above is a
+// own trend card. The flat health score above is a
 // current-snapshot only, this is the history view. 'auto'
 // (see resolveFlatTrendView) steps weekly -> biweekly ->
 // monthly as the flat's own history grows, same idea as the

@@ -7,11 +7,11 @@ import type { FlatMember } from '@/lib/flats';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// Split an Expense -- the form that used to permanently occupy the
+// Split an Expense: the form that used to permanently occupy the
 // Overview (quick-add AI, manual fields, split-with picker) now
 // lives here, reached via the pillar tile, open on demand instead
 // of always rendered. Same handlers/state as before, just moved
-// into its own screen -- all of it still owned by FlatView, since
+// into its own screen. All of it is still owned by FlatView, since
 // editing can be started from the Recent Activity list or the history
 // modal too.
 export function FlatExpenseFormModal({

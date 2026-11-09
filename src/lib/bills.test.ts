@@ -1,4 +1,4 @@
-// Same native-module problem as profile.test.ts -- bills.ts imports the
+// Same native-module problem as profile.test.ts: bills.ts imports the
 // real Supabase client for its network functions, so it's stubbed out here;
 // these tests only touch the pure getPendingBillDue/getNextBillDueDate
 // helpers, which never call supabase.

@@ -52,7 +52,7 @@ function findColumn(header: string[], patterns: RegExp[]): number {
 
 // Tries ISO (YYYY-MM-DD) first, then assumes DD/MM/YYYY (NZ/AU bank export
 // convention) for slash- or dash-separated dates. Ambiguous for US-style
-// MM/DD/YYYY exports -- a known limitation, documented for the R&D report.
+// MM/DD/YYYY exports, a known limitation, documented for the R&D report.
 function parseDate(raw: string): string {
   const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) {
@@ -74,7 +74,7 @@ export type ParsedCSVTransaction = {
   description: string;
   occurredAt: string;
   isIncome: boolean;
-  // null here (always, from this pure parser) -- a category suggestion is
+  // null here (always, from this pure parser). A category suggestion is
   // layered on afterwards by the caller (see transactions.tsx), which has
   // the user's category list; this function only ever reads the raw CSV.
   categoryId: string | null;
@@ -98,7 +98,7 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
       const parsedRaw = parseFloat(rawAmount);
       // Standard bank-statement convention: negative = money out (expense),
       // positive = money in (income/credit). A row with just "45" and no
-      // sign at all is ambiguous -- treated as an expense, since that's the
+      // sign at all is ambiguous, treated as an expense, since that's the
       // far more common case in a personal spending export.
       const isIncome = parsedRaw > 0;
       const amount = Math.abs(parsedRaw);
@@ -110,7 +110,7 @@ export function parseTransactionsFromCSV(text: string): ParsedCSVTransaction[] {
 }
 
 // Found in code review: a field starting with =, +, -, or @ is read as a
-// formula by Excel/Sheets when the CSV is opened, not as plain text --
+// formula by Excel/Sheets when the CSV is opened, not as plain text:
 // classic CSV injection. A transaction description can come from free
 // text (manual entry, AI parsing, CSV import), so neutralize it the
 // standard way: prefix with a leading apostrophe, which every spreadsheet
@@ -120,7 +120,7 @@ function escapeCSVField(field: string): string {
   return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-// The export direction -- a user's own transaction history (full, no
+// The export direction: a user's own transaction history (full, no
 // filtering) as a CSV they can keep for their own records or hand to
 // whoever does their taxes. Plain feature columns only; the income-source
 // payslip breakdown (gross/tax/ACC/etc.) stays out of this, same as it

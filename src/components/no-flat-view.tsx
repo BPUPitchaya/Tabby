@@ -7,7 +7,7 @@ import { createFlat, joinFlat } from '@/lib/flats';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// The Flat tab's empty state -- create a new flat or join one by invite
+// The Flat tab's empty state: create a new flat or join one by invite
 // code. `onFlatReady` re-fetches the flats list once either succeeds.
 export function NoFlatView({ onFlatReady }: { onFlatReady: () => void }) {
   const { session } = useAuth();

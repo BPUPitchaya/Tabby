@@ -1,4 +1,4 @@
-// Optional per-category budget caps -- no category starts with one; the
+// Optional per-category budget caps. No category starts with one; the
 // user adds a cap to whichever categories they want to track, and a
 // category with none just shows spend with no bar. See
 // 0026_add_category_budgets.sql for why this lives in its own table.
@@ -39,7 +39,7 @@ export async function clearCategoryBudget(userId: string, categoryId: string): P
   if (error) throw error;
 }
 
-// One-tap opt-out of category budgeting entirely -- clears every cap at
+// One-tap opt-out of category budgeting entirely. Clears every cap at
 // once so Home falls back to the manual overall figure, rather than
 // clearing each category one at a time.
 export async function clearAllCategoryBudgets(userId: string): Promise<void> {
@@ -56,7 +56,7 @@ export type CategoryBudgetProgress = {
 };
 
 // Merges budget caps with category names/icons and this cycle's per-
-// category spend -- a category with a cap but no spend yet still appears
+// category spend. A category with a cap but no spend yet still appears
 // (at $0), never dropped just because nothing's been logged against it
 // this cycle. `categories` is the full list (names/icons never change by
 // cycle); `categoryTotals` is this cycle's spend (only categories with
@@ -90,16 +90,16 @@ export type CategorySpendAverage = {
   categoryId: string | null;
   monthlyAverage: number;
   // How many of the last `months` complete calendar months actually had
-  // spend in this category -- lets a suggestion say "based on 1 month"
+  // spend in this category, letting a suggestion say "based on 1 month"
   // when history is thin, instead of implying 3 months of real pattern.
   monthsWithSpend: number;
 };
 
 // Average monthly spend per category over the last `months` COMPLETE
-// calendar months -- excludes the current, still-in-progress month so a
+// calendar months. It excludes the current, still-in-progress month so a
 // suggestion made on the 3rd doesn't get skewed low by 2 days of data.
 // Averages over monthsWithSpend (months that actually had a transaction),
-// not the fixed window -- dividing a single $50 month by a 3-month window
+// not the fixed window: dividing a single $50 month by a 3-month window
 // instead of by 1 would suggest $16.67 for a category that really runs
 // $50/month, just silently understating it because the other 2 months
 // hadn't been logged yet. Pure calculation (same split-for-testability
@@ -158,7 +158,7 @@ export async function fetchCategorySpendAverages(
 }
 
 // Average real monthly income over months that actually had income, same
-// "don't dilute with silent months" logic as computeCategorySpendAverages --
+// "don't dilute with silent months" logic as computeCategorySpendAverages,
 // used to sanity-check a category budget suggestion against what the
 // person actually earns, not just what they've historically spent.
 export function computeAverageMonthlyIncome(

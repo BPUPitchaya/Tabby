@@ -7,12 +7,12 @@ import { fetchWantsFlat, updateWantsFlat } from '@/lib/profile';
 // Single source of truth for "should the Flat tab be visible," shared by
 // the root layout (decides whether to show the onboarding question),
 // AppTabs (decides the `hidden` prop), and Settings (decides whether to
-// show the unlock row) -- so the three can't disagree with each other.
+// show the unlock row), so the three can't disagree with each other.
 type FlatPreferenceContextValue = {
   loading: boolean;
   wantsFlat: boolean | null;
   hasFlat: boolean;
-  // true once either wantsFlat or hasFlat is truthy -- the actual
+  // true once either wantsFlat or hasFlat is truthy: the actual
   // Flat-tab-visibility answer every consumer actually wants.
   tabVisible: boolean;
   setWantsFlat: (value: boolean) => Promise<void>;
@@ -35,7 +35,7 @@ export function FlatPreferenceProvider({ userId, children }: { userId: string; c
     load().finally(() => setLoading(false));
   }, [load]);
 
-  // Silent re-fetch every time the (app) group regains focus -- covers
+  // Silent re-fetch every time the (app) group regains focus. Covers
   // joining a flat via the public join/[code] screen while this provider
   // (mounted inside (app)) was already sitting here from before, which
   // the mount-only effect above would otherwise never see.
@@ -46,7 +46,7 @@ export function FlatPreferenceProvider({ userId, children }: { userId: string; c
   );
 
   const setWantsFlat = async (value: boolean) => {
-    setWantsFlatState(value); // optimistic -- the question/unlock should feel instant
+    setWantsFlatState(value); // optimistic, so the question/unlock should feel instant
     await updateWantsFlat(userId, value);
   };
 

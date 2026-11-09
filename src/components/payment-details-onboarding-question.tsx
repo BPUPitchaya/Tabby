@@ -7,9 +7,9 @@ import { markPaymentDetailsPrompted, updatePaymentDetails } from '@/lib/profile'
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 // Shown once, right after signup (or on next open for an existing account
-// that's never seen it -- see FlatGate), only while payment_details_prompted
+// that's never seen it (see FlatGate), only while payment_details_prompted
 // is still false. Skipping is a real, permanent answer here, not "ask me
-// later" -- same one-shot posture as FlatOnboardingQuestion, just with no
+// later", same one-shot posture as FlatOnboardingQuestion, just with no
 // null/undecided state to represent (see 0020_add_payment_details_prompted.sql).
 export function PaymentDetailsOnboardingQuestion({ userId, onDone }: { userId: string; onDone: () => void }) {
   const isDark = useColorScheme() === 'dark';

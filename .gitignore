@@ -48,3 +48,10 @@ example
 # Supabase CLI local link state
 supabase/.temp
 supabase/.branches
+
+# local tooling state, never published
+.omc/
+apollo-output/
+apollo-output-*/
+brag-output-*/
+graphify-out/

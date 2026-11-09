@@ -1,7 +1,7 @@
 // Whether the Flat screen's spend-trend chart shows weekly, biweekly, or
 // monthly bars. 'auto' picks weekly for a brand-new flat (thin history),
 // biweekly once there's a couple months of it, and monthly once there's
-// enough history (~6 months) for that to be the more useful view -- same
+// enough history (~6 months) for that to be the more useful view. Same
 // local-only persistence pattern as the personal dashboard's own
 // trend-period-preference.ts, with an extra biweekly tier since a flat's
 // shared costs (rent/power/internet) are logged far less often than
@@ -19,7 +19,7 @@ export async function loadFlatTrendPeriodPreference(): Promise<FlatTrendPeriodPr
       return stored;
     }
   } catch {
-    // fall through to the default below -- a storage read failure
+    // fall through to the default below: a storage read failure
     // shouldn't block the app from rendering
   }
   return 'auto';
@@ -29,7 +29,7 @@ export async function setFlatTrendPeriodPreference(preference: FlatTrendPeriodPr
   try {
     await AsyncStorage.setItem(STORAGE_KEY, preference);
   } catch {
-    // the caller already updated in-memory state -- losing the persisted
+    // the caller already updated in-memory state, so losing the persisted
     // value just means it won't survive an app restart
   }
 }

@@ -1,4 +1,4 @@
-// Self-service account deletion (App Store Guideline 5.1.1(v) -- an app
+// Self-service account deletion (App Store Guideline 5.1.1(v): an app
 // that lets you create an account must let you delete it in-app, not
 // just email a request). Needs the service-role key to actually remove
 // the auth.users row, so this runs server-side, same reasoning as
@@ -8,7 +8,7 @@
 // table that references profiles(id) is now either ON DELETE CASCADE
 // (the user's own data: transactions, categories, bills, income_sources,
 // etc.) or ON DELETE SET NULL (flats.created_by, shared_expenses.paid_by,
-// shared_expense_splits.user_id, settlements.from_user/to_user -- see
+// shared_expense_splits.user_id, settlements.from_user/to_user. See
 // 0036_nullable_profile_refs_for_account_deletion.sql). So deleting the
 // auth user alone is enough: your own data is gone, and anything you did
 // inside a shared flat survives for the other members with its "who"
@@ -38,7 +38,7 @@ export default {
         return Response.json({ error: "Missing Authorization header." }, { status: 401 });
       }
 
-      // Identify the caller from their OWN JWT -- never trust a client-
+      // Identify the caller from their OWN JWT. Never trust a client-
       // supplied user id, or anyone could ask this function to delete
       // someone else's account. The anon key + forwarded Authorization
       // header is the standard pattern for "who is actually calling this."
@@ -50,7 +50,7 @@ export default {
         return Response.json({ error: "Not authenticated." }, { status: 401 });
       }
 
-      // Service-role client, only for this one privileged call -- the
+      // Service-role client, only for this one privileged call. The
       // key never reaches the client, same posture as ai-proxy's
       // GEMINI_API_KEY.
       const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

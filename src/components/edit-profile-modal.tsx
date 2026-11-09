@@ -28,12 +28,12 @@ import {
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
-// A field's own save/update button -- small and off to the side instead
+// A field's own save/update button: small and off to the side instead
 // of a full-width bar, and only lit up once there's actually something to
 // save. Four identical solid buttons sitting there with nothing to do was
 // the real problem with the old screen, not the saving-independently part
-// (each field keeps its own flow -- email needs a confirm click, password
-// needs its own validation -- that behavior is unchanged).
+// (each field keeps its own flow: email needs a confirm click, password
+// needs its own validation; that behavior is unchanged).
 function MiniButton({
   label,
   active,
@@ -89,7 +89,7 @@ function Card({ children }: { children: ReactNode }) {
 
 // Income/budget moved out to their own dashboard-tap entry points (see
 // EarnedModal and BudgetModal, reachable from the Earned/Budget cells on
-// Home) -- keeping a second editor for the same fields here would just
+// Home); keeping a second editor for the same fields here would just
 // invite the two to drift out of sync.
 export function EditProfileModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { session } = useAuth();
@@ -139,7 +139,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
       await updateAvatarAnimal(userId, animal);
       setAvatarAnimal(animal);
     } catch {
-      // Silent -- picking an avatar is low-stakes, and the grid staying on
+      // Silent: picking an avatar is low-stakes, and the grid staying on
       // the old selection already shows the tap didn't take, no banner
       // needed for something this minor.
     } finally {
@@ -269,7 +269,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                   </View>
                 </View>
 
-                {/* AVATAR: tap an animal to switch immediately -- no
+                {/* AVATAR: tap an animal to switch immediately. No
                     separate Save button, since there's nothing to type or
                     get wrong, just a choice. */}
                 <View className="gap-2">
@@ -298,7 +298,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                   </View>
                 </View>
 
-                {/* NAME: lightweight, no box -- changes often, shouldn't
+                {/* NAME: lightweight, no box. Changes often, shouldn't
                     carry the same weight as Security below. */}
                 <View className="gap-2">
                   <SectionLabel>NAME</SectionLabel>
@@ -320,7 +320,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                 </View>
 
                 {/* SECURITY: email + password, both account-sensitive, both
-                    keep their own confirm flow -- one card instead of two
+                    keep their own confirm flow: one card instead of two
                     identical boxes. */}
                 <View className="gap-2">
                   <SectionLabel>SECURITY</SectionLabel>
@@ -379,7 +379,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
                   </Card>
                 </View>
 
-                {/* PAYMENT DETAILS: optional, lower-stakes -- its own
+                {/* PAYMENT DETAILS: optional, lower-stakes. Its own
                     quieter card. */}
                 <View className="gap-2">
                   <View className="flex-row items-baseline justify-between px-1">

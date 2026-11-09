@@ -1,5 +1,5 @@
 // dashboard.ts imports the real Supabase client for fetchDashboardData,
-// which side-effect-imports expo-sqlite -- same Jest/native-module problem
+// which side-effect-imports expo-sqlite, same Jest/native-module problem
 // as flats.test.ts. Stubbed out since these tests only touch the pure
 // computeDashboardFromRows function, which never calls supabase.
 import {
@@ -119,7 +119,7 @@ describe('computeDashboardFromRows', () => {
   it('buckets the 6-week trend by Monday-start week and tracks the earliest date', () => {
     const result = computeDashboardFromRows(
       [
-        // NOW is 2026-10-15, a Thursday -- that week's Monday is 2026-10-12
+        // NOW is 2026-10-15, a Thursday, so that week's Monday is 2026-10-12
         row({ amount: 20, occurred_at: '2026-10-13' }),
         row({ amount: 5, occurred_at: '2026-10-12' }),
         // previous week (Monday 2026-10-05)

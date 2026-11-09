@@ -1,4 +1,4 @@
-// Static explanation sheet -- same chrome as budget-help-modal.tsx, for
+// Static explanation sheet, same chrome as budget-help-modal.tsx, for
 // explaining what this screen actually shows (see flat.tsx's "?" button).
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';

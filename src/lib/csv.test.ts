@@ -1,5 +1,5 @@
 // Same scenario manually verified earlier during the CSV import feature
-// build -- see commit "Add CSV import for personal transactions".
+// build. See commit "Add CSV import for personal transactions".
 
 import { parseCSVRows, parseTransactionsFromCSV, transactionsToCSV } from './csv';
 import type { Transaction } from './transactions';

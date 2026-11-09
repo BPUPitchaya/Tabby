@@ -25,7 +25,7 @@ export default function JoinScreen() {
 
   const userId = session?.user.id;
 
-  // Belonging to other flats is fine (multi-flat is supported) -- the
+  // Belonging to other flats is fine (multi-flat is supported); the
   // only thing worth checking ahead of time is whether this user is
   // already a member of THIS specific flat, so re-tapping an old invite
   // link shows a friendly "you're already in" instead of a raw
@@ -62,7 +62,7 @@ export default function JoinScreen() {
     );
   }
 
-  // No account yet, or signed out -- sign in/up first, then this screen
+  // No account yet, or signed out: sign in/up first, then this screen
   // re-renders with a session and picks up where it left off.
   if (!session) return <AuthScreen />;
 
@@ -137,7 +137,7 @@ export default function JoinScreen() {
 
         {/* This screen has no header/back button (see _layout.tsx), so
             without this, a wrong or expired code leaves no way out at
-            all -- not even if the join itself succeeds, since there'd
+            all, not even if the join itself succeeds, since there'd
             still be no way to just change your mind and look around the
             app first. */}
         <Pressable

@@ -1,6 +1,6 @@
 // Deterministic per-category icon tint, hashed from the category id so the
 // same category always lands on the same color across sessions without a
-// color column in the DB -- categories include user-created ones, not just
+// color column in the DB: categories include user-created ones, not just
 // the fixed defaults, so this can't be a hardcoded name lookup.
 const CATEGORY_PALETTE_LIGHT = [
   { bg: '#D7E4CE', fg: '#3F5A35' },

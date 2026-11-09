@@ -20,8 +20,8 @@ export function CategoryTotalsGrid({
 }) {
   const isDark = useColorScheme() === 'dark';
 
-  // Expense-only, same convention as the dashboard's "Spending by category"
-  // -- every expense category shows up even with zero activity (dashed,
+  // Expense-only, same convention as the dashboard's "Spending by category":
+  // every expense category shows up even with zero activity (dashed,
   // dimmed), rather than only the ones with transactions, so the grid
   // doesn't reshuffle as spending starts/stops in a category.
   const categoryTiles = useMemo(() => {

@@ -37,7 +37,7 @@ import {
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
 // First-initial bubble, sky-blue like every other avatar placeholder in
-// the app (Home header, splash/Profile icon) -- gives each person row an
+// the app (Home header, splash/Profile icon), giving each person row an
 // identity instead of a bare line of text.
 function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (

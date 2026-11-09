@@ -7,7 +7,7 @@ export function LegalModal({ doc, onClose }: { doc: LegalDoc | null; onClose: ()
   return (
     // RN's <Modal> renders its content in a separate native view
     // hierarchy (a second UIWindow on iOS), which does NOT automatically
-    // inherit the SafeAreaProvider from the app root -- insets silently
+    // inherit the SafeAreaProvider from the app root, so insets silently
     // come back as 0 inside it. Confirmed via Expo's own
     // safe-area-context docs: "You may need to add it in other places
     // too, including at the root of any modals." Without this, the
