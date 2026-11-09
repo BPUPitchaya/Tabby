@@ -2,9 +2,11 @@
 // payday-notifications.ts, but IDs are keyed per bill id rather than a
 // single fixed string, since a user can have many bills due on different
 // (or the same) days at once.
-import * as Notifications from 'expo-notifications';
+import { getNotifications } from '@/lib/safe-notifications';
 
 export async function requestBillNotificationPermission(): Promise<boolean> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) return true;
   const requested = await Notifications.requestPermissionsAsync();
@@ -28,6 +30,8 @@ function overdueNudgeId(billId: string, dayOffset: number): string {
 // `dueDate` is 'YYYY-MM-DD' -- interpreted as noon local time, same
 // convention as payday reminders.
 export async function scheduleBillReminder(billId: string, billName: string, dueDate: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const reminderId = `bill-reminder-${billId}`;
   await Notifications.cancelScheduledNotificationAsync(reminderId).catch(() => {});
   const target = new Date(`${dueDate}T12:00:00`);
@@ -61,6 +65,8 @@ export async function scheduleBillReminder(billId: string, billName: string, due
 
 // One follow-up, 12 hours after "not yet" -- not a repeating nag.
 export async function scheduleBillFollowUp(billId: string, billName: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const followupId = `bill-followup-${billId}`;
   await Notifications.cancelScheduledNotificationAsync(followupId).catch(() => {});
   await Notifications.scheduleNotificationAsync({
@@ -77,12 +83,16 @@ export async function scheduleBillFollowUp(billId: string, billName: string): Pr
 }
 
 export async function cancelBillFollowUp(billId: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(`bill-followup-${billId}`).catch(() => {});
 }
 
 // Every scheduled notification for one bill -- used on delete, since
 // there's no longer a schedule to remind anyone about.
 export async function cancelAllBillReminders(billId: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(`bill-reminder-${billId}`).catch(() => {});
   await Notifications.cancelScheduledNotificationAsync(`bill-followup-${billId}`).catch(() => {});
   for (const dayOffset of OVERDUE_NUDGE_DAYS) {

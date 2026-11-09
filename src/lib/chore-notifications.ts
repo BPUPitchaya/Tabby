@@ -13,9 +13,11 @@
 // responsible for only calling scheduleChoreReminder for chores where
 // currentAssigneeId(chore) === the user on THIS device, and cancelling
 // otherwise -- see the "whose turn" check in load().
-import * as Notifications from 'expo-notifications';
+import { getNotifications } from '@/lib/safe-notifications';
 
 export async function requestChoreNotificationPermission(): Promise<boolean> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) return true;
   const requested = await Notifications.requestPermissionsAsync();
@@ -29,6 +31,8 @@ function reminderId(choreId: string): string {
 // `dueDate` is 'YYYY-MM-DD' -- interpreted as noon local time, same
 // convention as bill/income reminders.
 export async function scheduleChoreReminder(choreId: string, choreName: string, dueDate: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const id = reminderId(choreId);
   await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
   const target = new Date(`${dueDate}T12:00:00`);
@@ -44,5 +48,7 @@ export async function scheduleChoreReminder(choreId: string, choreName: string, 
 }
 
 export async function cancelChoreReminder(choreId: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(reminderId(choreId)).catch(() => {});
 }

@@ -60,6 +60,30 @@ Some native modules (e.g. `expo-sharing`, notifications) aren't available in Exp
 
 If you typecheck or lint before ever running `npx expo start`, TypeScript will fail on `Cannot find module ... for side-effect import of '@/global.css'`. That's expected — `expo-env.d.ts` is gitignored (Expo's own convention) and only gets written the first time the dev server runs. Start the dev server once, or see `.github/workflows/ci.yml` for how CI generates it without one.
 
+### Android
+
+Expo Go on Android (SDK 53+) doesn't support `expo-notifications` at all — the app guards against that (see `src/lib/safe-notifications.ts`) so it doesn't crash, but a couple of other native-module quirks in Expo Go's Android sandbox can still make it unreliable there. The recommended way to try the app on Android is a standalone release build instead of Expo Go.
+
+#### Prebuilt APK (for the lecturer / grading — no setup required)
+
+**[Download Tabby.apk](https://expo.dev/artifacts/eas/3RNEh8_K2scAsk4NsmD8GSAjsamRAgzl44PzwMI_vT0.apk)** (link valid until 2026-11-23; see below to rebuild it if it's expired)
+
+To install on an Android phone or tablet:
+
+1. Open that link in the device's browser and let the `.apk` download.
+2. Tap the downloaded file to open it. If Android blocks the install with "For your security..." or similar, tap **Settings** in that prompt, turn on **Allow from this source** for the browser, then go back and tap the file again.
+3. Tap **Install**, then **Open**. No Expo account, QR code, or dev server needed — it's a standalone app like any other.
+
+It's been verified end-to-end on an Android emulator: login, the home dashboard, and flatmate bill-splitting all load and work correctly.
+
+#### Building your own APK
+
+```bash
+npx eas-cli build --platform android --profile preview
+```
+
+This produces an installable `.apk` (via [EAS Build](https://docs.expo.dev/build/introduction/), configured in `eas.json`).
+
 ### Backend (Supabase)
 
 The database schema lives in `supabase/migrations/` and the two Edge Functions (`ai-proxy`, `delete-account`) live in `supabase/functions/`. If you're pointing at your own Supabase project rather than an existing one, apply the migrations and deploy the functions via the [Supabase CLI](https://supabase.com/docs/guides/cli) or the Supabase MCP server.

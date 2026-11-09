@@ -39,11 +39,10 @@ import {
 import { Quicksand_600SemiBold, Quicksand_700Bold } from '@expo-google-fonts/quicksand';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { vars } from 'nativewind';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useColorScheme, View } from 'react-native';
+import { Platform, useColorScheme, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
@@ -74,14 +73,36 @@ Sentry.init({
 // Governs how a payday reminder (or any future local notification)
 // presents while the app is already open in the foreground -- without
 // this, a foreground-delivered notification shows nothing at all on iOS.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Loaded lazily via require(), never a static top-level import: merely
+// `import`-ing expo-notifications throws synchronously in Expo Go on
+// Android (SDK 53+, remote push support was pulled from the Expo Go
+// sandbox there), even though this only configures local notification
+// presentation. A static top-level import's side effects ran before
+// anything could catch them, which took down the whole root layout --
+// and with it the entire app -- on Android. require() (not a dynamic
+// import()) because Metro's production/eager-bundle step, used by EAS
+// builds, fails to bundle a dynamic import() of this native module at
+// all -- an opaque "Cannot read properties of undefined (reading
+// 'match')" with no useful stack trace. require() is the conventional
+// React Native pattern for an optional native dependency and bundles
+// fine in both dev and production.
+if (!(Platform.OS === 'android' && isRunningInExpoGo())) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Notifications = require('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch {
+    // Foreground notification presentation just won't be customized on
+    // this platform/environment -- not worth crashing the app over.
+  }
+}
 
 function TabLayout() {
   const colorScheme = useColorScheme();

@@ -5,9 +5,11 @@
 // device independently schedules its own reminder for an unconfirmed,
 // due cycle; there's no "whose turn" check to gate it the way chores
 // have (see the caller in flat.tsx's load()).
-import * as Notifications from 'expo-notifications';
+import { getNotifications } from '@/lib/safe-notifications';
 
 export async function requestFlatBillNotificationPermission(): Promise<boolean> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) return true;
   const requested = await Notifications.requestPermissionsAsync();
@@ -21,6 +23,8 @@ function reminderId(billId: string): string {
 // `dueDate` is 'YYYY-MM-DD' -- interpreted as noon local time, same
 // convention as chore/bill/income reminders.
 export async function scheduleFlatBillReminder(billId: string, billName: string, dueDate: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   const id = reminderId(billId);
   await Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
   const target = new Date(`${dueDate}T12:00:00`);
@@ -36,5 +40,7 @@ export async function scheduleFlatBillReminder(billId: string, billName: string,
 }
 
 export async function cancelFlatBillReminder(billId: string): Promise<void> {
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(reminderId(billId)).catch(() => {});
 }
