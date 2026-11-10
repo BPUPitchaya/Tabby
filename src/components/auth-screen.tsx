@@ -16,6 +16,7 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
+  const [signUpSent, setSignUpSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -49,18 +50,21 @@ export function AuthScreen() {
 
     if (result.error) {
       setError(result.error);
+    } else if (mode === 'signUp' && 'needsEmailConfirmation' in result && result.needsEmailConfirmation) {
+      setSignUpSent(true);
     }
   };
 
   const switchMode = (next: typeof mode) => {
     setError(null);
     setResetSent(false);
+    setSignUpSent(false);
     setMode(next);
   };
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View className="flex-1 justify-center px-6 gap-4">
         <View className="items-center mb-2">
           <View
@@ -77,69 +81,77 @@ export function AuthScreen() {
           {mode === 'signIn' ? 'Welcome back' : mode === 'signUp' ? 'Create your account' : 'Reset your password'}
         </Text>
 
-        {mode === 'signUp' && (
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Display name"
-            autoCapitalize="words"
-            className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
-          />
-        )}
-
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
-        />
-
-        {mode !== 'forgotPassword' && (
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            secureTextEntry
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
-            className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
-          />
-        )}
-
-        {mode === 'signIn' && (
-          <Pressable onPress={() => switchMode('forgotPassword')} style={pressFeedback} accessibilityRole="button">
-            <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm text-right">
-              Forgot password?
-            </Text>
-          </Pressable>
-        )}
-
-        {resetSent ? (
+        {signUpSent ? (
           <Text className="font-nunito text-sage-700 dark:text-sage-400 text-sm text-center">
-            Check your email for a link to reset your password.
+            Check your email for a link to confirm your account, then come back and log in.
           </Text>
         ) : (
-          error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>
-        )}
-
-        {!resetSent && (
-          <Pressable
-            onPress={handleSubmit}
-            disabled={submitting}
-            style={pressFeedback}
-            className="bg-tabby-600 dark:bg-white rounded-lg py-3 items-center mt-2"
-            accessibilityRole="button"
-            accessibilityLabel={mode === 'signIn' ? 'Log in' : mode === 'signUp' ? 'Sign up' : 'Send reset link'}>
-            {submitting ? (
-              <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
-            ) : (
-              <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-base">
-                {mode === 'signIn' ? 'Log In' : mode === 'signUp' ? 'Sign Up' : 'Send Reset Link'}
-              </Text>
+          <>
+            {mode === 'signUp' && (
+              <TextInput
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="Display name"
+                autoCapitalize="words"
+                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
+              />
             )}
-          </Pressable>
+
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
+            />
+
+            {mode !== 'forgotPassword' && (
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-4 py-3 text-base dark:text-white"
+              />
+            )}
+
+            {mode === 'signIn' && (
+              <Pressable onPress={() => switchMode('forgotPassword')} style={pressFeedback} accessibilityRole="button">
+                <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-sm text-right">
+                  Forgot password?
+                </Text>
+              </Pressable>
+            )}
+
+            {resetSent ? (
+              <Text className="font-nunito text-sage-700 dark:text-sage-400 text-sm text-center">
+                Check your email for a link to reset your password.
+              </Text>
+            ) : (
+              error && <Text className="font-nunito text-red-500 dark:text-red-400 text-sm text-center">{error}</Text>
+            )}
+
+            {!resetSent && (
+              <Pressable
+                onPress={handleSubmit}
+                disabled={submitting}
+                style={pressFeedback}
+                className="bg-tabby-600 dark:bg-white rounded-lg py-3 items-center mt-2"
+                accessibilityRole="button"
+                accessibilityLabel={mode === 'signIn' ? 'Log in' : mode === 'signUp' ? 'Sign up' : 'Send reset link'}>
+                {submitting ? (
+                  <ActivityIndicator color={isDark ? '#2B1810' : 'white'} />
+                ) : (
+                  <Text className="font-nunito-semibold text-white dark:text-tabby-900 text-base">
+                    {mode === 'signIn' ? 'Log In' : mode === 'signUp' ? 'Sign Up' : 'Send Reset Link'}
+                  </Text>
+                )}
+              </Pressable>
+            )}
+          </>
         )}
 
         {mode === 'forgotPassword' ? (

@@ -8,6 +8,7 @@
 import '@/global.css';
 
 import { isRunningInExpoGo } from 'expo';
+import * as Linking from 'expo-linking';
 import { Fraunces_600SemiBold, Fraunces_700Bold } from '@expo-google-fonts/fraunces';
 import {
   Fredoka_400Regular,
@@ -48,6 +49,7 @@ import * as Sentry from '@sentry/react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { AuthProvider } from '@/lib/auth-context';
+import { setLatestDeepLink } from '@/lib/deep-link-cache';
 import {
   FONT_VARS,
   FontPreferenceProvider,
@@ -58,6 +60,12 @@ import {
 import { restoreThemePreference } from '@/lib/theme-preference';
 
 SplashScreen.preventAutoHideAsync();
+
+// Registered here, at module load, so it runs before expo-router's own
+// Linking subscription (which decides which screen to navigate to) and
+// before any screen mounts. See deep-link-cache.ts for why a listener
+// registered any later always misses a warm-start deep link.
+Linking.addEventListener('url', ({ url }) => setLatestDeepLink(url));
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -169,6 +177,7 @@ function TabLayout() {
                 <Stack.Screen name="join/[code]" />
                 <Stack.Screen name="add-friend/[code]" />
                 <Stack.Screen name="reset-password" />
+                <Stack.Screen name="confirm-email" />
                 <Stack.Screen name="(app)" />
               </Stack>
             </AuthProvider>

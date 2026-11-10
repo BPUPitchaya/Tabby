@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, Text, TextInput, useColorScheme } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/lib/auth-context';
+import { getLatestDeepLink } from '@/lib/deep-link-cache';
 import { supabase } from '@/lib/supabase';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
@@ -54,9 +55,18 @@ export default function ResetPasswordScreen() {
       setStatus(sessionError ? 'invalid' : 'ready');
     };
 
-    Linking.getInitialURL().then(establishSession);
-    // Covers the app already being open (warm start) when the link is
-    // tapped. getInitialURL above only fires for a cold start.
+    // getLatestDeepLink covers a warm start (app already running when the
+    // link is tapped): the root layout's listener caught it before this
+    // screen even mounted. getInitialURL covers a cold start instead.
+    const warmStartUrl = getLatestDeepLink();
+    if (warmStartUrl) {
+      establishSession(warmStartUrl);
+    } else {
+      Linking.getInitialURL().then(establishSession);
+    }
+    // Still listen directly too, in case the link arrives while this
+    // screen is already mounted (e.g. the app was already sitting on
+    // this exact screen).
     const subscription = Linking.addEventListener('url', ({ url }) => establishSession(url));
     return () => subscription.remove();
   }, []);

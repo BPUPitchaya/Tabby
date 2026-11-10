@@ -337,7 +337,7 @@ export function ManualTransactionModal({
   return (
     <>
       <Modal visible={manualOpen} animationType="slide" transparent onRequestClose={closeManualForm}>
-        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View className="flex-1 bg-black/40 justify-end">
             <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3">
               <View className="flex-row items-center justify-between">

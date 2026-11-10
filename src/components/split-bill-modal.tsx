@@ -538,7 +538,7 @@ export function SplitBillModal({
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
       <SafeAreaProvider>
         <SafeAreaView className="flex-1 bg-white dark:bg-tabby-900">
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <View className="flex-row items-center justify-between px-4 pt-3 pb-3 border-b border-gray-100 dark:border-tabby-700">
               <Text className="font-fredoka-semibold text-2xl dark:text-white">Split a Bill</Text>
               <Pressable

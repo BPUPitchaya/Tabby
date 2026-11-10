@@ -249,7 +249,7 @@ export function EditProfileModal({ visible, onClose }: { visible: boolean; onClo
               <ActivityIndicator />
             </View>
           ) : (
-            <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
               <ScrollView contentContainerStyle={{ padding: 16, gap: 22 }}>
                 {/* Same header chrome as the Profile screen itself, so this
                     reads as a continuation of your identity, not a cold

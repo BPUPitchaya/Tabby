@@ -11,7 +11,7 @@ type AuthContextValue = {
     email: string,
     password: string,
     displayName: string
-  ) => Promise<{ error: string | null }>;
+  ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   // Emails a recovery link to tabby://reset-password. That screen
   // establishes a session from the link's tokens itself (see
@@ -47,12 +47,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp: AuthContextValue['signUp'] = async (email, password, displayName) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      options: { data: { display_name: displayName }, emailRedirectTo: 'tabby://confirm-email' },
     });
-    return { error: error?.message ?? null };
+    // With email confirmation on, signUp succeeds but returns no session
+    // until the user taps the link in their inbox. That's the signal to
+    // show a "check your email" message instead of expecting
+    // onAuthStateChange to fire like it does when confirmation is off.
+    return { error: error?.message ?? null, needsEmailConfirmation: !error && !data.session };
   };
 
   const signOut = async () => {
