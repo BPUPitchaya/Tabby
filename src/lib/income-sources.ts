@@ -1,4 +1,4 @@
-// Multi-job income -- replaces the old income_settings singleton. One row
+// Multi-job income, replacing the old income_settings singleton. One row
 // per job, each with its own schedule, fixed-or-hourly mode, and optional
 // gross/net tax tracking. See 0028_add_income_sources.sql for the schema
 // and the two DB-level constraints (one primary per user, one main tax
@@ -12,17 +12,17 @@ export type TrackingMode = 'gross' | 'net';
 export type KiwiSaverPct = 3 | 4 | 6 | 8 | 10;
 
 // Shared by income-sources-modal.tsx's form and
-// income-transaction-detail-modal.tsx's inline edit -- the same tax-code/
+// income-transaction-detail-modal.tsx's inline edit: the same tax-code/
 // KiwiSaver choices apply whether you're setting up the job or correcting
 // one specific payday's figures.
 export const TAX_CODE_OPTIONS = ['M', 'ME', 'S', 'SB', 'SH', 'ST'];
 export const KIWISAVER_OPTIONS: KiwiSaverPct[] = [3, 4, 6, 8, 10];
 
-// IRD's own "what tax code should I use?" tool -- deliberately a link
+// IRD's own "what tax code should I use?" tool: deliberately a link
 // out, not a decision tree built into Tabby. /cassandra premortem on
 // building one: IRD's rules change most tax years, edge cases (multiple
 // jobs, overseas income, benefit + job combos) are already handled
-// there, and a wrong code here has real withholding consequences --
+// there, and a wrong code here has real withholding consequences, the
 // same "never guess, only read" principle as the tax-code AI use this
 // project already ruled out.
 export const IRD_TAX_CODE_URL =
@@ -43,7 +43,7 @@ export type IncomeSource = {
   hasStudentLoan: boolean;
   kiwiSaverPct: KiwiSaverPct | null; // net tracking only, null = opted out
   lastConfirmedPayday: string | null;
-  // Only ever read off the primary source -- Budget rides whichever
+  // Only ever read off the primary source. Budget rides whichever
   // source's cycle is primary, same one-budget-per-cycle shape the old
   // income_settings singleton had. See 0030_add_budget_amount_to_income_sources.sql.
   budgetAmount: number | null;
@@ -101,7 +101,7 @@ export async function fetchIncomeSources(userId: string): Promise<IncomeSource[]
 }
 
 // Used by income-transaction-detail-modal.tsx to look up the job behind a
-// logged payday -- needs the source's frequency/mode/current tax settings
+// logged payday. Needs the source's frequency/mode/current tax settings
 // to let the user correct one payday's figures the same way they'd set up
 // the job itself. RLS already scopes this to rows the caller owns.
 export async function fetchIncomeSourceById(id: string): Promise<IncomeSource | null> {
@@ -126,10 +126,10 @@ export type IncomeSourceParams = {
 };
 
 // Clears fields that don't apply to the chosen mode/tracking, rather than
-// trusting the caller to already have -- mirrors the DB's own CHECK
+// trusting the caller to already have. Mirrors the DB's own CHECK
 // constraint shape (mode = 'fixed' implies hourly_rate is null, etc.) so
 // the two can't drift apart.
-// is_primary is always written false here, never true -- the unique
+// is_primary is always written false here, never true: the unique
 // index allows only one true row per user, so setting true inline can
 // collide with whichever row currently holds it (two plain updates each
 // trying to be true at once). setPrimaryIncomeSource below is the only
@@ -178,7 +178,7 @@ export async function deleteIncomeSource(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// Two plain updates, not one atomic RPC -- unlike confirm/skip (which log
+// Two plain updates, not one atomic RPC. Unlike confirm/skip (which log
 // real money and genuinely need atomicity), a momentary "zero primary
 // sources" state between these two calls is harmless and self-healing: at
 // worst, one extra screen load briefly falls back to calendar-month
@@ -199,7 +199,7 @@ export function getPrimaryIncomeSource(sources: IncomeSource[]): IncomeSource | 
   return sources.find((s) => s.isPrimary) ?? null;
 }
 
-// Plain updates, not RPCs -- same reasoning as setPrimaryIncomeSource: no
+// Plain updates, not RPCs, same reasoning as setPrimaryIncomeSource: no
 // money involved, just a figure Budget reads back.
 export async function updateSourceBudgetAmount(sourceId: string, budgetAmount: number): Promise<void> {
   const { error } = await supabase
@@ -214,8 +214,8 @@ export async function clearSourceBudgetAmount(sourceId: string): Promise<void> {
   if (error) throw error;
 }
 
-// Mirrors the DB's income_sources_one_main_tax_code partial unique index --
-// checked client-side first for a friendly inline error, same pattern as
+// Mirrors the DB's income_sources_one_main_tax_code partial unique index.
+// Checked client-side first for a friendly inline error, same pattern as
 // createCategory's duplicate-name check (lib/transactions.ts). The DB
 // constraint is still the real enforcement; this just avoids a raw
 // constraint-violation message reaching the user.
@@ -231,6 +231,101 @@ export function canUseTaxCode(
   );
 }
 
+// Shared by income-sources-modal.tsx's form and the income onboarding
+// question (income-onboarding-question.tsx): same fields, same
+// validation, two different entry points into creating a source.
+export type IncomeFormState = {
+  id: string | null;
+  label: string;
+  isPrimary: boolean;
+  mode: IncomeMode;
+  amount: string;
+  hourlyRate: string;
+  frequency: IncomeFrequency | null;
+  payWeekday: number | null;
+  dayOfMonth: number | null;
+  trackingMode: TrackingMode;
+  taxCode: string | null;
+  hasStudentLoan: boolean;
+  kiwiSaverPct: KiwiSaverPct | null;
+};
+
+export const EMPTY_INCOME_FORM: IncomeFormState = {
+  id: null,
+  label: '',
+  isPrimary: false,
+  mode: 'fixed',
+  amount: '',
+  hourlyRate: '',
+  frequency: null,
+  payWeekday: null,
+  dayOfMonth: null,
+  trackingMode: 'gross',
+  taxCode: null,
+  hasStudentLoan: false,
+  kiwiSaverPct: null,
+};
+
+// Same checks handleSaveForm always ran inline, lifted out so the
+// onboarding question can run them too without duplicating (and risking
+// drifting from) the modal's validation.
+export function buildIncomeSourceParams(
+  form: IncomeFormState,
+  sources: IncomeSource[],
+): { params: IncomeSourceParams } | { error: string } {
+  if (!form.label.trim()) {
+    return { error: 'Give this income source a name (e.g. a job title or employer).' };
+  }
+  if (!form.frequency) {
+    return { error: 'Choose how often you get paid.' };
+  }
+  if ((form.frequency === 'weekly' || form.frequency === 'biweekly') && form.payWeekday === null) {
+    return { error: 'Choose which day you get paid.' };
+  }
+  if (form.frequency === 'monthly' && !form.dayOfMonth) {
+    return { error: 'Choose which day of the month you get paid.' };
+  }
+
+  let amount: number | null = null;
+  let hourlyRate: number | null = null;
+  if (form.mode === 'fixed') {
+    amount = parseFloat(form.amount);
+    if (isNaN(amount) || amount <= 0) {
+      return { error: 'Enter a valid amount, or switch to hourly.' };
+    }
+  } else {
+    hourlyRate = parseFloat(form.hourlyRate);
+    if (isNaN(hourlyRate) || hourlyRate <= 0) {
+      return { error: 'Enter a valid hourly rate.' };
+    }
+  }
+
+  if (form.trackingMode === 'net' && form.taxCode) {
+    if (!canUseTaxCode(sources, form.taxCode, form.id)) {
+      return {
+        error: `${form.taxCode} is already used by another income source. Only one concurrent job can use the main tax code; this one probably needs a secondary code (S, SB, SH, or ST) instead.`,
+      };
+    }
+  }
+
+  return {
+    params: {
+      label: form.label,
+      isPrimary: form.isPrimary,
+      mode: form.mode,
+      amount,
+      hourlyRate,
+      frequency: form.frequency,
+      payWeekday: form.frequency === 'monthly' ? null : form.payWeekday,
+      dayOfMonth: form.frequency === 'monthly' ? form.dayOfMonth : null,
+      trackingMode: form.trackingMode,
+      taxCode: form.trackingMode === 'net' ? form.taxCode : null,
+      hasStudentLoan: form.trackingMode === 'net' ? form.hasStudentLoan : false,
+      kiwiSaverPct: form.trackingMode === 'net' ? form.kiwiSaverPct : null,
+    },
+  };
+}
+
 function toCycleInput(source: Pick<IncomeSource, 'frequency' | 'payWeekday' | 'dayOfMonth'>) {
   return { frequency: source.frequency, payWeekday: source.payWeekday, payDayOfMonth: source.dayOfMonth };
 }
@@ -243,7 +338,7 @@ export function getIncomeSourceCycle(
 }
 
 // Same shape as profile.ts's getPendingPayday, per source instead of a
-// singleton -- the most recent payday (cycle.startDate) if it hasn't been
+// singleton: the most recent payday (cycle.startDate) if it hasn't been
 // resolved (confirmed or skipped) yet.
 export function getPendingIncomeSourcePayday(
   source: Pick<IncomeSource, 'frequency' | 'payWeekday' | 'dayOfMonth' | 'lastConfirmedPayday'>,
@@ -262,9 +357,9 @@ export function getNextIncomeSourcePaydayDate(
   return getIncomeSourceCycle(source, now)?.endDate ?? null;
 }
 
-// Gross pay for a confirm -- the stored fixed amount, or rate × hours for
+// Gross pay for a confirm: the stored fixed amount, or rate × hours for
 // hourly mode. `hoursWorked` here means total PAID hours (worked + any
-// paid leave taken), not hours physically worked -- see bell copy in
+// paid leave taken), not hours physically worked. See bell copy in
 // notifications-modal.tsx and session notes on why sick/annual leave still
 // counts as paid.
 export function computeGrossPay(
@@ -278,7 +373,7 @@ export function computeGrossPay(
 
 // Payslip-style breakdown stored alongside a net-tracked confirm, so
 // Transactions can later show "detail of the pay" instead of just a plain
-// edit form -- see 0031_add_income_breakdown_to_transactions.sql /
+// edit form. See 0031_add_income_breakdown_to_transactions.sql /
 // 0032_confirm_income_source_payment_with_breakdown.sql. Every field
 // optional: a gross-tracked source's confirm passes none of this.
 export type IncomeBreakdown = {
@@ -291,7 +386,7 @@ export type IncomeBreakdown = {
 };
 
 // Both writes (transaction insert + last_confirmed_payday advance) happen
-// inside a single Postgres function call -- see confirm_income_source_payment
+// inside a single Postgres function call. See confirm_income_source_payment
 // in 0029_add_income_source_payment_rpcs.sql for why this isn't two
 // separate client calls (the original singleton payday confirm had exactly
 // that bug once; this starts out right).
@@ -325,7 +420,7 @@ export async function skipIncomeSourcePayment(sourceId: string, paydayDate: stri
 
 // Phase 5: same shape as profile.ts's IncomeProgress/fetchIncomeProgress,
 // but keyed off the primary income source's cycle and budget_amount
-// instead of the old income_settings singleton -- getOverspendPrediction
+// instead of the old income_settings singleton; getOverspendPrediction
 // (profile.ts) still works on this unchanged, since the shape matches.
 export type IncomeSourceProgress = {
   budgetAmount: number;
@@ -335,7 +430,7 @@ export type IncomeSourceProgress = {
   isDerivedFromCategories: boolean;
 };
 
-// null whenever there's nothing to show progress against -- no primary
+// null whenever there's nothing to show progress against: no primary
 // source at all, or neither an overall budget nor any category budgets
 // chosen yet.
 export async function getIncomeSourceProgress(userId: string): Promise<IncomeSourceProgress | null> {

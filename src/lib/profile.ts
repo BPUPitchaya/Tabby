@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 export type IncomeFrequency = 'weekly' | 'biweekly' | 'monthly';
 
-// Which animal mascot represents this user -- shown on the Profile header
+// Which animal mascot represents this user. Shown on the Profile header
 // and the Home hero box (see tabby-mascot.tsx). Kept here, not in the
 // component file, so the lib layer owns the data shape and the UI
 // component imports it, not the other way around.
@@ -61,7 +61,7 @@ export async function updateAvatarAnimal(userId: string, animal: AnimalKey) {
 }
 
 // Free-text bank account + reference, included in a reminder message so
-// the ower doesn't have to follow up asking how to pay -- see
+// the ower doesn't have to follow up asking how to pay. See
 // 0019_add_payment_details.sql / 0021_move_payment_details_to_own_table.sql
 // for why this is plain text (no NZ Venmo/Cash App equivalent) in its own
 // table with an owner-only RLS policy, not a column on profiles (which
@@ -90,7 +90,7 @@ export async function updatePaymentDetails(userId: string, paymentDetails: strin
 }
 
 // Whether the one-time "add your payment details?" onboarding question has
-// been shown -- see 0020_add_payment_details_prompted.sql for why this is
+// been shown. See 0020_add_payment_details_prompted.sql for why this is
 // a separate flag from payment_details itself (skipping still leaves that
 // null, and without this they'd be asked again every open).
 export async function fetchPaymentDetailsPrompted(userId: string): Promise<boolean> {
@@ -111,8 +111,25 @@ export async function markPaymentDetailsPrompted(userId: string) {
   if (error) throw error;
 }
 
+// Same shape as the payment-details flag above, for the "what's your
+// income?" onboarding question. See 0057_add_income_prompted.sql.
+export async function fetchIncomePrompted(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('income_prompted')
+    .eq('id', userId)
+    .single();
+  if (error) throw error;
+  return data.income_prompted as boolean;
+}
+
+export async function markIncomePrompted(userId: string) {
+  const { error } = await supabase.from('profiles').update({ income_prompted: true }).eq('id', userId);
+  if (error) throw error;
+}
+
 // null = hasn't answered the "living with flatmates?" onboarding question
-// yet. Distinct from `false`, which means they answered "no" -- both hide
+// yet. Distinct from `false`, which means they answered "no"; both hide
 // the Flat tab, but only `null` (combined with no flat) triggers the
 // onboarding question itself; `false` means they've already seen it.
 export async function fetchWantsFlat(userId: string): Promise<boolean | null> {
@@ -128,7 +145,7 @@ export async function updateWantsFlat(userId: string, wantsFlat: boolean) {
 
 // income_settings (the old single-job singleton this type/these functions
 // used to read and write) is retired as of Phase 5 of the income-sources
-// plan -- income_sources is now the only live read/write path, via
+// plan. income_sources is now the only live read/write path, via
 // income-sources.ts. The table itself still exists with historical data,
 // just unread by the app. See IncomeCycle/computeIncomeCycle below (still
 // shared pure math, reused by income-sources.ts and bills.ts) and
@@ -136,7 +153,7 @@ export async function updateWantsFlat(userId: string, wantsFlat: boolean) {
 // whatever progress shape is passed in).
 
 // Supabase Auth's email change sends a confirmation link to the new
-// address -- the email on the session doesn't actually change until the
+// address. The email on the session doesn't actually change until the
 // user clicks it, so the caller needs to tell the user to check their inbox
 // rather than treat this as instant.
 export async function updateEmail(newEmail: string) {
@@ -150,11 +167,11 @@ export async function updatePassword(newPassword: string) {
 }
 
 // Calls the delete-account Edge Function (service-role, the client never
-// gets that key) -- see supabase/functions/delete-account/index.ts. Your
+// gets that key). See supabase/functions/delete-account/index.ts. Your
 // own data cascades away with your auth.users row; anything you did
 // inside a shared flat (created it, paid a shared expense, settled up)
 // survives for other members with its "who" pointer set to null instead.
-// The caller is responsible for signing out locally afterward -- the
+// The caller is responsible for signing out locally afterward: the
 // server-side session is gone, but local storage still has to be cleared.
 export async function deleteAccount(): Promise<void> {
   const { data, error } = await supabase.functions.invoke('delete-account');
@@ -165,7 +182,7 @@ export async function deleteAccount(): Promise<void> {
 export type IncomeCycle = {
   /** Inclusive, 'YYYY-MM-DD'. */
   startDate: string;
-  /** Exclusive, 'YYYY-MM-DD' -- the first day of the *next* cycle. */
+  /** Exclusive, 'YYYY-MM-DD': the first day of the *next* cycle. */
   endDate: string;
 };
 
@@ -174,7 +191,7 @@ function toISODate(d: Date): string {
 }
 
 function daysInMonth(year: number, month: number): number {
-  // month is 0-indexed, same as Date -- day 0 of the *next* month is the
+  // month is 0-indexed, same as Date, so day 0 of the *next* month is the
   // last day of this one.
   return new Date(year, month + 1, 0).getDate();
 }
@@ -200,7 +217,7 @@ function mostRecentWeekday(now: Date, weekday: number): Date {
 //
 // Biweekly: deliberately a *rolling* 14-day window ending on the most
 // recent occurrence of the chosen weekday, not a true alternating-week
-// cycle -- a single weekday can't disambiguate which of the two possible
+// cycle: a single weekday can't disambiguate which of the two possible
 // phases is the real payday without an extra reference date the user
 // wasn't asked for. Documented limitation, not a bug.
 //
@@ -231,7 +248,7 @@ export function computeIncomeCycle(
     let startYear = year;
     let startMonth = month;
     if (now.getDate() < thisMonthDay) {
-      // hasn't happened yet this month -- the current cycle started last month
+      // hasn't happened yet this month, so the current cycle started last month
       startMonth = month - 1;
       if (startMonth < 0) {
         startMonth = 11;
@@ -263,7 +280,7 @@ export type OverspendPrediction = {
 
 // Projects end-of-cycle spend from the current pace (spent so far / days
 // elapsed * total days in the cycle) and flags it only when that
-// projection would meaningfully clear the budget -- not the actual
+// projection would meaningfully clear the budget, not the actual
 // percentage so far, which the existing progress bar already shows.
 // Deliberately conservative: nothing on day 1 (too noisy to project from
 // a single day), nothing once already over budget (the bar already says
@@ -286,7 +303,7 @@ export function getOverspendPrediction(
   if (elapsedDays < 2) return null;
 
   const pctSoFar = progress.spent / progress.budgetAmount;
-  if (pctSoFar >= 1) return null; // already over -- the actual bar already shows this
+  if (pctSoFar >= 1) return null; // already over; the actual bar already shows this
 
   const projectedTotal = (progress.spent / elapsedDays) * totalDays;
   const overBy = projectedTotal - progress.budgetAmount;
@@ -299,5 +316,5 @@ export function getOverspendPrediction(
 }
 
 // fetchIncomeProgress (the income_settings-based version of this) is
-// retired -- see getIncomeSourceProgress in income-sources.ts, which reads
+// retired. See getIncomeSourceProgress in income-sources.ts, which reads
 // the primary income source's cycle/budget_amount instead.

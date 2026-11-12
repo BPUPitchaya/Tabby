@@ -1,15 +1,18 @@
-// Multi-job income management -- list + form, same shape as bills-modal.tsx.
+// Multi-job income management: list + form, same shape as bills-modal.tsx.
 // Phase 2's replacement for Pay Schedule's own entry points (Home's Earned
-// cell, Budget's redirect) -- Pay Schedule itself is deleted, no remaining
+// cell, Budget's redirect). Pay Schedule itself is deleted, no remaining
 // callers. Phase 5 cut Earned/Budget over to read the primary income
 // source's cycle + budget_amount directly (see getIncomeSourceProgress in
 // income-sources.ts), so the "won't change Earned" disclaimer below refers
 // to the Earned total specifically staying a record of logged
-// transactions -- it's not a stale leftover from before the cutover.
+// transactions; it's not a stale leftover from before the cutover.
 // See income-sources.ts / 0028_add_income_sources.sql / 0030_add_budget_amount_to_income_sources.sql.
+//
+// The form fields themselves live in income-source-form.tsx, shared with
+// the income onboarding question (income-onboarding-question.tsx). This
+// file owns the list view, the modal chrome, and create/edit/delete.
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import * as WebBrowser from 'expo-web-browser';
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -18,33 +21,25 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Switch,
   Text,
-  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import { IncomeSourceForm } from '@/components/income-source-form';
 import { useAuth } from '@/lib/auth-context';
 import {
-  canUseTaxCode,
+  buildIncomeSourceParams,
   createIncomeSource,
-  getPrimaryIncomeSource,
   deleteIncomeSource,
   fetchIncomeSources,
-  IRD_TAX_CODE_URL,
-  KIWISAVER_OPTIONS,
   setPrimaryIncomeSource,
-  TAX_CODE_OPTIONS,
   updateIncomeSource,
-  type IncomeMode,
+  EMPTY_INCOME_FORM,
+  type IncomeFormState,
   type IncomeSource,
-  type KiwiSaverPct,
-  type TrackingMode,
 } from '@/lib/income-sources';
-import { computeNetPay, type NzTaxCode } from '@/lib/nz-tax';
-import type { IncomeFrequency } from '@/lib/profile';
 
 const pressFeedback = ({ pressed }: { pressed: boolean }) => (pressed ? { opacity: 0.7 } : undefined);
 
@@ -58,44 +53,6 @@ const SEGMENT_SHADOW = {
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const FREQUENCY_OPTIONS: { value: IncomeFrequency; label: string }[] = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'biweekly', label: 'Fortnightly' },
-  { value: 'monthly', label: 'Monthly' },
-];
-
-type FormState = {
-  id: string | null;
-  label: string;
-  isPrimary: boolean;
-  mode: IncomeMode;
-  amount: string;
-  hourlyRate: string;
-  frequency: IncomeFrequency | null;
-  payWeekday: number | null;
-  dayOfMonth: number | null;
-  trackingMode: TrackingMode;
-  taxCode: string | null;
-  hasStudentLoan: boolean;
-  kiwiSaverPct: KiwiSaverPct | null;
-};
-
-const EMPTY_FORM: FormState = {
-  id: null,
-  label: '',
-  isPrimary: false,
-  mode: 'fixed',
-  amount: '',
-  hourlyRate: '',
-  frequency: null,
-  payWeekday: null,
-  dayOfMonth: null,
-  trackingMode: 'gross',
-  taxCode: null,
-  hasStudentLoan: false,
-  kiwiSaverPct: null,
-};
-
 export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const isDark = useColorScheme() === 'dark';
   const { session } = useAuth();
@@ -107,9 +64,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [showWeekdayPicker, setShowWeekdayPicker] = useState(false);
-  const [showDayOfMonthPicker, setShowDayOfMonthPicker] = useState(false);
+  const [form, setForm] = useState<IncomeFormState>(EMPTY_INCOME_FORM);
 
   const load = async () => {
     if (!userId) return;
@@ -129,7 +84,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
   }, [visible, userId]);
 
   const beginAddForm = () => {
-    setForm({ ...EMPTY_FORM, isPrimary: sources.length === 0 });
+    setForm({ ...EMPTY_INCOME_FORM, isPrimary: sources.length === 0 });
     setMessage(null);
     setView('form');
   };
@@ -156,75 +111,24 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
 
   const handleSaveForm = async () => {
     if (!userId) return;
-    if (!form.label.trim()) {
-      setMessage('Give this income source a name (e.g. a job title or employer).');
+    const result = buildIncomeSourceParams(form, sources);
+    if ('error' in result) {
+      setMessage(result.error);
       return;
-    }
-    if (!form.frequency) {
-      setMessage('Choose how often you get paid.');
-      return;
-    }
-    if ((form.frequency === 'weekly' || form.frequency === 'biweekly') && form.payWeekday === null) {
-      setMessage('Choose which day you get paid.');
-      return;
-    }
-    if (form.frequency === 'monthly' && !form.dayOfMonth) {
-      setMessage('Choose which day of the month you get paid.');
-      return;
-    }
-
-    let amount: number | null = null;
-    let hourlyRate: number | null = null;
-    if (form.mode === 'fixed') {
-      amount = parseFloat(form.amount);
-      if (isNaN(amount) || amount <= 0) {
-        setMessage('Enter a valid amount, or switch to hourly.');
-        return;
-      }
-    } else {
-      hourlyRate = parseFloat(form.hourlyRate);
-      if (isNaN(hourlyRate) || hourlyRate <= 0) {
-        setMessage('Enter a valid hourly rate.');
-        return;
-      }
-    }
-
-    if (form.trackingMode === 'net' && form.taxCode) {
-      if (!canUseTaxCode(sources, form.taxCode, form.id)) {
-        setMessage(
-          `${form.taxCode} is already used by another income source. Only one concurrent job can use the main tax code; this one probably needs a secondary code (S, SB, SH, or ST) instead.`,
-        );
-        return;
-      }
     }
 
     setBusy(true);
     setMessage(null);
     try {
-      const params = {
-        label: form.label,
-        isPrimary: form.isPrimary,
-        mode: form.mode,
-        amount,
-        hourlyRate,
-        frequency: form.frequency,
-        payWeekday: form.frequency === 'monthly' ? null : form.payWeekday,
-        dayOfMonth: form.frequency === 'monthly' ? form.dayOfMonth : null,
-        trackingMode: form.trackingMode,
-        taxCode: form.trackingMode === 'net' ? form.taxCode : null,
-        hasStudentLoan: form.trackingMode === 'net' ? form.hasStudentLoan : false,
-        kiwiSaverPct: form.trackingMode === 'net' ? form.kiwiSaverPct : null,
-      };
-
       if (form.id) {
-        await updateIncomeSource(form.id, userId, params);
+        await updateIncomeSource(form.id, userId, result.params);
         // setPrimaryIncomeSource handles clearing any other primary first --
         // only call it when this source is actually meant to become
         // primary, never to un-set it to false by itself (there must
         // always be exactly one primary once any source exists).
         if (form.isPrimary) await setPrimaryIncomeSource(userId, form.id);
       } else {
-        const id = await createIncomeSource(userId, params);
+        const id = await createIncomeSource(userId, result.params);
         if (form.isPrimary) await setPrimaryIncomeSource(userId, id);
       }
 
@@ -273,15 +177,6 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
       ]);
     }
   };
-
-  const scheduleLabel =
-    form.frequency === 'monthly'
-      ? form.dayOfMonth
-        ? `Day ${form.dayOfMonth} of the month`
-        : 'Pick a day of the month'
-      : form.payWeekday !== null
-        ? WEEKDAYS[form.payWeekday]
-        : 'Pick a day of the week';
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -397,315 +292,7 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
             </ScrollView>
           ) : (
             <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
-              <TextInput
-                value={form.label}
-                onChangeText={(label) => setForm((f) => ({ ...f, label }))}
-                placeholder="e.g. Countdown, Main job"
-                className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
-              />
-
-              <View className="gap-1.5">
-                <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 tracking-wide">
-                  PAY TYPE
-                </Text>
-                <View className="flex-row gap-1.5 p-1 bg-gray-100 dark:bg-tabby-800 rounded-xl">
-                  {(['fixed', 'hourly'] as const).map((mode) => (
-                    <Pressable
-                      key={mode}
-                      onPress={() => setForm((f) => ({ ...f, mode }))}
-                      style={(state) => [pressFeedback(state), form.mode === mode && SEGMENT_SHADOW]}
-                      className={`flex-1 rounded-lg py-2 items-center ${form.mode === mode ? 'bg-white dark:bg-tabby-900' : ''}`}
-                    >
-                      <Text
-                        className={`font-nunito-semibold text-sm ${
-                          form.mode === mode
-                            ? 'text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-tabby-300'
-                        }`}
-                      >
-                        {mode === 'fixed' ? 'Fixed amount' : 'Hourly'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {form.mode === 'fixed' ? (
-                <TextInput
-                  value={form.amount}
-                  onChangeText={(amount) => setForm((f) => ({ ...f, amount }))}
-                  placeholder="Amount per pay"
-                  keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
-                />
-              ) : (
-                <TextInput
-                  value={form.hourlyRate}
-                  onChangeText={(hourlyRate) => setForm((f) => ({ ...f, hourlyRate }))}
-                  placeholder="Hourly rate"
-                  keyboardType="decimal-pad"
-                  className="font-nunito border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5 bg-white dark:bg-tabby-900 dark:text-white"
-                />
-              )}
-
-              <View className="flex-row gap-2">
-                {FREQUENCY_OPTIONS.map((opt) => (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() =>
-                      setForm((f) => ({ ...f, frequency: opt.value, payWeekday: null, dayOfMonth: null }))
-                    }
-                    style={pressFeedback}
-                    className={`flex-1 rounded-lg py-2 items-center border ${
-                      form.frequency === opt.value
-                        ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
-                        : 'border-gray-300 dark:border-tabby-600'
-                    }`}
-                  >
-                    <Text
-                      className={`font-nunito-medium text-sm ${
-                        form.frequency === opt.value
-                          ? 'text-white dark:text-tabby-900'
-                          : 'text-gray-700 dark:text-tabby-200'
-                      }`}
-                    >
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {form.frequency && (
-                <Pressable
-                  onPress={() =>
-                    form.frequency === 'monthly' ? setShowDayOfMonthPicker(true) : setShowWeekdayPicker(true)
-                  }
-                  style={pressFeedback}
-                  className="flex-row items-center justify-between border border-gray-300 dark:border-tabby-600 rounded-lg px-3 py-2.5"
-                >
-                  <Text className="font-nunito text-gray-800 dark:text-white text-sm">{scheduleLabel}</Text>
-                  <Feather
-                    name={form.frequency === 'monthly' ? 'calendar' : 'chevron-right'}
-                    size={16}
-                    color={isDark ? '#E8C39E' : '#9ca3af'}
-                  />
-                </Pressable>
-              )}
-
-              <View className="flex-row items-center justify-between rounded-lg border border-gray-300 dark:border-tabby-600 px-3 py-2.5">
-                <Text className="font-nunito-medium dark:text-white">Primary income</Text>
-                <Switch
-                  value={form.isPrimary}
-                  onValueChange={(isPrimary) => {
-                    // Turning it off is non-destructive -- only this row
-                    // changes. Turning it on replaces whichever other
-                    // source currently holds it, so confirm that swap
-                    // before it's saved, same as any other irreversible-
-                    // feeling settings change.
-                    const currentPrimary = getPrimaryIncomeSource(sources);
-                    if (isPrimary && currentPrimary && currentPrimary.id !== form.id) {
-                      Alert.alert(
-                        'Make this your primary income?',
-                        `Budget and your overall pay cycle will switch to follow this source instead of "${currentPrimary.label}".`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Make primary', onPress: () => setForm((f) => ({ ...f, isPrimary: true })) },
-                        ],
-                      );
-                      return;
-                    }
-                    setForm((f) => ({ ...f, isPrimary }));
-                  }}
-                />
-              </View>
-              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300 -mt-2">
-                Budget and the overall pay cycle follow your primary source. Only one can be primary at a
-                time.
-              </Text>
-
-              <View className="gap-1.5">
-                <Text className="font-nunito-semibold text-xs text-gray-500 dark:text-tabby-300 tracking-wide">
-                  TRACKING
-                </Text>
-                <View className="flex-row gap-1.5 p-1 bg-gray-100 dark:bg-tabby-800 rounded-xl">
-                  {(['gross', 'net'] as const).map((trackingMode) => (
-                    <Pressable
-                      key={trackingMode}
-                      onPress={() => setForm((f) => ({ ...f, trackingMode }))}
-                      style={(state) => [
-                        pressFeedback(state),
-                        form.trackingMode === trackingMode && SEGMENT_SHADOW,
-                      ]}
-                      className={`flex-1 rounded-lg py-2 items-center ${form.trackingMode === trackingMode ? 'bg-white dark:bg-tabby-900' : ''}`}
-                    >
-                      <Text
-                        className={`font-nunito-semibold text-sm ${
-                          form.trackingMode === trackingMode
-                            ? 'text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-tabby-300'
-                        }`}
-                      >
-                        {trackingMode === 'gross' ? 'Gross' : 'Take-home (net)'}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {form.trackingMode === 'net' && (
-                <View className="gap-3 border border-gray-200 dark:border-tabby-700 rounded-xl p-3">
-                  <View className="gap-1.5">
-                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">Tax code</Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {TAX_CODE_OPTIONS.map((code) => (
-                        <Pressable
-                          key={code}
-                          onPress={() =>
-                            setForm((f) => ({ ...f, taxCode: code === f.taxCode ? null : code }))
-                          }
-                          style={pressFeedback}
-                          className={`px-3 py-1.5 rounded-full border ${
-                            form.taxCode === code
-                              ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
-                              : 'border-gray-300 dark:border-tabby-600'
-                          }`}
-                        >
-                          <Text
-                            className={`font-nunito-medium text-sm ${
-                              form.taxCode === code
-                                ? 'text-white dark:text-tabby-900'
-                                : 'text-gray-700 dark:text-tabby-200'
-                            }`}
-                          >
-                            {code}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    <Pressable
-                      onPress={() => WebBrowser.openBrowserAsync(IRD_TAX_CODE_URL).catch(() => {})}
-                      style={pressFeedback}
-                      className="flex-row items-center gap-1.5 self-start mt-0.5"
-                      accessibilityRole="link"
-                      accessibilityLabel="Not sure which tax code to use? Check with IRD"
-                      accessibilityHint="opens the IRD website in your browser"
-                    >
-                      <Feather name="external-link" size={12} color="#8B5A2B" />
-                      <Text className="font-nunito text-xs text-tabby-700 dark:text-tabby-300 underline">
-                        Not sure which code? Check with IRD
-                      </Text>
-                    </Pressable>
-                  </View>
-
-                  <View className="flex-row items-center justify-between">
-                    <Text className="font-nunito-medium text-sm dark:text-white">Student loan</Text>
-                    <Switch
-                      value={form.hasStudentLoan}
-                      onValueChange={(hasStudentLoan) => setForm((f) => ({ ...f, hasStudentLoan }))}
-                    />
-                  </View>
-
-                  <View className="gap-1.5">
-                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                      KiwiSaver (leave unselected if not enrolled)
-                    </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {KIWISAVER_OPTIONS.map((pct) => (
-                        <Pressable
-                          key={pct}
-                          onPress={() =>
-                            setForm((f) => ({ ...f, kiwiSaverPct: pct === f.kiwiSaverPct ? null : pct }))
-                          }
-                          style={pressFeedback}
-                          className={`px-3 py-1.5 rounded-full border ${
-                            form.kiwiSaverPct === pct
-                              ? 'bg-tabby-600 dark:bg-white border-tabby-600 dark:border-white'
-                              : 'border-gray-300 dark:border-tabby-600'
-                          }`}
-                        >
-                          <Text
-                            className={`font-nunito-medium text-sm ${
-                              form.kiwiSaverPct === pct
-                                ? 'text-white dark:text-tabby-900'
-                                : 'text-gray-700 dark:text-tabby-200'
-                            }`}
-                          >
-                            {pct}%
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {form.mode === 'fixed' && form.taxCode && form.frequency && parseFloat(form.amount) > 0 ? (
-                    (() => {
-                      const breakdown = computeNetPay({
-                        grossPay: parseFloat(form.amount),
-                        frequency: form.frequency!,
-                        taxCode: form.taxCode as NzTaxCode,
-                        hasStudentLoan: form.hasStudentLoan,
-                        kiwiSaverPct: form.kiwiSaverPct,
-                      });
-                      return (
-                        <View className="gap-1 bg-gray-50 dark:bg-tabby-800 rounded-lg p-2.5">
-                          <View className="flex-row justify-between">
-                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                              Income tax
-                            </Text>
-                            <Text className="font-nunito text-xs dark:text-white">
-                              -${breakdown.incomeTax.toFixed(2)}
-                            </Text>
-                          </View>
-                          <View className="flex-row justify-between">
-                            <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                              ACC earner levy
-                            </Text>
-                            <Text className="font-nunito text-xs dark:text-white">
-                              -${breakdown.accLevy.toFixed(2)}
-                            </Text>
-                          </View>
-                          {form.hasStudentLoan && (
-                            <View className="flex-row justify-between">
-                              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                                Student loan
-                              </Text>
-                              <Text className="font-nunito text-xs dark:text-white">
-                                -${breakdown.studentLoan.toFixed(2)}
-                              </Text>
-                            </View>
-                          )}
-                          {form.kiwiSaverPct && (
-                            <View className="flex-row justify-between">
-                              <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                                KiwiSaver ({form.kiwiSaverPct}%)
-                              </Text>
-                              <Text className="font-nunito text-xs dark:text-white">
-                                -${breakdown.kiwiSaver.toFixed(2)}
-                              </Text>
-                            </View>
-                          )}
-                          <View className="flex-row justify-between pt-1 mt-1 border-t border-gray-200 dark:border-tabby-700">
-                            <Text className="font-nunito-semibold text-xs dark:text-white">
-                              Estimated take-home
-                            </Text>
-                            <Text className="font-nunito-bold text-xs dark:text-white">
-                              ${breakdown.netPay.toFixed(2)}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })()
-                  ) : (
-                    <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                      Pick a tax code and enter an amount to see an estimated take-home figure. Hourly jobs
-                      show their estimate per payday instead, once hours are entered.
-                    </Text>
-                  )}
-                  <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-                    Estimate only, check your actual payslip.
-                  </Text>
-                </View>
-              )}
+              <IncomeSourceForm form={form} setForm={setForm} sources={sources} />
 
               {message && (
                 <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">{message}</Text>
@@ -725,82 +312,6 @@ export function IncomeSourcesModal({ visible, onClose }: { visible: boolean; onC
               </Pressable>
             </ScrollView>
           )}
-
-          <Modal visible={showWeekdayPicker} animationType="slide" transparent>
-            <View className="flex-1 bg-black/40 justify-end">
-              <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-1">
-                <Text className="font-fredoka-semibold text-lg dark:text-white mb-2">
-                  Which day is it due?
-                </Text>
-                {WEEKDAYS.map((day, i) => (
-                  <Pressable
-                    key={day}
-                    onPress={() => {
-                      setForm((f) => ({ ...f, payWeekday: i }));
-                      setShowWeekdayPicker(false);
-                    }}
-                    style={pressFeedback}
-                    className="flex-row items-center justify-between py-3 px-2 border-b border-gray-100 dark:border-tabby-700"
-                  >
-                    <Text className="font-nunito text-gray-800 dark:text-white">{day}</Text>
-                    {form.payWeekday === i && (
-                      <Feather name="check" size={18} color={isDark ? '#E8C39E' : '#8B5A2B'} />
-                    )}
-                  </Pressable>
-                ))}
-                <Pressable
-                  onPress={() => setShowWeekdayPicker(false)}
-                  style={pressFeedback}
-                  className="py-3 items-center"
-                >
-                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Modal>
-
-          <Modal visible={showDayOfMonthPicker} animationType="slide" transparent>
-            <View className="flex-1 bg-black/40 justify-end">
-              <View className="bg-white dark:bg-tabby-900 rounded-t-2xl p-4 gap-3">
-                <Text className="font-fredoka-semibold text-lg dark:text-white">Which day of the month?</Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
-                    <Pressable
-                      key={day}
-                      onPress={() => {
-                        setForm((f) => ({ ...f, dayOfMonth: day }));
-                        setShowDayOfMonthPicker(false);
-                      }}
-                      style={pressFeedback}
-                      className={`w-[12.5%] aspect-square items-center justify-center rounded-full ${
-                        form.dayOfMonth === day ? 'bg-tabby-600 dark:bg-white' : ''
-                      }`}
-                    >
-                      <Text
-                        className={`font-nunito-medium text-sm ${
-                          form.dayOfMonth === day
-                            ? 'text-white dark:text-tabby-900'
-                            : 'text-gray-800 dark:text-white'
-                        }`}
-                      >
-                        {day}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text className="font-nunito text-gray-500 dark:text-tabby-300 text-xs">
-                  Due on the 31st in a shorter month? We&apos;ll use the last day of that month instead.
-                </Text>
-                <Pressable
-                  onPress={() => setShowDayOfMonthPicker(false)}
-                  style={pressFeedback}
-                  className="py-3 items-center"
-                >
-                  <Text className="font-nunito-semibold text-gray-500 dark:text-tabby-300">Cancel</Text>
-                </Pressable>
-              </View>
-            </View>
-          </Modal>
         </SafeAreaView>
       </SafeAreaProvider>
     </Modal>
