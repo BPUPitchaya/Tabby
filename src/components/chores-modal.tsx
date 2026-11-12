@@ -157,7 +157,7 @@ export function ChoresModal({
       return;
     }
     if (form.assignmentMode === 'rotating' && form.assigneeOrder.length < 2) {
-      setMessage('Rotating needs at least two people -- pick one more, or switch to Fixed.');
+      setMessage('Rotating needs at least two people. Pick one more, or switch to Fixed.');
       return;
     }
 

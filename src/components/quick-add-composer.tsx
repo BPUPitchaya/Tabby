@@ -50,7 +50,7 @@ export function QuickAddComposer({
         >
           <ActivityIndicator size="small" color={isDark ? '#E8C39E' : '#8B5A2B'} />
           <Text className="font-nunito text-xs text-gray-500 dark:text-tabby-300">
-            Reading that -- usually just a few seconds
+            Reading that, usually just a few seconds
           </Text>
         </Animated.View>
       )}

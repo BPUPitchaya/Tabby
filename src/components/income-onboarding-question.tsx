@@ -45,7 +45,7 @@ export function IncomeOnboardingQuestion({ userId, onDone }: { userId: string; o
 
   const save = async () => {
     // Nothing at all chosen yet (not even a pay frequency) is the same as
-    // skipping -- don't make "Save" with a completely blank form throw a
+    // skipping: don't make "Save" with a completely blank form throw a
     // validation error at someone who just wants to move on. Once they've
     // picked anything, fall through to real validation instead of
     // silently discarding a partial selection.

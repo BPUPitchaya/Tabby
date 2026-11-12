@@ -196,7 +196,7 @@ export async function resolveEditCommand(
         ]);
         const primary = getPrimaryIncomeSource(sources);
         if (!primary) {
-          return { kind: 'error', message: 'Add an income source first -- a budget rides its pay cycle.' };
+          return { kind: 'error', message: 'Add an income source first. A budget rides its pay cycle.' };
         }
         return {
           kind: 'edit',

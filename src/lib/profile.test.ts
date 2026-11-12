@@ -93,12 +93,12 @@ describe('getOverspendPrediction', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null once already over budget -- the actual bar already shows that', () => {
+  it('returns null once already over budget, since the actual bar already shows that', () => {
     const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 90 }, now);
     expect(result).toBeNull();
   });
 
-  it('returns null on day 1 of the cycle -- too little data to project from', () => {
+  it('returns null on day 1 of the cycle, too little data to project from', () => {
     const dayOne = new Date(2026, 9, 1);
     const result = getOverspendPrediction({ cycle, budgetAmount: 80, spent: 30 }, dayOne);
     expect(result).toBeNull();
